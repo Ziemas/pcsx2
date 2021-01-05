@@ -128,6 +128,7 @@ struct FrequencyResponseFilter
 	}
 };
 
+extern s16 gaussianTable[512];
 extern void Mix();
 extern s32 clamp_mix(s32 x, u8 bitshift = 0);
 

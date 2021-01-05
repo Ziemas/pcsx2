@@ -13,6 +13,7 @@
  *  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <cfenv>
 #include "PrecompiledHeader.h"
 #include "Global.h"
 #include "spu2.h"
@@ -227,6 +228,52 @@ s32 SPU2ps1reset()
 	return 0;
 }
 
+void gaussianConstructTable() {
+    const int originalRounding = fegetround();
+    fesetround(FE_TONEAREST);
+    double table[512];
+
+    for(u32 n = 0; n < 512; n++)
+    {
+        double k = 0.5 + n;
+        double s = (sin(M_PI * k * 2.048 / 1024));
+        double t = (cos(M_PI * k * 2.000 / 1023) - 1) * 0.50;
+        double u = (cos(M_PI * k * 4.000 / 1023) - 1) * 0.08;
+        double r = s * (t + u + 1.0) / k;
+        table[511 - n] = r;
+    }
+
+    double sum = 0.0;
+
+    for(u32 n = 0; n < 512; n++)
+    {
+      sum += table[n];
+    }
+
+    double scale = 0x7f80 * 128 / sum;
+
+    for(u32 n = 0; n < 512; n++)
+    {
+      table[n] *= scale;
+    }
+
+    for(u32 phase = 0; phase < 128; phase++)
+    {
+        double sum = 0.0;
+        sum += table[phase +   0];
+        sum += table[phase + 256];
+        sum += table[511 - phase];
+        sum += table[255 - phase];
+        double diff = (sum - 0x7f80) / 4;
+        gaussianTable[phase +   0] = nearbyint(table[phase +   0] - diff);
+        gaussianTable[phase + 256] = nearbyint(table[phase + 256] - diff);
+        gaussianTable[511 - phase] = nearbyint(table[511 - phase] - diff);
+        gaussianTable[255 - phase] = nearbyint(table[255 - phase] - diff);
+    }
+    fesetround(originalRounding);
+}
+
+
 s32 SPU2init()
 {
 	assert(regtable[0x400] == nullptr);
@@ -279,6 +326,8 @@ s32 SPU2init()
 			regtable[mem >> 1] = &(spu2Ru16(mem));
 		}
 	}
+
+	gaussianConstructTable();
 
 	SPU2reset();
 
