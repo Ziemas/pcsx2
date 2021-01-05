@@ -349,132 +349,28 @@ static __forceinline void CalculateADSR(V_Core& thiscore, uint voiceidx)
 	pxAssume(vc.ADSR.Value >= 0); // ADSR should never be negative...
 }
 
-
-__forceinline static s32 GaussianInterpolate(s32 pv4, s32 pv3, s32 pv2, s32 pv1, s32 i)
-{
-	s32 out = 0;
-    out =  (gaussianTable[0x0FF-i] * pv4) >> 15;
-    out += (gaussianTable[0x1FF-i] * pv3) >> 15;
-    out += (gaussianTable[0x100+i] * pv2) >> 15;
-    out += (gaussianTable[0x000+i] * pv1) >> 15;
-
-    return out;
-}
-
-/*
-   Tension: 65535 is high, 32768 is normal, 0 is low
-*/
-
-template <s32 i_tension>
-__forceinline static s32 HermiteInterpolate(
-	s32 y0, // 16.0
-	s32 y1, // 16.0
-	s32 y2, // 16.0
-	s32 y3, // 16.0
-	s32 mu  //  0.12
-)
-{
-	s32 m00 = ((y1 - y0) * i_tension) >> 16; // 16.0
-	s32 m01 = ((y2 - y1) * i_tension) >> 16; // 16.0
-	s32 m0 = m00 + m01;
-
-	s32 m10 = ((y2 - y1) * i_tension) >> 16; // 16.0
-	s32 m11 = ((y3 - y2) * i_tension) >> 16; // 16.0
-	s32 m1 = m10 + m11;
-
-	s32 val = ((2 * y1 + m0 + m1 - 2 * y2) * mu) >> 12;       // 16.0
-	val = ((val - 3 * y1 - 2 * m0 - m1 + 3 * y2) * mu) >> 12; // 16.0
-	val = ((val + m0) * mu) >> 11;                            // 16.0
-
-	return (val + (y1 << 1));
-}
-
-__forceinline static s32 CatmullRomInterpolate(
-	s32 y0, // 16.0
-	s32 y1, // 16.0
-	s32 y2, // 16.0
-	s32 y3, // 16.0
-	s32 mu  //  0.12
-)
-{
-	//q(t) = 0.5 *(    	(2 * P1) +
-	//	(-P0 + P2) * t +
-	//	(2*P0 - 5*P1 + 4*P2 - P3) * t2 +
-	//	(-P0 + 3*P1- 3*P2 + P3) * t3)
-
-	s32 a3 = (-y0 + 3 * y1 - 3 * y2 + y3);
-	s32 a2 = (2 * y0 - 5 * y1 + 4 * y2 - y3);
-	s32 a1 = (-y0 + y2);
-	s32 a0 = (2 * y1);
-
-	s32 val = ((a3)*mu) >> 12;
-	val = ((a2 + val) * mu) >> 12;
-	val = ((a1 + val) * mu) >> 12;
-
-	return (a0 + val);
-}
-
-__forceinline static s32 CubicInterpolate(
-	s32 y0, // 16.0
-	s32 y1, // 16.0
-	s32 y2, // 16.0
-	s32 y3, // 16.0
-	s32 mu  //  0.12
-)
-{
-	const s32 a0 = y3 - y2 - y0 + y1;
-	const s32 a1 = y0 - y1 - a0;
-	const s32 a2 = y2 - y0;
-
-	s32 val = ((a0)*mu) >> 12;
-	val = ((val + a1) * mu) >> 12;
-	val = ((val + a2) * mu) >> 11;
-
-	return (val + (y1 << 1));
-}
-
 // Returns a 16 bit result in Value.
-// Uses standard template-style optimization techniques to statically generate five different
-// versions of this function (one for each type of interpolation).
-template <int InterpType>
 static __forceinline s32 GetVoiceValues(V_Core& thiscore, uint voiceidx)
 {
 	V_Voice& vc(thiscore.Voices[voiceidx]);
 
 	while (vc.SP > 0)
 	{
-		if (InterpType >= 2)
-		{
-			vc.PV4 = vc.PV3;
-			vc.PV3 = vc.PV2;
-		}
+		vc.PV4 = vc.PV3;
+		vc.PV3 = vc.PV2;
 		vc.PV2 = vc.PV1;
 		vc.PV1 = GetNextDataBuffered(thiscore, voiceidx);
 		vc.SP -= 4096;
 	}
 
-	const s32 mu = vc.SP + 4096;
+	u16 i = (vc.SP & 0x0ff0) >> 4;
+	s32 out = 0;
+    out =  (gaussianTable[0x0FF-i] * vc.PV4) >> 15;
+    out += (gaussianTable[0x1FF-i] * vc.PV3) >> 15;
+    out += (gaussianTable[0x100+i] * vc.PV2) >> 15;
+    out += (gaussianTable[0x000+i] * vc.PV1) >> 15;
 
-	switch (InterpType)
-	{
-		case 0:
-			return vc.PV1 << 1;
-		case 1:
-			return (vc.PV1 << 1) - (((vc.PV2 - vc.PV1) * vc.SP) >> 11);
-
-		case 2:
-			return CubicInterpolate(vc.PV4, vc.PV3, vc.PV2, vc.PV1, mu);
-		case 3:
-			return HermiteInterpolate<16384>(vc.PV4, vc.PV3, vc.PV2, vc.PV1, mu);
-		case 4:
-			return CatmullRomInterpolate(vc.PV4, vc.PV3, vc.PV2, vc.PV1, mu);
-		case 5:
-			return GaussianInterpolate(vc.PV4, vc.PV3, vc.PV2, vc.PV1, (vc.SP & 0x0ff0) >> 4);
-
-			jNO_DEFAULT;
-	}
-
-	return 0; // technically unreachable!
+    return out;
 }
 
 // Noise values need to be mixed without going through interpolation, since it
@@ -553,34 +449,7 @@ static __forceinline StereoOut32 MixVoice(uint coreidx, uint voiceidx)
 		if (vc.Noise)
 			Value = GetNoiseValues(thiscore, voiceidx);
 		else
-		{
-			// Optimization : Forceinline'd Templated Dispatch Table.  Any halfwit compiler will
-			// turn this into a clever jump dispatch table (no call/rets, no compares, uber-efficient!)
-
-			switch (Interpolation)
-			{
-				case 0:
-					Value = GetVoiceValues<0>(thiscore, voiceidx);
-					break;
-				case 1:
-					Value = GetVoiceValues<1>(thiscore, voiceidx);
-					break;
-				case 2:
-					Value = GetVoiceValues<2>(thiscore, voiceidx);
-					break;
-				case 3:
-					Value = GetVoiceValues<3>(thiscore, voiceidx);
-					break;
-				case 4:
-					Value = GetVoiceValues<4>(thiscore, voiceidx);
-					break;
-				case 5:
-					Value = GetVoiceValues<5>(thiscore, voiceidx);
-					break;
-
-					jNO_DEFAULT;
-			}
-		}
+			Value = GetVoiceValues(thiscore, voiceidx);
 
 		// Update and Apply ADSR  (applies to normal and noise sources)
 		//

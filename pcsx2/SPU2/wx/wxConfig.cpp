@@ -26,19 +26,6 @@ MixerTab::MixerTab(wxWindow* parent)
 {
 	auto* top_box = new wxBoxSizer(wxVERTICAL);
 
-	// Mixing Settings
-	top_box->Add(new wxStaticText(this, wxID_ANY, "Interpolation"), wxSizerFlags().Centre());
-
-	wxArrayString interpolation_entries;
-	interpolation_entries.Add("Nearest (Fastest/bad quality)");
-	interpolation_entries.Add("Linear (Simple/okay sound)");
-	interpolation_entries.Add("Cubic (Artificial highs)");
-	interpolation_entries.Add("Hermite (Better highs)");
-	interpolation_entries.Add("Catmull-Rom (PS2-like/slow)");
-	interpolation_entries.Add("Gaussian (SPU native)");
-
-	m_inter_select = new wxChoice(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, interpolation_entries);
-
 	effect_check = new wxCheckBox(this, wxID_ANY, "Disable Effects Processing (Speedup)");
 	dealias_check = new wxCheckBox(this, wxID_ANY, "Use the de-alias filter (Overemphasizes the highs) ");
 
@@ -77,8 +64,6 @@ MixerTab::MixerTab(wxWindow* parent)
 
 void MixerTab::Load()
 {
-	m_inter_select->SetSelection(Interpolation);
-
 	effect_check->SetValue(EffectsDisabled);
 	dealias_check->SetValue(postprocess_filter_dealias);
 	m_audio_select->SetSelection(numSpeakers);
@@ -89,7 +74,6 @@ void MixerTab::Load()
 
 void MixerTab::Save()
 {
-	Interpolation = m_inter_select->GetSelection();
 	EffectsDisabled = effect_check->GetValue();
 	postprocess_filter_dealias = dealias_check->GetValue();
 
