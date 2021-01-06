@@ -31,8 +31,6 @@ BEGIN
     PUSHBUTTON      "OK",IDOK,101,238,50,14,NOT WS_TABSTOP
     PUSHBUTTON      "Cancel",IDCANCEL,157,238,50,14,NOT WS_TABSTOP
     GROUPBOX        "Mixing Settings",IDC_STATIC,6,5,145,115
-    LTEXT           "Interpolation:",IDC_STATIC,12,16,61,10,NOT WS_GROUP
-    COMBOBOX        IDC_INTERPOLATE,14,26,129,84,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
     CHECKBOX        "Disable Effects Processing",IDC_EFFECTS_DISABLE,14,47,126,10
     LTEXT           "(speedup!) Skips reverb effects processing, but won't sound as good in most games.",IDC_STATIC,26,59,110,36
     CONTROL         "Use the de-alias filter",IDC_DEALIASFILTER,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,13,92,126,10
