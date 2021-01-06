@@ -75,8 +75,6 @@ int dplLevel = 0;
 
 void ReadSettings()
 {
-	Interpolation = CfgReadInt(L"MIXING", L"Interpolation", 4);
-
 	EffectsDisabled = CfgReadBool(L"MIXING", L"Disable_Effects", false);
 	postprocess_filter_dealias = CfgReadBool(L"MIXING", L"DealiasFilter", false);
 	FinalVolume = ((float)CfgReadInt(L"MIXING", L"FinalVolume", 100)) / 100;
@@ -153,8 +151,6 @@ void ReadSettings()
 
 void WriteSettings()
 {
-	CfgWriteInt(L"MIXING", L"Interpolation", Interpolation);
-
 	CfgWriteBool(L"MIXING", L"Disable_Effects", EffectsDisabled);
 	CfgWriteBool(L"MIXING", L"DealiasFilter", postprocess_filter_dealias);
 	CfgWriteInt(L"MIXING", L"FinalVolume", (int)(FinalVolume * 100 + 0.5f));
@@ -217,14 +213,6 @@ BOOL CALLBACK ConfigProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 
 		case WM_INITDIALOG:
 		{
-			SendDialogMsg(hWnd, IDC_INTERPOLATE, CB_RESETCONTENT, 0, 0);
-			SendDialogMsg(hWnd, IDC_INTERPOLATE, CB_ADDSTRING, 0, (LPARAM)L"0 - Nearest (Fastest/bad quality)");
-			SendDialogMsg(hWnd, IDC_INTERPOLATE, CB_ADDSTRING, 0, (LPARAM)L"1 - Linear (Simple/okay sound)");
-			SendDialogMsg(hWnd, IDC_INTERPOLATE, CB_ADDSTRING, 0, (LPARAM)L"2 - Cubic (Artificial highs)");
-			SendDialogMsg(hWnd, IDC_INTERPOLATE, CB_ADDSTRING, 0, (LPARAM)L"3 - Hermite (Better highs)");
-			SendDialogMsg(hWnd, IDC_INTERPOLATE, CB_ADDSTRING, 0, (LPARAM)L"4 - Catmull-Rom (PS2-like/slow)");
-			SendDialogMsg(hWnd, IDC_INTERPOLATE, CB_SETCURSEL, Interpolation, 0);
-
 			SendDialogMsg(hWnd, IDC_SYNCHMODE, CB_RESETCONTENT, 0, 0);
 			SendDialogMsg(hWnd, IDC_SYNCHMODE, CB_ADDSTRING, 0, (LPARAM)L"TimeStretch (Recommended)");
 			SendDialogMsg(hWnd, IDC_SYNCHMODE, CB_ADDSTRING, 0, (LPARAM)L"Async Mix (Breaks some games!)");
@@ -289,7 +277,6 @@ BOOL CALLBACK ConfigProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 					SndOutLatencyMS = (int)pow(res, 3.0);
 					Clampify(SndOutLatencyMS, LATENCY_MIN, LATENCY_MAX);
 					FinalVolume = (float)(SendDialogMsg(hWnd, IDC_VOLUME_SLIDER, TBM_GETPOS, 0, 0)) / 100;
-					Interpolation = (int)SendDialogMsg(hWnd, IDC_INTERPOLATE, CB_GETCURSEL, 0, 0);
 					OutputModule = (int)SendDialogMsg(hWnd, IDC_OUTPUT, CB_GETCURSEL, 0, 0);
 					SynchMode = (int)SendDialogMsg(hWnd, IDC_SYNCHMODE, CB_GETCURSEL, 0, 0);
 					numSpeakers = (int)SendDialogMsg(hWnd, IDC_SPEAKERS, CB_GETCURSEL, 0, 0);

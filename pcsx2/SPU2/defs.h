@@ -164,12 +164,6 @@ struct V_Voice
 	// Sample pointer (19:12 bit fixed point)
 	s32 SP;
 
-	// Sample pointer for Cubic Interpolation
-	// Cubic interpolation mixes a sample behind Linear, so that it
-	// can have sample data to either side of the end points from which
-	// to extrapolate.  This SP represents that late sample position.
-	s32 SPc;
-
 	// Previous sample values - used for interpolation
 	// Inverted order of these members to match the access order in the
 	//   code (might improve cache hits).
