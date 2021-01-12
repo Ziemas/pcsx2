@@ -29,15 +29,6 @@ int AutoDMAPlayRate[2] = {0, 0};
 // Default settings.
 
 // MIXING
-int Interpolation = 4;
-/* values:
-		0: no interpolation (use nearest)
-		1. linear interpolation
-		2. cubic interpolation
-		3. hermite interpolation
-		4. catmull-rom interpolation
-*/
-
 bool EffectsDisabled = false;
 float FinalVolume; // global
 bool AdvancedVolumeControl;
@@ -84,7 +75,6 @@ void ReadSettings()
 	if (!pathSet)
 		initIni();
 
-	Interpolation = CfgReadInt(L"MIXING", L"Interpolation", 4);
 	EffectsDisabled = CfgReadBool(L"MIXING", L"Disable_Effects", false);
 	postprocess_filter_dealias = CfgReadBool(L"MIXING", L"DealiasFilter", false);
 	FinalVolume = ((float)CfgReadInt(L"MIXING", L"FinalVolume", 100)) / 100;
@@ -186,7 +176,6 @@ void WriteSettings()
 		return;
 	}
 
-	CfgWriteInt(L"MIXING", L"Interpolation", Interpolation);
 	CfgWriteBool(L"MIXING", L"Disable_Effects", EffectsDisabled);
 	CfgWriteBool(L"MIXING", L"DealiasFilter", postprocess_filter_dealias);
 	CfgWriteInt(L"MIXING", L"FinalVolume", (int)(FinalVolume * 100 + 0.5f));

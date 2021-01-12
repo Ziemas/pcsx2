@@ -30,7 +30,7 @@
 class MixerTab : public wxPanel
 {
 public:
-	wxChoice* m_inter_select, *m_audio_select;
+	wxChoice *m_audio_select;
 	wxCheckBox *effect_check, *dealias_check;
 	wxSlider *m_latency_slider, *m_volume_slider;
 	wxStaticBoxSizer *m_volume_box, *m_latency_box;
