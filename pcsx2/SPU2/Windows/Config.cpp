@@ -29,15 +29,6 @@ static const int LATENCY_MIN = 3;
 static const int LATENCY_MIN_TS = 15;
 
 // MIXING
-int Interpolation = 4;
-/* values:
-		0: no interpolation (use nearest)
-		1. linear interpolation
-		2. cubic interpolation
-		3. hermite interpolation
-		4. catmull-rom interpolation
-*/
-
 bool EffectsDisabled = false;
 
 float FinalVolume; // Global
