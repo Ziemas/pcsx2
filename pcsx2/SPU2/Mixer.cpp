@@ -271,18 +271,6 @@ static __forceinline void GetNextDataDummy(V_Core& thiscore, uint voiceidx)
 
 /////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////
-
-static s32 __forceinline GetNoiseValues()
-{
-	static u16 lfsr = 0xC0FEu;
-
-	u16 bit = lfsr ^ (lfsr << 3) ^ (lfsr << 4) ^ (lfsr << 5);
-	lfsr = (lfsr << 1) | (bit >> 15);
-
-	return (s16)lfsr;
-}
-/////////////////////////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////////////////////////
 //                                                                                     //
 
 // Data is expected to be 16 bit signed (typical stuff!).
@@ -373,26 +361,51 @@ static __forceinline s32 GetVoiceValues(V_Core& thiscore, uint voiceidx)
     return out;
 }
 
-// Noise values need to be mixed without going through interpolation, since it
-// can wreak havoc on the noise (causing muffling or popping).  Not that this noise
-// generator is accurate in its own right.. but eh, ah well :)
-static __forceinline s32 GetNoiseValues(V_Core& thiscore, uint voiceidx)
+// This is Dr. Hell's noise algorithm as implemented in pcsxr
+// Supposedly this is 100% accurate
+static __forceinline void UpdateNoise(V_Core& thiscore)
 {
-	// V_Voice &vc(thiscore.Voices[voiceidx]);
+	static const uint8_t noise_add[64] = {
+		1, 0, 0, 1, 0, 1, 1, 0,
+		1, 0, 0, 1, 0, 1, 1, 0,
+		1, 0, 0, 1, 0, 1, 1, 0,
+		1, 0, 0, 1, 0, 1, 1, 0,
+		0, 1, 1, 0, 1, 0, 0, 1,
+		0, 1, 1, 0, 1, 0, 0, 1,
+		0, 1, 1, 0, 1, 0, 0, 1,
+		0, 1, 1, 0, 1, 0, 0, 1
+	};
 
-	s32 retval = GetNoiseValues();
+	static const uint16_t noise_freq_add[5] = {
+		0, 84, 140, 180, 210
+	};
 
-	/*while(vc.SP>=4096)
-	{
-		retval = GetNoiseValues();
-		vc.SP-=4096;
-	}*/
 
-	// GetNoiseValues can't set the phase zero on us unexpectedly
-	// like GetVoiceValues can.  Better assert just in case though..
-	// pxAssume(vc.ADSR.Phase != 0);
+    uint32_t level = 0x8000 >> (thiscore.NoiseClk >> 2);
+    level <<= 16;
 
-	return retval;
+    thiscore.NoiseCnt += 0x10000;
+
+    thiscore.NoiseCnt += noise_freq_add[thiscore.NoiseClk & 3];
+    if((thiscore.NoiseCnt & 0xffff) >= noise_freq_add[4])
+    {
+        thiscore.NoiseCnt += 0x10000;
+        thiscore.NoiseCnt -= noise_freq_add[thiscore.NoiseClk & 3];
+    }
+
+    if(thiscore.NoiseCnt >= level)
+    {
+        while(thiscore.NoiseCnt >= level)
+            thiscore.NoiseCnt -= level;
+
+       thiscore.NoiseOut = (thiscore.NoiseOut << 1) | noise_add[(thiscore.NoiseOut >> 10) & 63];
+    }
+
+}
+
+static __forceinline s32 GetNoiseValues(V_Core& thiscore)
+{
+	return (s32)(s16)thiscore.NoiseOut;
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -447,7 +460,7 @@ static __forceinline StereoOut32 MixVoice(uint coreidx, uint voiceidx)
 		s32 Value = 0;
 
 		if (vc.Noise)
-			Value = GetNoiseValues(thiscore, voiceidx);
+			Value = GetNoiseValues(thiscore);
 		else
 			Value = GetVoiceValues(thiscore, voiceidx);
 
@@ -513,6 +526,7 @@ const VoiceMixSet VoiceMixSet::Empty((StereoOut32()), (StereoOut32())); // Don't
 static __forceinline void MixCoreVoices(VoiceMixSet& dest, const uint coreidx)
 {
 	V_Core& thiscore(Cores[coreidx]);
+	UpdateNoise(thiscore);
 
 	for (uint voiceidx = 0; voiceidx < V_Core::NumVoices; ++voiceidx)
 	{
