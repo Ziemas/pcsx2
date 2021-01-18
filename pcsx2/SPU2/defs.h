@@ -553,7 +553,6 @@ extern void SetIrqCall(int core);
 extern void SetIrqCallDMA(int core);
 extern void StartVoices(int core, u32 value);
 extern void StopVoices(int core, u32 value);
-extern void InitADSR();
 extern void CalculateADSR(V_Voice& vc);
 extern void UpdateSpdifMode();
 

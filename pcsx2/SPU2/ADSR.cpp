@@ -19,11 +19,10 @@
 static const s32 ADSR_MAX_VOL = 0x7fffffff;
 
 static const int InvExpOffsets[] = {0, 4, 6, 8, 9, 10, 11, 12};
-static u32 PsxRates[160];
 
-
-void InitADSR() // INIT ADSR
+static constexpr std::array<u32, 160> InitADSR() // INIT ADSR
 {
+	std::array<u32, 160> rates {};
 	for (int i = 0; i < (32 + 128); i++)
 	{
 		int shift = (i - 32) >> 2;
@@ -33,9 +32,14 @@ void InitADSR() // INIT ADSR
 		else
 			rate <<= shift;
 
-		PsxRates[i] = (int)std::min(rate, (s64)0x3fffffffLL);
+		rates[i] = (int)std::min(rate, (s64)0x3fffffffLL);
 	}
+
+	return rates;
 }
+
+static constexpr std::array<u32, 160> PsxRates = InitADSR();
+
 
 bool V_ADSR::Calculate()
 {
