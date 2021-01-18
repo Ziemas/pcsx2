@@ -320,23 +320,14 @@ static __forceinline void CalculateADSR(V_Core& thiscore, uint voiceidx)
 {
 	V_Voice& vc(thiscore.Voices[voiceidx]);
 
-	if (vc.ADSR.Phase == 0)
+	if (vc.ADSR.stage == V_ADSR::Stage::Stopped)
 	{
-		vc.ADSR.Value = 0;
+		vc.ADSR.volume = 0;
 		return;
 	}
 
-	if (!vc.ADSR.Calculate())
-	{
-		if (IsDevBuild)
-		{
-			if (MsgVoiceOff())
-				ConLog("* SPU2: Voice Off by ADSR: %d \n", voiceidx);
-		}
-		vc.Stop();
-	}
+	vc.ADSR.advance();
 
-	pxAssume(vc.ADSR.Value >= 0); // ADSR should never be negative...
 }
 
 /*
@@ -541,7 +532,7 @@ static __forceinline StereoOut32 MixVoice(uint coreidx, uint voiceidx)
 	// have to run through all the motions of updating the voice regardless of it's
 	// audible status.  Otherwise IRQs might not trigger and emulation might fail.
 
-	if (vc.ADSR.Phase > 0)
+	if (vc.ADSR.stage != V_ADSR::Stage::Stopped)
 	{
 		UpdatePitch(coreidx, voiceidx);
 
@@ -584,7 +575,7 @@ static __forceinline StereoOut32 MixVoice(uint coreidx, uint voiceidx)
 		// use a full 64-bit multiply/result here.
 
 		CalculateADSR(thiscore, voiceidx);
-		Value = ApplyVolume(Value, vc.ADSR.Value);
+		Value = ApplyVolume(Value, vc.ADSR.volume);
 		vc.OutX = Value;
 
 		if (IsDevBuild)

@@ -205,8 +205,8 @@ void V_Core::Init(int index)
 		Voices[v].Volume = V_VolumeSlideLR(0, 0); // V_VolumeSlideLR::Max;
 		Voices[v].SCurrent = 28;
 
-		Voices[v].ADSR.Value = 0;
-		Voices[v].ADSR.Phase = 0;
+		Voices[v].ADSR.volume = 0;
+		Voices[v].ADSR.stage = V_ADSR::Stage::Stopped;
 		Voices[v].Pitch = 0x3FFF;
 		Voices[v].NextA = 0x2801;
 		Voices[v].StartA = 0x2800;
@@ -344,9 +344,8 @@ bool V_Voice::Start()
 		StartA = (StartA + 0xFFFF8) + 0x8;
 	}
 
-	ADSR.Releasing = false;
-	ADSR.Value = 1;
-	ADSR.Phase = 1;
+	ADSR.set_stage(V_ADSR::Stage::Attack);
+	ADSR.volume = 1;
 	SCurrent = 28;
 	LoopMode = 0;
 	SP = 0;
@@ -364,8 +363,8 @@ bool V_Voice::Start()
 
 void V_Voice::Stop()
 {
-	ADSR.Value = 0;
-	ADSR.Phase = 0;
+	ADSR.volume = 0;
+	ADSR.set_stage(V_ADSR::Stage::Stopped);
 }
 
 uint TickInterval = 768;
@@ -644,18 +643,18 @@ void V_Core::WriteRegPS1(u32 mem, u16 value)
 				break;
 
 			case 0x8: // ADSR1 (Envelope)
-				Voices[voice].ADSR.regADSR1 = value;
+				Voices[voice].ADSR.adsr1 = value;
 				//ConLog("voice %x regADSR1 write: %x\n", voice, Voices[voice].ADSR.regADSR1);
 				break;
 
 			case 0xa: // ADSR2 (Envelope)
-				Voices[voice].ADSR.regADSR2 = value;
+				Voices[voice].ADSR.adsr1 = value;
 				//ConLog("voice %x regADSR2 write: %x\n", voice, Voices[voice].ADSR.regADSR2);
 				break;
 			case 0xc: // Voice 0..23 ADSR Current Volume
 				// not commonly set by games
-				Voices[voice].ADSR.Value = value;
-				ConLog("voice %x ADSR.Value write: %x\n", voice, Voices[voice].ADSR.Value);
+				Voices[voice].ADSR.volume = value;
+				ConLog("voice %x ADSR.Value write: %x\n", voice, Voices[voice].ADSR.volume);
 				break;
 			case 0xe:
 				Voices[voice].LoopStartA = map_spu1to2(value);
@@ -965,13 +964,13 @@ u16 V_Core::ReadRegPS1(u32 mem)
 				//ConLog("voice %d read StartA result = %x\n", voice, value);
 				break;
 			case 0x8:
-				value = Voices[voice].ADSR.regADSR1;
+				value = Voices[voice].ADSR.adsr1;
 				break;
 			case 0xa:
-				value = Voices[voice].ADSR.regADSR2;
+				value = Voices[voice].ADSR.adsr2;
 				break;
 			case 0xc:                                   // Voice 0..23 ADSR Current Volume
-				value = Voices[voice].ADSR.Value; // no clue
+				value = Voices[voice].ADSR.volume; // >> 16; // no clue
 				//if (value != 0) ConLog("voice %d read ADSR.Value result = %x\n", voice, value);
 				break;
 			case 0xe:
@@ -1138,11 +1137,11 @@ static void __fastcall RegWrite_VoiceParams(u16 value)
 			break;
 
 		case 3: // ADSR1 (Envelope)
-			thisvoice.ADSR.regADSR1 = value;
+			thisvoice.ADSR.adsr1 = value;
 			break;
 
 		case 4: // ADSR2 (Envelope)
-			thisvoice.ADSR.regADSR2 = value;
+			thisvoice.ADSR.adsr2 = value;
 			break;
 
 			// REG_VP_ENVX, REG_VP_VOLXL and REG_VP_VOLXR have been confirmed to not be allowed to be written to, so code has been commented out.
@@ -1502,8 +1501,8 @@ static void __fastcall RegWrite_Core(u16 value)
 					Cores[1].Voices[v].Volume = V_VolumeSlideLR(0, 0); // V_VolumeSlideLR::Max;
 					Cores[1].Voices[v].SCurrent = 28;
 
-					Cores[1].Voices[v].ADSR.Value = 0;
-					Cores[1].Voices[v].ADSR.Phase = 0;
+					Cores[1].Voices[v].ADSR.volume = 0;
+					Cores[1].Voices[v].ADSR.set_stage(V_ADSR::Stage::Stopped);
 					Cores[1].Voices[v].Pitch = 0x0;
 					Cores[1].Voices[v].NextA = 0x6FFFF;
 					Cores[1].Voices[v].StartA = 0x6FFFF;
@@ -1945,7 +1944,7 @@ void StartVoices(int core, u32 value)
 					   *(u16*)GetMemPtr(thisvc.StartA),
 					   thisvc.Pitch,
 					   thisvc.Volume.Left.Value >> 16, thisvc.Volume.Right.Value >> 16,
-					   thisvc.ADSR.regADSR1, thisvc.ADSR.regADSR2);
+					   thisvc.ADSR.adsr1, thisvc.ADSR.adsr2);
 		}
 	}
 }
@@ -1968,7 +1967,9 @@ void StopVoices(int core, u32 value)
 			continue;
 		}
 
-		Cores[core].Voices[vc].ADSR.Releasing = true;
+		if (Cores[core].Voices[vc].ADSR.stage != V_ADSR::Stage::Stopped)
+			Cores[core].Voices[vc].ADSR.set_stage(V_ADSR::Stage::Release);
+
 		if (MsgKeyOnOff())
 			ConLog("* SPU2: KeyOff: Core %d; Voice %d.\n", core, vc);
 	}

@@ -27,9 +27,9 @@
 	,                                      \
 		PVCP(c, v, Volume.Right.Reg_VOL),  \
 		PVCP(c, v, Pitch),                 \
-		PVCP(c, v, ADSR.regADSR1),         \
-		PVCP(c, v, ADSR.regADSR2),         \
-		PVCP(c, v, ADSR.Value),        \
+		PVCP(c, v, ADSR.adsr1),         \
+		PVCP(c, v, ADSR.adsr2),         \
+		PVCP(c, v, ADSR.volume),        \
 		PVCP(c, v, Volume.Left.Value), \
 		PVCP(c, v, Volume.Right.Value)
 

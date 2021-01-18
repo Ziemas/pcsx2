@@ -16,152 +16,116 @@
 #include "PrecompiledHeader.h"
 #include "Global.h"
 
-static const s32 ADSR_MAX_VOL = 0x7fff;
+static constexpr s32 ADSR_MAX_VOL = 0x7fff;
 
-static const int InvExpOffsets[] = {0, 4, 6, 8, 9, 10, 11, 12};
-static u32 PsxRates[160];
-
-
-void InitADSR() // INIT ADSR
+s32 Envelope::next_step(s16 volume)
 {
-	for (int i = 0; i < (32 + 128); i++)
+	if (cycles_left > 1)
 	{
-		int shift = (i - 32) >> 2;
-		s64 rate = (i & 3) + 4;
-		if (shift < 0)
-			rate >>= -shift;
-		else
-			rate <<= shift;
+		cycles_left--;
+		return 0;
+	}
 
-		PsxRates[i] = (s16)(std::min(rate, (s64)0x3fffffffLL) >> 16);
+	// Need to handle negative phase for volume sweeps eventually
+
+	cycles_left = 1 << std::max(0, shift - 11);
+	s32 next_step = static_cast<s32>(step << std::max(0, 11 - shift));
+
+	if (exponential && rising && volume > 0x6000)
+		cycles_left <<= 2;
+
+	if (exponential && !rising)
+		next_step = (next_step * volume) >> 15;
+
+	return next_step;
+}
+
+void V_ADSR::update()
+{
+	set_stage(stage);
+}
+
+void V_ADSR::set_stage(V_ADSR::Stage new_stage)
+{
+	// If the parameters change it seems we need to run the next step ASAP
+	envelope.cycles_left = 0;
+	switch (new_stage)
+	{
+		case V_ADSR::Stage::Attack:
+			target = 0x7fff;
+			envelope.exponential = ((adsr1 >> 15) & 1) ? true : false;
+			envelope.negative_phase = false;
+			envelope.rising = true;
+			envelope.shift = (adsr1 >> 10) & 0x1f;
+			envelope.step = (adsr1 >> 8) & 0x03;
+			envelope.step = envelope.rising ? (7 - envelope.step) : (-8 + envelope.step);
+			stage = new_stage;
+			break;
+		case V_ADSR::Stage::Decay:
+			target = ((adsr1 & 0x0F) + 1) * 0x800;
+			envelope.negative_phase = false;
+			envelope.exponential = true;
+			envelope.rising = false;
+			envelope.shift = (adsr1 >> 4) & 0xf;
+			envelope.step = -8;
+			stage = new_stage;
+			break;
+		case V_ADSR::Stage::Sustain:
+			target = 0;
+			envelope.negative_phase = false;
+			envelope.exponential = ((adsr2 >> 15) & 1) ? true : false;
+			envelope.rising = ((adsr2 >> 14) & 1) ? false : true;
+			envelope.shift = (adsr2 >> 8) & 0x1f;
+			envelope.step = (adsr2 >> 6) & 0x03;
+			envelope.step = envelope.rising ? (7 - envelope.step) : (-8 + envelope.step);
+			stage = new_stage;
+			break;
+		case V_ADSR::Stage::Release:
+			target = 0;
+			envelope.negative_phase = false;
+			envelope.exponential = ((adsr2 >> 5) & 1) ? true : false;
+			envelope.rising = false;
+			envelope.shift = adsr2 & 0x1f;
+			envelope.step = -8;
+			stage = new_stage;
+			break;
+		case V_ADSR::Stage::Stopped:
+			stage = new_stage;
 	}
 }
 
-bool V_ADSR::Calculate()
+void V_ADSR::advance()
 {
-	pxAssume(Phase != 0);
-
-	if (Releasing && (Phase < 5))
-		Phase = 5;
-
-	switch (Phase)
+	if (stage == V_ADSR::Stage::Stopped)
 	{
-		case 1: // attack
-			if (Value == ADSR_MAX_VOL)
-			{
-				// Already maxed out.  Progress phase and nothing more:
-				Phase++;
-				break;
-			}
-
-			// Case 1 below is for pseudo exponential below 75%.
-			// Pseudo Exp > 75% and Linear are the same.
-
-			if (AttackMode && (Value >= 0x6000))
-				Value += PsxRates[(AttackRate ^ 0x7f) - 0x18 + 32];
-			else
-				Value += PsxRates[(AttackRate ^ 0x7f) - 0x10 + 32];
-
-			if (Value > ADSR_MAX_VOL)
-			{
-				// We hit the ceiling.
-				Phase++;
-				Value = ADSR_MAX_VOL;
-			}
-			break;
-
-		case 2: // decay
-		{
-			u32 off = InvExpOffsets[(Value >> 12) & 7];
-			Value -= PsxRates[((DecayRate ^ 0x1f) * 4) - 0x18 + off + 32];
-
-			// calculate sustain level as a factor of the ADSR maximum volume.
-
-			s32 suslev = ((0x8000 / 0x10) * (SustainLevel + 1)) - 1;
-
-			if (Value <= suslev)
-			{
-				if (Value < 0)
-					Value = 0;
-				Phase++;
-			}
-		}
-		break;
-
-		case 3: // sustain
-		{
-			// 0x7f disables sustain (infinite sustain)
-			if (SustainRate == 0x7f)
-				return true;
-
-			if (SustainMode & 2) // decreasing
-			{
-				if (SustainMode & 4) // exponential
-				{
-					u32 off = InvExpOffsets[(Value >> 12) & 7];
-					Value -= PsxRates[(SustainRate ^ 0x7f) - 0x1b + off + 32];
-				}
-				else // linear
-					Value -= PsxRates[(SustainRate ^ 0x7f) - 0xf + 32];
-
-				if (Value <= 0)
-				{
-					Value = 0;
-					Phase++;
-				}
-			}
-			else
-			{ // increasing
-				if ((SustainMode & 4) && (Value >= 0x6000))
-					Value += PsxRates[(SustainRate ^ 0x7f) - 0x18 + 32];
-				else
-					// linear / Pseudo below 75% (they're the same)
-					Value += PsxRates[(SustainRate ^ 0x7f) - 0x10 + 32];
-
-				if (Value > ADSR_MAX_VOL)
-				{
-					Value = ADSR_MAX_VOL;
-					Phase++;
-				}
-			}
-		}
-		break;
-
-		case 4: // sustain end
-			Value = (SustainMode & 2) ? 0 : ADSR_MAX_VOL;
-			if (Value == 0)
-				Phase = 6;
-			break;
-
-		case 5:              // release
-			if (ReleaseMode) // exponential
-			{
-				u32 off = InvExpOffsets[(Value >> 12) & 7];
-				Value -= PsxRates[((ReleaseRate ^ 0x1f) * 4) - 0x18 + off + 32];
-			}
-			else
-			{ // linear
-				//Value-=PsxRates[((ReleaseRate^0x1f)*4)-0xc+32];
-				if (ReleaseRate != 0x1f)
-					Value -= (1 << (0x1f - ReleaseRate));
-			}
-
-			if (Value <= 0)
-			{
-				Value = 0;
-				Phase++;
-			}
-			break;
-
-		case 6: // release end
-			Value = 0;
-			break;
-
-			jNO_DEFAULT
+		return;
 	}
 
-	// returns true if the voice is active, or false if it's stopping.
-	return Phase != 6;
+	int32_t step = envelope.next_step(volume);
+
+	volume = static_cast<int16_t>(std::max(std::min(volume + step, 0x7fff), 0));
+
+	if (stage != Stage::Sustain)
+	{
+		if ((envelope.rising && volume >= target) ||
+			(!envelope.rising && volume <= target))
+		{
+			switch (stage)
+			{
+				case Stage::Attack:
+					set_stage(Stage::Decay);
+					break;
+				case Stage::Decay:
+					set_stage(Stage::Sustain);
+					break;
+				case Stage::Release:
+					set_stage(Stage::Stopped);
+					break;
+				default:
+					break;
+			}
+		}
+	}
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -192,13 +156,13 @@ void V_VolumeSlide::Update()
 
 		if (Mode & VOLFLAG_EXPONENTIAL)
 		{
-			u32 off = InvExpOffsets[(value >> 12) & 7];
-			value -= PsxRates[(Increment ^ 0x7f) - 0x1b + off + 32];
+			//u32 off = InvExpOffsets[(value >> 28) & 7];
+			//value -= PsxRates[(Increment ^ 0x7f) - 0x1b + off + 32];
 		}
 		else
-			value -= PsxRates[(Increment ^ 0x7f) - 0xf + 32];
+			//value -= PsxRates[(Increment ^ 0x7f) - 0xf + 32];
 
-		if (value < 0)
+			if (value < 0)
 		{
 			value = 0;
 			Mode = 0; // disable slide
@@ -211,10 +175,14 @@ void V_VolumeSlide::Update()
 		// Above 75% slides slow, below 75% slides fast.  It's exponential, pseudo'ly speaking.
 
 		if ((Mode & VOLFLAG_EXPONENTIAL) && (value >= 0x6000))
-			value += PsxRates[(Increment ^ 0x7f) - 0x18 + 32];
+		{
+		}
+		//value += PsxRates[(Increment ^ 0x7f) - 0x18 + 32];
 		else
-			// linear / Pseudo below 75% (they're the same)
-			value += PsxRates[(Increment ^ 0x7f) - 0x10 + 32];
+		{
+		}
+		// linear / Pseudo below 75% (they're the same)
+		//value += PsxRates[(Increment ^ 0x7f) - 0x10 + 32];
 
 		if (value > ADSR_MAX_VOL) // wrapped around the "top"?
 		{

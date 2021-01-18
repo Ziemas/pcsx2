@@ -98,38 +98,39 @@ public:
 	void DebugDump(FILE* dump, const char* title);
 };
 
+
+
+struct Envelope
+{
+    bool exponential;
+    bool rising;
+    bool negative_phase;
+    uint32_t cycles_left;
+    uint8_t shift;
+    int8_t step;
+
+    s32 next_step(s16 volume);
+};
+
 struct V_ADSR
 {
-	union
-	{
-		u32 reg32;
+    enum class Stage
+    {
+        Stopped,
+        Attack,
+        Decay,
+        Sustain,
+        Release,
+    };
 
-		struct
-		{
-			u16 regADSR1;
-			u16 regADSR2;
-		};
-
-		struct
-		{
-			u32 SustainLevel : 4,
-				DecayRate : 4,
-				AttackRate : 7,
-				AttackMode : 1, // 0 for linear (+lin), 1 for pseudo exponential (+exp)
-
-				ReleaseRate : 5,
-				ReleaseMode : 1, // 0 for linear (-lin), 1 for exponential (-exp)
-				SustainRate : 7,
-				SustainMode : 3; // 0 = +lin, 1 = -lin, 2 = +exp, 3 = -exp
-		};
-	};
-
-	s32 Value;      // Ranges from 0 to 0x7fffffff (signed values are clamped to 0) [Reg_ENVX]
-	u8 Phase;       // monitors current phase of ADSR envelope
-	bool Releasing; // Ready To Release, triggered by Voice.Stop();
-
-public:
-	bool Calculate();
+    Envelope envelope;
+    Stage stage;
+    uint16_t target;
+    s32 volume;
+    uint16_t adsr1, adsr2;
+    void set_stage(Stage new_stage);
+    void advance();
+    void update();
 };
 
 
@@ -559,7 +560,6 @@ extern void SetIrqCall(int core);
 extern void SetIrqCallDMA(int core);
 extern void StartVoices(int core, u32 value);
 extern void StopVoices(int core, u32 value);
-extern void InitADSR();
 extern void CalculateADSR(V_Voice& vc);
 extern void UpdateSpdifMode();
 

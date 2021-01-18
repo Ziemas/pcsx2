@@ -285,7 +285,6 @@ s32 SPU2init()
 	SPU2reset();
 
 	DMALogOpen();
-	InitADSR();
 
 #ifdef S2R_ENABLE
 	if (!replay_mode)
