@@ -373,6 +373,7 @@ __forceinline bool StartQueuedVoice(uint coreidx, uint voiceidx)
 	vc.ADSR.Releasing = false;
 	vc.ADSR.Value = 1;
 	vc.ADSR.Phase = 1;
+	vc.ADSR.Fraction = 0;
 	vc.SCurrent = 28;
 	vc.LoopMode = 0;
 	vc.SP = 0;

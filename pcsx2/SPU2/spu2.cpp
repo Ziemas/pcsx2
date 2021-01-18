@@ -258,7 +258,6 @@ s32 SPU2init()
 	SPU2reset();
 
 	DMALogOpen();
-	InitADSR();
 
 	return 0;
 }

@@ -56,6 +56,7 @@ struct V_VolumeSlide
 
 	s16 Reg_VOL;
 	s32 Value;
+	s32 Fraction;
 	s8 Increment;
 	s8 Mode;
 
@@ -64,6 +65,7 @@ public:
 	V_VolumeSlide(s16 regval, s32 fullvol)
 		: Reg_VOL(regval)
 		, Value(fullvol)
+		, Fraction(0)
 		, Increment(0)
 		, Mode(0)
 	{
@@ -120,11 +122,15 @@ struct V_ADSR
 				ReleaseRate : 5,
 				ReleaseMode : 1, // 0 for linear (-lin), 1 for exponential (-exp)
 				SustainRate : 7,
-				SustainMode : 3; // 0 = +lin, 1 = -lin, 2 = +exp, 3 = -exp
+				Unused : 1,
+				SustainDecr : 1, // 1 for decreasing
+				SustainMode : 1; // 0 for linear, 1 for exponential
 		};
 	};
 
+
 	s32 Value;      // Ranges from 0 to 0x7fffffff (signed values are clamped to 0) [Reg_ENVX]
+	s32 Fraction;
 	u8 Phase;       // monitors current phase of ADSR envelope
 	bool Releasing; // Ready To Release, triggered by Voice.Stop();
 
@@ -570,7 +576,6 @@ extern void SetIrqCall(int core);
 extern void SetIrqCallDMA(int core);
 extern void StartVoices(int core, u32 value);
 extern void StopVoices(int core, u32 value);
-extern void InitADSR();
 extern void CalculateADSR(V_Voice& vc);
 extern void UpdateSpdifMode();
 
