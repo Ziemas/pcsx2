@@ -469,13 +469,14 @@ static __forceinline StereoOut32 MixVoice(uint coreidx, uint voiceidx)
 		// use a full 64-bit multiply/result here.
 
 		CalculateADSR(thiscore, voiceidx);
-		Value = MulShr32(Value, vc.ADSR.Value);
+		Value = ApplyVolume(Value, vc.ADSR.Value << 16);
+		//Value = MulShr32(Value, vc.ADSR.Value << 16);
 
 		// Store Value for eventual modulation later
 		// Pseudonym's Crest calculation idea. Actually calculates a crest, unlike the old code which was just peak.
 		if (vc.PV1 < vc.NextCrest)
 		{
-			vc.OutX = MulShr32(vc.NextCrest, vc.ADSR.Value);
+			vc.OutX = MulShr32(vc.NextCrest, vc.ADSR.Value << 16);
 			vc.NextCrest = -0x8000;
 		}
 		if (vc.PV1 > vc.PV2)

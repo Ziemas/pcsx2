@@ -16,29 +16,52 @@
 #include "PrecompiledHeader.h"
 #include "Global.h"
 
-static const s32 ADSR_MAX_VOL = 0x7fffffff;
+//static const s32 ADSR_MAX_VOL = 0x7fffffff;
+static constexpr s32 ADSR_MAX_VOL = 0x7fff;
 
-static const int InvExpOffsets[] = {0, 4, 6, 8, 9, 10, 11, 12};
+static constexpr int RateTable_denom = 1 << (((4 * 32) >> 2) - 11);
 
-static constexpr std::array<u32, 160> InitADSR() // INIT ADSR
+struct AdsrEntry
 {
-	std::array<u32, 160> rates {};
-	for (int i = 0; i < (32 + 128); i++)
-	{
-		int shift = (i - 32) >> 2;
-		s64 rate = (i & 3) + 4;
-		if (shift < 0)
-			rate >>= -shift;
-		else
-			rate <<= shift;
+	s32 step;
+	s32 fraction;
 
-		rates[i] = (int)std::min(rate, (s64)0x3fffffffLL);
+};
+
+// ADSR implementation based on Dr. Hell's documentation
+// Implementation based on PCRSXR's
+
+static constexpr std::array<std::array<AdsrEntry, 128>, 2> InitADSR() // INIT ADSR
+{
+	std::array<std::array<AdsrEntry, 128>, 2> entries = {};
+
+	for (int i = 0; i < 48; i++)
+	{
+		entries[0][i].step = (7 - (s32)(i & 3)) << (11 - (i >> 2));
+		entries[1][i].step = (s32)((u32)(-8 + (s32)(i & 3)) << (11 - (i >> 2)));
+
+		entries[0][i].fraction = 0;
+		entries[1][i].fraction = 0;
 	}
 
-	return rates;
+	for (int i = 48; i < 128; i++)
+	{
+        int denom = 1 << ((i >> 2) - 11);
+
+		entries[0][i].step = (7 - (s32)(i & 3)) / denom;
+		entries[1][i].step = (-8 + (s32)(i & 3)) / denom;
+
+		entries[0][i].fraction = (7 - (s32)(i & 3)) % denom;
+		entries[1][i].fraction = (-8 + (s32)(i & 3)) % denom;
+
+		entries[0][i].fraction *= RateTable_denom / denom;
+		entries[1][i].fraction *= RateTable_denom / denom;
+	}
+
+	return entries;
 }
 
-static constexpr std::array<u32, 160> PsxRates = InitADSR();
+static constexpr std::array<std::array<AdsrEntry, 128>, 2> RateTable = InitADSR();
 
 
 bool V_ADSR::Calculate()
@@ -51,108 +74,160 @@ bool V_ADSR::Calculate()
 	switch (Phase)
 	{
 		case 1: // attack
-			if (Value == ADSR_MAX_VOL)
+			if (Value >= ADSR_MAX_VOL)
 			{
 				// Already maxed out.  Progress phase and nothing more:
 				Phase++;
 				break;
 			}
 
-			// Case 1 below is for pseudo exponential below 75%.
-			// Pseudo Exp > 75% and Linear are the same.
+			if (AttackMode == 1)
+			{
+				if (Value >= 0x6000)
+				{
+					Value += RateTable[0][AttackRate + 8].step;
+					Fraction += RateTable[0][AttackRate + 8].fraction;
+				}
+				else
+				{
+					Value += RateTable[0][AttackRate].step;
+					Fraction += RateTable[0][AttackRate].fraction;
+				}
+			}
 
-			if (AttackMode && (Value >= 0x60000000))
-				Value += PsxRates[(AttackRate ^ 0x7f) - 0x18 + 32];
-			else
-				Value += PsxRates[(AttackRate ^ 0x7f) - 0x10 + 32];
+			if (AttackMode == 0)
+			{
+				Value += RateTable[0][AttackRate].step;
+				Fraction += RateTable[0][AttackRate].fraction;
+			}
 
-			if (Value < 0)
+			if (Fraction >= RateTable_denom)
+			{
+				Fraction -= RateTable_denom;
+				Value++;
+			}
+
+			if (Value < 0 || Value >= 0x8000)
 			{
 				// We hit the ceiling.
 				Phase++;
 				Value = ADSR_MAX_VOL;
+				Fraction = RateTable_denom;
 			}
-			break;
 
+			break;
 		case 2: // decay
 		{
-			u32 off = InvExpOffsets[(Value >> 28) & 7];
-			Value -= PsxRates[((DecayRate ^ 0x1f) * 4) - 0x18 + off + 32];
+			Value += (RateTable[1][DecayRate * 4].step * Value) >> 15;
 
-			// calculate sustain level as a factor of the ADSR maximum volume.
-
-			s32 suslev = ((0x80000000 / 0x10) * (SustainLevel + 1)) - 1;
-
-			if (Value <= suslev)
+			Fraction += RateTable[1][DecayRate * 4].fraction;
+			if (Fraction < 0)
 			{
-				if (Value < 0)
-					Value = 0;
+				Fraction += RateTable_denom;
+				Value--;
+			}
+
+			if (Value < 0)
+			{
+				Value = 0;
+				Fraction = 0;
+			}
+
+			if (((Value >> 11) & 0xf) <= SustainLevel)
+			{
 				Phase++;
 			}
-		}
-		break;
 
+			break;
+		}
 		case 3: // sustain
 		{
-			// 0x7f disables sustain (infinite sustain)
-			if (SustainRate == 0x7f)
-				return true;
-
-			if (SustainMode & 2) // decreasing
+			if (!SustainDecr)
 			{
-				if (SustainMode & 4) // exponential
+				if (SustainMode == 1)
 				{
-					u32 off = InvExpOffsets[(Value >> 28) & 7];
-					Value -= PsxRates[(SustainRate ^ 0x7f) - 0x1b + off + 32];
-				}
-				else // linear
-					Value -= PsxRates[(SustainRate ^ 0x7f) - 0xf + 32];
+					if (Value >= 0x6000)
+					{
+						Value += RateTable[0][SustainRate + 8].step;
+						Fraction += RateTable[0][SustainRate + 8].fraction;
 
-				if (Value <= 0)
+					}
+					else
+					{
+						Value += RateTable[0][SustainRate].step;
+						Fraction += RateTable[0][SustainRate].fraction;
+					}
+
+				}
+
+				if (SustainMode == 0)
 				{
-					Value = 0;
+					Value += RateTable[0][SustainRate].step;
+					Fraction += RateTable[0][SustainRate].fraction;
+
+				}
+
+				if (Fraction >= RateTable_denom)
+				{
+					Fraction -= RateTable_denom;
+					Value++;
+				}
+
+				if (Value >= 0x8000)
+				{
+					Value = ADSR_MAX_VOL;
+					Fraction = RateTable_denom;
 					Phase++;
 				}
 			}
 			else
-			{ // increasing
-				if ((SustainMode & 4) && (Value >= 0x60000000))
-					Value += PsxRates[(SustainRate ^ 0x7f) - 0x18 + 32];
+			{
+				if (SustainMode == 1)
+					Value += (RateTable[1][SustainRate].step * Value) >> 15;
 				else
-					// linear / Pseudo below 75% (they're the same)
-					Value += PsxRates[(SustainRate ^ 0x7f) - 0x10 + 32];
+					Value += RateTable[1][SustainRate].step;
+
+				Fraction += RateTable[1][SustainRate].fraction;
+				if (Fraction < 0)
+				{
+					Fraction += RateTable_denom;
+					Value--;
+				}
 
 				if (Value < 0)
 				{
-					Value = ADSR_MAX_VOL;
+					Value = 0;
+					Fraction = 0;
 					Phase++;
 				}
+
 			}
 		}
 		break;
 
 		case 4: // sustain end
-			Value = (SustainMode & 2) ? 0 : ADSR_MAX_VOL;
+			Value = (SustainDecr) ? 0 : ADSR_MAX_VOL;
 			if (Value == 0)
 				Phase = 6;
 			break;
 
 		case 5:              // release
 			if (ReleaseMode) // exponential
+				Value += (RateTable[1][ReleaseRate * 4].step * Value) >> 15;
+			else // Linear
+				Value += RateTable[1][ReleaseRate * 4].step;
+
+			Fraction += RateTable[1][ReleaseRate * 4].fraction;
+			if (Fraction < 0)
 			{
-				u32 off = InvExpOffsets[(Value >> 28) & 7];
-				Value -= PsxRates[((ReleaseRate ^ 0x1f) * 4) - 0x18 + off + 32];
-			}
-			else
-			{ // linear
-				//Value-=PsxRates[((ReleaseRate^0x1f)*4)-0xc+32];
-				if (ReleaseRate != 0x1f)
-					Value -= (1 << (0x1f - ReleaseRate));
+				Fraction += RateTable_denom;
+				Value--;
 			}
 
 			if (Value <= 0)
 			{
 				Value = 0;
+				Fraction = 0;
 				Phase++;
 			}
 			break;
@@ -196,11 +271,11 @@ void V_VolumeSlide::Update()
 
 		if (Mode & VOLFLAG_EXPONENTIAL)
 		{
-			u32 off = InvExpOffsets[(value >> 28) & 7];
-			value -= PsxRates[(Increment ^ 0x7f) - 0x1b + off + 32];
+			//u32 off = InvExpOffsets[(value >> 28) & 7];
+			//value -= PsxRates[(Increment ^ 0x7f) - 0x1b + off + 32];
 		}
 		else
-			value -= PsxRates[(Increment ^ 0x7f) - 0xf + 32];
+			//value -= PsxRates[(Increment ^ 0x7f) - 0xf + 32];
 
 		if (value < 0)
 		{
@@ -215,10 +290,12 @@ void V_VolumeSlide::Update()
 		// Above 75% slides slow, below 75% slides fast.  It's exponential, pseudo'ly speaking.
 
 		if ((Mode & VOLFLAG_EXPONENTIAL) && (value >= 0x60000000))
-			value += PsxRates[(Increment ^ 0x7f) - 0x18 + 32];
+		{}
+			//value += PsxRates[(Increment ^ 0x7f) - 0x18 + 32];
 		else
+		{}
 			// linear / Pseudo below 75% (they're the same)
-			value += PsxRates[(Increment ^ 0x7f) - 0x10 + 32];
+			//value += PsxRates[(Increment ^ 0x7f) - 0x10 + 32];
 
 		if (value < 0) // wrapped around the "top"?
 		{

@@ -120,11 +120,15 @@ struct V_ADSR
 				ReleaseRate : 5,
 				ReleaseMode : 1, // 0 for linear (-lin), 1 for exponential (-exp)
 				SustainRate : 7,
-				SustainMode : 3; // 0 = +lin, 1 = -lin, 2 = +exp, 3 = -exp
+				Unused : 1,
+				SustainDecr : 1, // 1 for decreasing
+				SustainMode : 1; // 0 for linear, 1 for exponential
 		};
 	};
 
+
 	s32 Value;      // Ranges from 0 to 0x7fffffff (signed values are clamped to 0) [Reg_ENVX]
+	s32 Fraction;
 	u8 Phase;       // monitors current phase of ADSR envelope
 	bool Releasing; // Ready To Release, triggered by Voice.Stop();
 

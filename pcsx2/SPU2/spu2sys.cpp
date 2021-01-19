@@ -346,6 +346,7 @@ bool V_Voice::Start()
 
 	ADSR.Releasing = false;
 	ADSR.Value = 1;
+	ADSR.Fraction = 0;
 	ADSR.Phase = 1;
 	SCurrent = 28;
 	LoopMode = 0;
@@ -980,7 +981,7 @@ u16 V_Core::ReadRegPS1(u32 mem)
 				value = Voices[voice].ADSR.regADSR2;
 				break;
 			case 0xc:                                   // Voice 0..23 ADSR Current Volume
-				value = Voices[voice].ADSR.Value >> 16; // no clue
+				value = Voices[voice].ADSR.Value; // >> 16; // no clue
 				//if (value != 0) ConLog("voice %d read ADSR.Value result = %x\n", voice, value);
 				break;
 			case 0xe:
