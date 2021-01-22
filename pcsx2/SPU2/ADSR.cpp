@@ -24,19 +24,19 @@ static constexpr int RateTable_denom = 1 << (((4 * 32) >> 2) - 11);
 // ADSR implementation based on Dr. Hell's documentation
 // Fraction stuff borrowed from PCSXR
 
-static std::pair<s32, s32> Step(bool rising, u32 rate, bool exp, s32 value)
+static std::pair<s32, s32> Step(bool rising, s32 rate, bool exp, s32 value)
 {
-	u32 real_rate = rate;
+	s32 real_rate = rate;
+	if (rising && exp && value >= 0x6000)
+		real_rate += 8;
+
 	s32 step = 0;
 	s32 fraction = 0;
-	int denom = 1 << ((rate >> 2) - 11);
+	s32 denom = 1 << ((real_rate >> 2) - 11);
 
 	if (rising)
 	{
-		if (exp && value > 0x6000)
-			real_rate += 8;
-
-		if (rate < 48)
+		if (real_rate < 48)
 		{
 			step = (7 - (s32)(real_rate & 3)) << (11 - (real_rate >> 2));
 		}
@@ -49,16 +49,21 @@ static std::pair<s32, s32> Step(bool rising, u32 rate, bool exp, s32 value)
 	}
 	else
 	{
-		if (rate < 48)
+		if (real_rate < 48)
 		{
+
 			step = (s32)((u32)(-8 + (s32)(real_rate & 3)) << (11 - (real_rate >> 2)));
+			if (exp)
+			{
+				step = (step * value) >> 15;
+			}
 		}
 		else
 		{
 			step = (-8 + (s32)(real_rate & 3)) / denom;
 			if (exp)
 			{
-				fraction = (((-8 + (s32)(real_rate & 3)) * real_rate) >> 15) % denom;
+				fraction = (((-8 + (s32)(real_rate & 3)) * value) >> 15) % denom;
 				fraction *= RateTable_denom / denom;
 			}
 			else
