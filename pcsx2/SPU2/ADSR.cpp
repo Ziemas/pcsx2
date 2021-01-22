@@ -21,47 +21,56 @@ static constexpr s32 ADSR_MAX_VOL = 0x7fff;
 
 static constexpr int RateTable_denom = 1 << (((4 * 32) >> 2) - 11);
 
-struct AdsrEntry
-{
-	s32 step;
-	s32 fraction;
-
-};
-
 // ADSR implementation based on Dr. Hell's documentation
-// Implementation based on PCRSXR's
+// Fraction stuff borrowed from PCSXR
 
-static constexpr std::array<std::array<AdsrEntry, 128>, 2> InitADSR() // INIT ADSR
+static std::pair<s32, s32> Step(bool rising, u32 rate, bool exp, s32 value)
 {
-	std::array<std::array<AdsrEntry, 128>, 2> entries = {};
+	u32 real_rate = rate;
+	s32 step = 0;
+	s32 fraction = 0;
+	int denom = 1 << ((rate >> 2) - 11);
 
-	for (int i = 0; i < 48; i++)
+	if (rising)
 	{
-		entries[0][i].step = (7 - (s32)(i & 3)) << (11 - (i >> 2));
-		entries[1][i].step = (s32)((u32)(-8 + (s32)(i & 3)) << (11 - (i >> 2)));
+		if (exp && value > 0x6000)
+			real_rate += 8;
 
-		entries[0][i].fraction = 0;
-		entries[1][i].fraction = 0;
+		if (rate < 48)
+		{
+			step = (7 - (s32)(real_rate & 3)) << (11 - (real_rate >> 2));
+		}
+		else
+		{
+			step = (7 - (s32)(real_rate & 3)) / denom;
+			fraction = (7 - (s32)(real_rate & 3)) % denom;
+			fraction *= RateTable_denom / denom;
+		}
+	}
+	else
+	{
+		if (rate < 48)
+		{
+			step = (s32)((u32)(-8 + (s32)(real_rate & 3)) << (11 - (real_rate >> 2)));
+		}
+		else
+		{
+			step = (-8 + (s32)(real_rate & 3)) / denom;
+			if (exp)
+			{
+				fraction = (((-8 + (s32)(real_rate & 3)) * real_rate) >> 15) % denom;
+				fraction *= RateTable_denom / denom;
+			}
+			else
+			{
+				fraction = (-8 + (s32)(real_rate & 3)) % denom;
+				fraction *= RateTable_denom / denom;
+			}
+		}
 	}
 
-	for (int i = 48; i < 128; i++)
-	{
-        int denom = 1 << ((i >> 2) - 11);
-
-		entries[0][i].step = (7 - (s32)(i & 3)) / denom;
-		entries[1][i].step = (-8 + (s32)(i & 3)) / denom;
-
-		entries[0][i].fraction = (7 - (s32)(i & 3)) % denom;
-		entries[1][i].fraction = (-8 + (s32)(i & 3)) % denom;
-
-		entries[0][i].fraction *= RateTable_denom / denom;
-		entries[1][i].fraction *= RateTable_denom / denom;
-	}
-
-	return entries;
+	return std::make_pair(step, fraction);
 }
-
-static constexpr std::array<std::array<AdsrEntry, 128>, 2> RateTable = InitADSR();
 
 
 bool V_ADSR::Calculate()
@@ -74,6 +83,7 @@ bool V_ADSR::Calculate()
 	switch (Phase)
 	{
 		case 1: // attack
+		{
 			if (Value >= ADSR_MAX_VOL)
 			{
 				// Already maxed out.  Progress phase and nothing more:
@@ -81,25 +91,10 @@ bool V_ADSR::Calculate()
 				break;
 			}
 
-			if (AttackMode == 1)
-			{
-				if (Value >= 0x6000)
-				{
-					Value += RateTable[0][AttackRate + 8].step;
-					Fraction += RateTable[0][AttackRate + 8].fraction;
-				}
-				else
-				{
-					Value += RateTable[0][AttackRate].step;
-					Fraction += RateTable[0][AttackRate].fraction;
-				}
-			}
+			auto [v, f] = Step(true, AttackRate, AttackMode, Value);
 
-			if (AttackMode == 0)
-			{
-				Value += RateTable[0][AttackRate].step;
-				Fraction += RateTable[0][AttackRate].fraction;
-			}
+			Value += v;
+			Fraction += f;
 
 			if (Fraction >= RateTable_denom)
 			{
@@ -116,11 +111,14 @@ bool V_ADSR::Calculate()
 			}
 
 			break;
+		}
 		case 2: // decay
 		{
-			Value += (RateTable[1][DecayRate * 4].step * Value) >> 15;
+			auto [v, f] = Step(false, DecayRate * 4, true, Value);
 
-			Fraction += RateTable[1][DecayRate * 4].fraction;
+			Value += v;
+			Fraction += f;
+
 			if (Fraction < 0)
 			{
 				Fraction += RateTable_denom;
@@ -142,31 +140,13 @@ bool V_ADSR::Calculate()
 		}
 		case 3: // sustain
 		{
+			auto [v, f] = Step(!SustainDecr, SustainRate, SustainMode, Value);
+
+			Value += v;
+			Fraction += f;
+
 			if (!SustainDecr)
 			{
-				if (SustainMode == 1)
-				{
-					if (Value >= 0x6000)
-					{
-						Value += RateTable[0][SustainRate + 8].step;
-						Fraction += RateTable[0][SustainRate + 8].fraction;
-
-					}
-					else
-					{
-						Value += RateTable[0][SustainRate].step;
-						Fraction += RateTable[0][SustainRate].fraction;
-					}
-
-				}
-
-				if (SustainMode == 0)
-				{
-					Value += RateTable[0][SustainRate].step;
-					Fraction += RateTable[0][SustainRate].fraction;
-
-				}
-
 				if (Fraction >= RateTable_denom)
 				{
 					Fraction -= RateTable_denom;
@@ -182,12 +162,6 @@ bool V_ADSR::Calculate()
 			}
 			else
 			{
-				if (SustainMode == 1)
-					Value += (RateTable[1][SustainRate].step * Value) >> 15;
-				else
-					Value += RateTable[1][SustainRate].step;
-
-				Fraction += RateTable[1][SustainRate].fraction;
 				if (Fraction < 0)
 				{
 					Fraction += RateTable_denom;
@@ -200,7 +174,6 @@ bool V_ADSR::Calculate()
 					Fraction = 0;
 					Phase++;
 				}
-
 			}
 		}
 		break;
@@ -211,13 +184,13 @@ bool V_ADSR::Calculate()
 				Phase = 6;
 			break;
 
-		case 5:              // release
-			if (ReleaseMode) // exponential
-				Value += (RateTable[1][ReleaseRate * 4].step * Value) >> 15;
-			else // Linear
-				Value += RateTable[1][ReleaseRate * 4].step;
+		case 5: // release
+		{
+			auto [v, f] = Step(false, ReleaseRate * 4, ReleaseMode, Value);
 
-			Fraction += RateTable[1][ReleaseRate * 4].fraction;
+			Value += v;
+			Fraction += f;
+
 			if (Fraction < 0)
 			{
 				Fraction += RateTable_denom;
@@ -231,7 +204,7 @@ bool V_ADSR::Calculate()
 				Phase++;
 			}
 			break;
-
+		}
 		case 6: // release end
 			Value = 0;
 			break;
@@ -277,7 +250,7 @@ void V_VolumeSlide::Update()
 		else
 			//value -= PsxRates[(Increment ^ 0x7f) - 0xf + 32];
 
-		if (value < 0)
+			if (value < 0)
 		{
 			value = 0;
 			Mode = 0; // disable slide
@@ -290,12 +263,14 @@ void V_VolumeSlide::Update()
 		// Above 75% slides slow, below 75% slides fast.  It's exponential, pseudo'ly speaking.
 
 		if ((Mode & VOLFLAG_EXPONENTIAL) && (value >= 0x60000000))
-		{}
-			//value += PsxRates[(Increment ^ 0x7f) - 0x18 + 32];
+		{
+		}
+		//value += PsxRates[(Increment ^ 0x7f) - 0x18 + 32];
 		else
-		{}
-			// linear / Pseudo below 75% (they're the same)
-			//value += PsxRates[(Increment ^ 0x7f) - 0x10 + 32];
+		{
+		}
+		// linear / Pseudo below 75% (they're the same)
+		//value += PsxRates[(Increment ^ 0x7f) - 0x10 + 32];
 
 		if (value < 0) // wrapped around the "top"?
 		{
