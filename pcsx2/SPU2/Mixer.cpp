@@ -610,6 +610,7 @@ static __forceinline StereoOut32 MixVoice(uint coreidx, uint voiceidx)
 				GetNextDataDummy(thiscore, voiceidx); // Dummy is enough
 		}
 
+		WaveDump::WriteVoice(coreidx, voiceidx, 0);
 		// Write-back of raw voice data (some zeros since the voice is "dead")
 		if (voiceidx == 1)
 			spu2M_WriteFast(((0 == coreidx) ? 0x400 : 0xc00) + OutPos, 0);
