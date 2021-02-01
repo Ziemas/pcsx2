@@ -572,6 +572,8 @@ static __forceinline StereoOut32 MixVoice(uint coreidx, uint voiceidx)
 			}
 		}
 
+		WaveDump::WriteVoice(coreidx, voiceidx, Value);
+
 		// Update and Apply ADSR  (applies to normal and noise sources)
 		//
 		// Note!  It's very important that ADSR stay as accurate as possible.  By the way

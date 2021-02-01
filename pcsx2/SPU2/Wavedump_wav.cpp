@@ -21,14 +21,15 @@
 #include "soundtouch/source/SoundStretch/WavFile.h"
 #endif
 
-static WavOutFile* _new_WavOutFile(const char* destfile)
+static WavOutFile* _new_WavOutFile(const char* destfile, int channels)
 {
-	return new WavOutFile(destfile, 48000, 16, 2);
+	return new WavOutFile(destfile, 48000, 16, channels);
 }
 
 namespace WaveDump
 {
 	static WavOutFile* m_CoreWav[2][CoreSrc_Count];
+	static WavOutFile* m_Voice[2][24];
 
 	static const char* m_tbl_CoreOutputTypeNames[CoreSrc_Count] =
 		{
@@ -63,7 +64,7 @@ namespace WaveDump
 
 				try
 				{
-					m_CoreWav[cidx][srcidx] = _new_WavOutFile(wavfilename);
+					m_CoreWav[cidx][srcidx] = _new_WavOutFile(wavfilename, 2);
 				}
 				catch (std::runtime_error& ex)
 				{
@@ -71,7 +72,18 @@ namespace WaveDump
 					m_CoreWav[cidx][srcidx] = nullptr;
 				}
 			}
+
+			for (int voice = 0; voice < 24; voice++)
+			{
+
+				sprintf(wavfilename, "logs/spu2x-Core%ud-voice-%d.wav",
+						cidx, voice);
+
+				m_Voice[cidx][voice] = _new_WavOutFile(wavfilename, 1);
+			}
+
 		}
+
 	}
 
 	void Close()
@@ -83,6 +95,12 @@ namespace WaveDump
 			for (int srcidx = 0; srcidx < CoreSrc_Count; srcidx++)
 			{
 				safe_delete(m_CoreWav[cidx][srcidx]);
+
+			}
+
+			for (int voiceidx = 0; voiceidx < 24; voiceidx++)
+			{
+				safe_delete(m_Voice[cidx][voiceidx]);
 			}
 		}
 	}
@@ -98,6 +116,14 @@ namespace WaveDump
 	void WriteCore(uint coreidx, CoreSourceType src, s16 left, s16 right)
 	{
 		WriteCore(coreidx, src, StereoOut16(left, right));
+	}
+
+	void WriteVoice(uint coreidx, int voice, s16 sample)
+	{
+		if (!IsDevBuild)
+			return;
+		if (m_CoreWav[coreidx][voice] != nullptr)
+			m_Voice[coreidx][voice]->write((s16*)&sample, 1);
 	}
 } // namespace WaveDump
 

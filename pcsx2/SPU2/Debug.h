@@ -57,6 +57,7 @@ namespace WaveDump
 	extern void Close();
 	extern void WriteCore(uint coreidx, CoreSourceType src, s16 left, s16 right);
 	extern void WriteCore(uint coreidx, CoreSourceType src, const StereoOut16& sample);
+	extern void WriteVoice(uint coreidx, int voice, s16 sample);
 } // namespace WaveDump
 
 using WaveDump::CoreSrc_DryVoiceMix;
