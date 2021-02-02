@@ -16,7 +16,7 @@
 #include "PrecompiledHeader.h"
 #include "Global.h"
 
-static const s32 ADSR_MAX_VOL = 0x7fffffff;
+static const s32 ADSR_MAX_VOL = 0x7fff;
 
 static const int InvExpOffsets[] = {0, 4, 6, 8, 9, 10, 11, 12};
 static u32 PsxRates[160];
@@ -33,7 +33,7 @@ void InitADSR() // INIT ADSR
 		else
 			rate <<= shift;
 
-		PsxRates[i] = (int)std::min(rate, (s64)0x3fffffffLL);
+		PsxRates[i] = (s16)(std::min(rate, (s64)0x3fffffffLL) >> 16);
 	}
 }
 
@@ -57,12 +57,12 @@ bool V_ADSR::Calculate()
 			// Case 1 below is for pseudo exponential below 75%.
 			// Pseudo Exp > 75% and Linear are the same.
 
-			if (AttackMode && (Value >= 0x60000000))
+			if (AttackMode && (Value >= 0x6000))
 				Value += PsxRates[(AttackRate ^ 0x7f) - 0x18 + 32];
 			else
 				Value += PsxRates[(AttackRate ^ 0x7f) - 0x10 + 32];
 
-			if (Value < 0)
+			if (Value > ADSR_MAX_VOL)
 			{
 				// We hit the ceiling.
 				Phase++;
@@ -72,12 +72,12 @@ bool V_ADSR::Calculate()
 
 		case 2: // decay
 		{
-			u32 off = InvExpOffsets[(Value >> 28) & 7];
+			u32 off = InvExpOffsets[(Value >> 12) & 7];
 			Value -= PsxRates[((DecayRate ^ 0x1f) * 4) - 0x18 + off + 32];
 
 			// calculate sustain level as a factor of the ADSR maximum volume.
 
-			s32 suslev = ((0x80000000 / 0x10) * (SustainLevel + 1)) - 1;
+			s32 suslev = ((0x8000 / 0x10) * (SustainLevel + 1)) - 1;
 
 			if (Value <= suslev)
 			{
@@ -98,7 +98,7 @@ bool V_ADSR::Calculate()
 			{
 				if (SustainMode & 4) // exponential
 				{
-					u32 off = InvExpOffsets[(Value >> 28) & 7];
+					u32 off = InvExpOffsets[(Value >> 12) & 7];
 					Value -= PsxRates[(SustainRate ^ 0x7f) - 0x1b + off + 32];
 				}
 				else // linear
@@ -112,13 +112,13 @@ bool V_ADSR::Calculate()
 			}
 			else
 			{ // increasing
-				if ((SustainMode & 4) && (Value >= 0x60000000))
+				if ((SustainMode & 4) && (Value >= 0x6000))
 					Value += PsxRates[(SustainRate ^ 0x7f) - 0x18 + 32];
 				else
 					// linear / Pseudo below 75% (they're the same)
 					Value += PsxRates[(SustainRate ^ 0x7f) - 0x10 + 32];
 
-				if (Value < 0)
+				if (Value > ADSR_MAX_VOL)
 				{
 					Value = ADSR_MAX_VOL;
 					Phase++;
@@ -136,7 +136,7 @@ bool V_ADSR::Calculate()
 		case 5:              // release
 			if (ReleaseMode) // exponential
 			{
-				u32 off = InvExpOffsets[(Value >> 28) & 7];
+				u32 off = InvExpOffsets[(Value >> 12) & 7];
 				Value -= PsxRates[((ReleaseRate ^ 0x1f) * 4) - 0x18 + off + 32];
 			}
 			else
@@ -192,7 +192,7 @@ void V_VolumeSlide::Update()
 
 		if (Mode & VOLFLAG_EXPONENTIAL)
 		{
-			u32 off = InvExpOffsets[(value >> 28) & 7];
+			u32 off = InvExpOffsets[(value >> 12) & 7];
 			value -= PsxRates[(Increment ^ 0x7f) - 0x1b + off + 32];
 		}
 		else
@@ -210,15 +210,15 @@ void V_VolumeSlide::Update()
 		// Pseudo-exponential increments, as done by the SPU2 (really!)
 		// Above 75% slides slow, below 75% slides fast.  It's exponential, pseudo'ly speaking.
 
-		if ((Mode & VOLFLAG_EXPONENTIAL) && (value >= 0x60000000))
+		if ((Mode & VOLFLAG_EXPONENTIAL) && (value >= 0x6000))
 			value += PsxRates[(Increment ^ 0x7f) - 0x18 + 32];
 		else
 			// linear / Pseudo below 75% (they're the same)
 			value += PsxRates[(Increment ^ 0x7f) - 0x10 + 32];
 
-		if (value < 0) // wrapped around the "top"?
+		if (value > ADSR_MAX_VOL) // wrapped around the "top"?
 		{
-			value = 0x7fffffff;
+			value = ADSR_MAX_VOL;
 			Mode = 0; // disable slide
 		}
 	}

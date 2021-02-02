@@ -100,8 +100,8 @@ __forceinline void spu2M_Write(u32 addr, u16 value)
 	spu2M_Write(addr, (s16)value);
 }
 
-V_VolumeLR V_VolumeLR::Max(0x7FFFFFFF);
-V_VolumeSlideLR V_VolumeSlideLR::Max(0x3FFF, 0x7FFFFFFF);
+V_VolumeLR V_VolumeLR::Max(0x7FFF);
+V_VolumeSlideLR V_VolumeSlideLR::Max(0x3FFF, 0x7FFF);
 
 V_Core::V_Core(int coreidx)
 	: Index(coreidx)
@@ -593,18 +593,6 @@ __forceinline void UpdateSpdifMode()
 	}
 }
 
-// Converts an SPU2 register volume write into a 32 bit SPU2 volume.  The value is extended
-// properly into the lower 16 bits of the value to provide a full spectrum of volumes.
-static s32 GetVol32(u16 src)
-{
-	return (((s32)src) << 16) | ((src << 1) & 0xffff);
-}
-
-void V_VolumeSlide::RegSet(u16 src)
-{
-	Value = GetVol32(src);
-}
-
 static u32 map_spu1to2(u32 addr)
 {
 	return addr * 4 + (addr >= 0x200 ? 0xc0000 : 0);
@@ -650,7 +638,7 @@ void V_Core::WriteRegPS1(u32 mem, u16 value)
 					// Volumes range from 0x3fff to 0x7fff, with 0x4000 serving as
 					// the "sign" bit, so a simple bitwise extension will do the trick:
 
-					thisvol.RegSet(value << 1);
+					thisvol.Value = (s16)(value << 1);
 					thisvol.Mode = 0;
 					thisvol.Increment = 0;
 				}
@@ -679,7 +667,7 @@ void V_Core::WriteRegPS1(u32 mem, u16 value)
 				break;
 			case 0xc: // Voice 0..23 ADSR Current Volume
 				// not commonly set by games
-				Voices[voice].ADSR.Value = value * 0x10001U;
+				Voices[voice].ADSR.Value = value;
 				ConLog("voice %x ADSR.Value write: %x\n", voice, Voices[voice].ADSR.Value);
 				break;
 			case 0xe:
@@ -696,20 +684,20 @@ void V_Core::WriteRegPS1(u32 mem, u16 value)
 		{
 			case 0x1d80: //         Mainvolume left
 				MasterVol.Left.Mode = 0;
-				MasterVol.Left.RegSet(value);
+				MasterVol.Left.Value = (s16)value;
 				break;
 
 			case 0x1d82: //         Mainvolume right
 				MasterVol.Right.Mode = 0;
-				MasterVol.Right.RegSet(value);
+				MasterVol.Right.Value = (s16)value;
 				break;
 
 			case 0x1d84: //         Reverberation depth left
-				FxVol.Left = GetVol32(value);
+				FxVol.Left = (s16)value;
 				break;
 
 			case 0x1d86: //         Reverberation depth right
-				FxVol.Right = GetVol32(value);
+				FxVol.Right = (s16)value;
 				break;
 
 			case 0x1d88: //         Voice ON  (0-15)
@@ -995,7 +983,7 @@ u16 V_Core::ReadRegPS1(u32 mem)
 				value = Voices[voice].ADSR.regADSR2;
 				break;
 			case 0xc:                                   // Voice 0..23 ADSR Current Volume
-				value = Voices[voice].ADSR.Value >> 16; // no clue
+				value = Voices[voice].ADSR.Value; // no clue
 				//if (value != 0) ConLog("voice %d read ADSR.Value result = %x\n", voice, value);
 				break;
 			case 0xe:
@@ -1148,7 +1136,7 @@ static void __fastcall RegWrite_VoiceParams(u16 value)
 				// Volumes range from 0x3fff to 0x7fff, with 0x4000 serving as
 				// the "sign" bit, so a simple bitwise extension will do the trick:
 
-				thisvol.RegSet(value << 1);
+				thisvol.Value  = (s16)(value << 1);
 				thisvol.Mode = 0;
 				thisvol.Increment = 0;
 			}
@@ -1609,7 +1597,7 @@ static void __fastcall RegWrite_CoreExt(u16 value)
 				// Volumes range from 0x3fff to 0x7fff, with 0x4000 serving as
 				// the "sign" bit, so a simple bitwise extension will do the trick:
 
-				thisvol.Value = GetVol32(value << 1);
+				thisvol.Value = (s16)(value << 1);
 				thisvol.Mode = 0;
 				thisvol.Increment = 0;
 			}
@@ -1618,27 +1606,27 @@ static void __fastcall RegWrite_CoreExt(u16 value)
 		break;
 
 		case REG_P_EVOLL:
-			thiscore.FxVol.Left = GetVol32(value);
+			thiscore.FxVol.Left = (s16)value;
 			break;
 
 		case REG_P_EVOLR:
-			thiscore.FxVol.Right = GetVol32(value);
+			thiscore.FxVol.Right = (s16)value;
 			break;
 
 		case REG_P_AVOLL:
-			thiscore.ExtVol.Left = GetVol32(value);
+			thiscore.ExtVol.Left = (s16)value;
 			break;
 
 		case REG_P_AVOLR:
-			thiscore.ExtVol.Right = GetVol32(value);
+			thiscore.ExtVol.Right = (s16)value;
 			break;
 
 		case REG_P_BVOLL:
-			thiscore.InpVol.Left = GetVol32(value);
+			thiscore.InpVol.Left = (s16)value;
 			break;
 
 		case REG_P_BVOLR:
-			thiscore.InpVol.Right = GetVol32(value);
+			thiscore.InpVol.Right = (s16)value;
 			break;
 
 			// MVOLX has been confirmed to not be allowed to be written to, so cases have been added as a no-op.

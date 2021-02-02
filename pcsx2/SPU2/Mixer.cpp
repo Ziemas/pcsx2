@@ -301,8 +301,9 @@ static __forceinline void GetNextDataDummy(V_Core& thiscore, uint voiceidx)
 // Data is shifted up by 1 bit to give the output an effective 16 bit range.
 static __forceinline s32 ApplyVolume(s32 data, s32 volume)
 {
-	//return (volume * data) >> 15;
-	return MulShr32(data << 1, volume);
+	pxAssert(volume >= INT16_MIN);
+	pxAssert(volume <= INT16_MAX);
+	return (data * volume) >> 15;
 }
 
 static __forceinline StereoOut32 ApplyVolume(const StereoOut32& data, const V_VolumeLR& volume)
@@ -905,8 +906,8 @@ __forceinline
 	}
 	else
 	{
-		Out.Left = MulShr32(Out.Left << SndOutVolumeShift, Cores[1].MasterVol.Left.Value);
-		Out.Right = MulShr32(Out.Right << SndOutVolumeShift, Cores[1].MasterVol.Right.Value);
+		Out.Left = MulShr32(Out.Left << SndOutVolumeShift, Cores[1].MasterVol.Left.Value << 16);
+		Out.Right = MulShr32(Out.Right << SndOutVolumeShift, Cores[1].MasterVol.Right.Value << 16);
 
 #ifdef DEBUG_KEYS
 		if (postprocess_filter_enabled)

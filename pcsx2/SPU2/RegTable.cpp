@@ -29,9 +29,9 @@
 		PVCP(c, v, Pitch),                 \
 		PVCP(c, v, ADSR.regADSR1),         \
 		PVCP(c, v, ADSR.regADSR2),         \
-		PVCP(c, v, ADSR.Value) + 1,        \
-		PVCP(c, v, Volume.Left.Value) + 1, \
-		PVCP(c, v, Volume.Right.Value) + 1
+		PVCP(c, v, ADSR.Value),        \
+		PVCP(c, v, Volume.Left.Value), \
+		PVCP(c, v, Volume.Right.Value)
 
 #define PVCA(c, v)                  \
 	PVCP(c, v, StartA) + 1,         \
