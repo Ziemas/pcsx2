@@ -593,6 +593,7 @@ static const int pcm_DecodedSamplesPerBlock = 28;
 struct PcmCacheEntry
 {
 	bool Validated;
+	u32 crc;
 	s16 Sampledata[pcm_DecodedSamplesPerBlock];
 };
 

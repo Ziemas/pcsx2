@@ -15,6 +15,7 @@
 
 #include "PrecompiledHeader.h"
 #include "Global.h"
+#include "zlib.h"
 
 // Games have turned out to be surprisingly sensitive to whether a parked, silent voice is being fully emulated.
 // With Silent Hill: Shattered Memories requiring full processing for no obvious reason, we've decided to
@@ -198,10 +199,21 @@ static __forceinline s32 GetNextDataBuffered(V_Core& thiscore, uint voiceidx)
 		PcmCacheEntry& cacheLine = pcm_cache_data[cacheIdx];
 		vc.SBuffer = cacheLine.Sampledata;
 
+		u32 crc = crc32(0L, (u8 *)memptr, pcm_WordsPerBlock*2);
+
 		if (cacheLine.Validated)
 		{
 			// Cached block!  Read from the cache directly.
 			// Make sure to propagate the prev1/prev2 ADPCM:
+
+
+			if (cacheLine.crc != crc)
+			{
+				ConLog("Validated cache entry CRC did not match SPU memory at %04x (%08x vs %08x)\n",
+					   vc.NextA, cacheLine.crc, crc);
+			}
+
+			pxAssert(cacheLine.crc == crc);
 
 			vc.Prev1 = vc.SBuffer[27];
 			vc.Prev2 = vc.SBuffer[26];
@@ -216,6 +228,8 @@ static __forceinline s32 GetNextDataBuffered(V_Core& thiscore, uint voiceidx)
 			// Only flag the cache if it's a non-dynamic memory range.
 			if (vc.NextA >= SPU2_DYN_MEMLINE)
 				cacheLine.Validated = true;
+
+			cacheLine.crc = crc;
 
 			if (IsDevBuild)
 			{
