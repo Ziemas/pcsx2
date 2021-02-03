@@ -254,16 +254,7 @@ s32 SPU2init()
 	spu2regs = (s16*)malloc(0x010000);
 	_spu2mem = (s16*)malloc(0x200000);
 
-	// adpcm decoder cache:
-	//  the cache data size is determined by taking the number of adpcm blocks
-	//  (2MB / 16) and multiplying it by the decoded block size (28 samples).
-	//  Thus: pcm_cache_data = 7,340,032 bytes (ouch!)
-	//  Expanded: 16 bytes expands to 56 bytes [3.5:1 ratio]
-	//    Resulting in 2MB * 3.5.
-
-	pcm_cache_data = (PcmCacheEntry*)calloc(pcm_BlockCount, sizeof(PcmCacheEntry));
-
-	if ((spu2regs == nullptr) || (_spu2mem == nullptr) || (pcm_cache_data == nullptr))
+	if ((spu2regs == nullptr) || (_spu2mem == nullptr))
 	{
 		SysMessage("SPU2: Error allocating Memory\n");
 		return -1;
@@ -438,7 +429,6 @@ void SPU2shutdown()
 
 	safe_free(spu2regs);
 	safe_free(_spu2mem);
-	safe_free(pcm_cache_data);
 
 
 #ifdef SPU2_LOG

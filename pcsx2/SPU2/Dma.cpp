@@ -247,21 +247,6 @@ void V_Core::FinishDMAwrite()
 		buff1end = 0x100000;
 	}
 
-	const int cacheIdxStart = ActiveTSA / pcm_WordsPerBlock;
-	const int cacheIdxEnd = (buff1end + pcm_WordsPerBlock - 1) / pcm_WordsPerBlock;
-	PcmCacheEntry* cacheLine = &pcm_cache_data[cacheIdxStart];
-	PcmCacheEntry& cacheEnd = pcm_cache_data[cacheIdxEnd];
-
-	do
-	{
-		cacheLine->Validated = false;
-		cacheLine++;
-	} while (cacheLine != &cacheEnd);
-
-	//ConLog( "* SPU2: Cache Clear Range!  TSA=0x%x, TDA=0x%x (low8=0x%x, high8=0x%x, len=0x%x)\n",
-	//	ActiveTSA, buff1end, flagTSA, flagTDA, clearLen );
-
-
 	// First Branch needs cleared:
 	// It starts at TSA and goes to buff1end.
 

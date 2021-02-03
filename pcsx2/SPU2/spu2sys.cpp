@@ -76,21 +76,9 @@ __forceinline s16 spu2M_Read(u32 addr)
 }
 
 // writes a signed value to the SPU2 ram
-// Invalidates the ADPCM cache in the process.
 __forceinline void spu2M_Write(u32 addr, s16 value)
 {
-	// Make sure the cache is invalidated:
-	// (note to self : addr address WORDs, not bytes)
-
 	addr &= 0xfffff;
-	if (addr >= SPU2_DYN_MEMLINE)
-	{
-		const int cacheIdx = addr / pcm_WordsPerBlock;
-		pcm_cache_data[cacheIdx].Validated = false;
-
-		if (MsgToConsole() && MsgCache())
-			ConLog("* SPU2: PcmCache Block Clear at 0x%x (cacheIdx=0x%x)\n", addr, cacheIdx);
-	}
 	*GetMemPtr(addr) = value;
 }
 

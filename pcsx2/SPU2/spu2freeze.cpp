@@ -25,11 +25,6 @@ namespace SPU2Savestate
 	// versioning for saves.
 	// Increment this when changes to the savestate system are made.
 	static const u32 SAVE_VERSION = 0x000e;
-
-	static void wipe_the_cache()
-	{
-		memset(pcm_cache_data, 0, pcm_BlockCount * sizeof(PcmCacheEntry));
-	}
 } // namespace SPU2Savestate
 
 struct SPU2Savestate::DataBlock
@@ -69,11 +64,6 @@ s32 __fastcall SPU2Savestate::FreezeIt(DataBlock& spud)
 	spud.lClocks = lClocks;
 	spud.PlayMode = PlayMode;
 
-	// note: Don't save the cache.  PCSX2 doesn't offer a safe method of predicting
-	// the required size of the savestate prior to saving, plus this is just too
-	// "implementation specific" for the intended spec of a savestate.  Let's just
-	// force the user to rebuild their cache instead.
-
 	return 0;
 }
 
@@ -96,9 +86,6 @@ s32 __fastcall SPU2Savestate::ThawIt(DataBlock& spud)
 		// only way to get that is to use the game's existing core settings and hope
 		// they kinda match the settings for the savestate (IRQ enables and such).
 
-		// adpcm cache : Clear all the cache flags and buffers.
-
-		wipe_the_cache();
 	}
 	else
 	{
@@ -120,20 +107,6 @@ s32 __fastcall SPU2Savestate::ThawIt(DataBlock& spud)
 		Cycles = spud.Cycles;
 		lClocks = spud.lClocks;
 		PlayMode = spud.PlayMode;
-
-		wipe_the_cache();
-
-		// Go through the V_Voice structs and recalculate SBuffer pointer from
-		// the NextA setting.
-
-		for (int c = 0; c < 2; c++)
-		{
-			for (int v = 0; v < 24; v++)
-			{
-				const int cacheIdx = Cores[c].Voices[v].NextA / pcm_WordsPerBlock;
-				Cores[c].Voices[v].SBuffer = pcm_cache_data[cacheIdx].Sampledata;
-			}
-		}
 
 		// HACKFIX!! DMAPtr can be invalid after a savestate load, so force it to nullptr and
 		// ignore it on any pending ADMA writes.  (the DMAPtr concept used to work in old VM

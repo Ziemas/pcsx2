@@ -182,8 +182,8 @@ struct V_Voice
 	s32 OutX;
 	s32 NextCrest; // temp value for Crest calculation
 
-	// SBuffer now points directly to an ADPCM cache entry.
-	s16* SBuffer;
+	// SBuffer holds the PCM samples of the currently decoded block;.
+	s16 SBuffer[28];
 
 	// sample position within the current decoded packet.
 	s32 SCurrent;
@@ -579,21 +579,4 @@ namespace SPU2Savestate
 // The SPU2 has a dynamic memory range which is used for several internal operations, such as
 // registers, CORE 1/2 mixing, AutoDMAs, and some other fancy stuff.  We exclude this range
 // from the cache here:
-static const s32 SPU2_DYN_MEMLINE = 0x2800;
-
-// 8 short words per encoded PCM block. (as stored in SPU2 ram)
-static const int pcm_WordsPerBlock = 8;
-
-// number of cachable ADPCM blocks (any blocks above the SPU2_DYN_MEMLINE)
-static const int pcm_BlockCount = 0x100000 / pcm_WordsPerBlock;
-
-// 28 samples per decoded PCM block (as stored in our cache)
-static const int pcm_DecodedSamplesPerBlock = 28;
-
-struct PcmCacheEntry
-{
-	bool Validated;
-	s16 Sampledata[pcm_DecodedSamplesPerBlock];
-};
-
-extern PcmCacheEntry* pcm_cache_data;
+static constexpr s32 SPU2_DYN_MEMLINE = 0x2800;

@@ -130,15 +130,6 @@ static void __forceinline IncrementNextA(V_Core& thiscore, uint voiceidx)
 	vc.NextA &= 0xFFFFF;
 }
 
-// decoded pcm data, used to cache the decoded data so that it needn't be decoded
-// multiple times.  Cache chunks are decoded when the mixer requests the blocks, and
-// invalided when DMA transfers and memory writes are performed.
-PcmCacheEntry* pcm_cache_data = nullptr;
-
-int g_counter_cache_hits = 0;
-int g_counter_cache_misses = 0;
-int g_counter_cache_ignores = 0;
-
 // LOOP/END sets the ENDX bit and sets NAX to LSA, and the voice is muted if LOOP is not set
 // LOOP seems to only have any effect on the block with LOOP/END set, where it prevents muting the voice
 // (the documented requirement that every block in a loop has the LOOP bit set is nonsense according to tests)
@@ -182,8 +173,6 @@ static __forceinline s32 GetNextDataBuffered(V_Core& thiscore, uint voiceidx)
 	{
 		vc.SCurrent = 0;
 
-		// We'll need the loop flags and buffer pointers regardless of cache status:
-
 		for (int i = 0; i < 2; i++)
 			if (Cores[i].IRQEnable && Cores[i].IRQA == (vc.NextA & 0xFFFF8))
 				SetIrqCall(i);
@@ -194,39 +183,7 @@ static __forceinline s32 GetNextDataBuffered(V_Core& thiscore, uint voiceidx)
 		if ((vc.LoopFlags & XAFLAG_LOOP_START) && !vc.LoopMode)
 			vc.LoopStartA = vc.NextA & 0xFFFF8;
 
-		const int cacheIdx = vc.NextA / pcm_WordsPerBlock;
-		PcmCacheEntry& cacheLine = pcm_cache_data[cacheIdx];
-		vc.SBuffer = cacheLine.Sampledata;
-
-		if (cacheLine.Validated)
-		{
-			// Cached block!  Read from the cache directly.
-			// Make sure to propagate the prev1/prev2 ADPCM:
-
-			vc.Prev1 = vc.SBuffer[27];
-			vc.Prev2 = vc.SBuffer[26];
-
-			//ConLog( "* SPU2: Cache Hit! NextA=0x%x, cacheIdx=0x%x\n", vc.NextA, cacheIdx );
-
-			if (IsDevBuild)
-				g_counter_cache_hits++;
-		}
-		else
-		{
-			// Only flag the cache if it's a non-dynamic memory range.
-			if (vc.NextA >= SPU2_DYN_MEMLINE)
-				cacheLine.Validated = true;
-
-			if (IsDevBuild)
-			{
-				if (vc.NextA < SPU2_DYN_MEMLINE)
-					g_counter_cache_ignores++;
-				else
-					g_counter_cache_misses++;
-			}
-
-			XA_decode_block(vc.SBuffer, memptr, vc.Prev1, vc.Prev2);
-		}
+		XA_decode_block(vc.SBuffer, memptr, vc.Prev1, vc.Prev2);
 	}
 
 	return vc.SBuffer[vc.SCurrent++];
@@ -803,9 +760,6 @@ StereoOut32 Apply_Dealias_Filter(StereoOut32& SoundStream)
 	return SoundStream;
 }
 
-// used to throttle the output rate of cache stat reports
-static int p_cachestat_counter = 0;
-
 // Gcc does not want to inline it when lto is enabled because some functions growth too much.
 // The function is big enought to see any speed impact. -- Gregory
 #ifndef __POSIX__
@@ -901,22 +855,4 @@ __forceinline
 	OutPos++;
 	if (OutPos >= 0x200)
 		OutPos = 0;
-
-	if (IsDevBuild)
-	{
-		p_cachestat_counter++;
-		if (p_cachestat_counter > (48000 * 10))
-		{
-			p_cachestat_counter = 0;
-			if (MsgCache())
-				ConLog(" * SPU2 > CacheStats > Hits: %d  Misses: %d  Ignores: %d\n",
-					   g_counter_cache_hits,
-					   g_counter_cache_misses,
-					   g_counter_cache_ignores);
-
-			g_counter_cache_hits =
-				g_counter_cache_misses =
-					g_counter_cache_ignores = 0;
-		}
-	}
 }
