@@ -120,6 +120,13 @@ if(PORTAUDIO_API)
 endif()
 check_lib(SOUNDTOUCH SoundTouch soundtouch/SoundTouch.h)
 
+if(CUBEB_API)
+    # Stop cubeb from adding gtest and screwing up the build
+    set(BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    set(BUILD_TOOLS OFF CACHE BOOL "" FORCE)
+    add_subdirectory(3rdparty/cubeb EXCLUDE_FROM_ALL)
+endif()
+
 if(SDL2_API)
     check_lib(SDL2 SDL2 SDL.h PATH_SUFFIXES SDL2)
 else()

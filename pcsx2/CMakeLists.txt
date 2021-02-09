@@ -254,6 +254,7 @@ set(pcsx2SPU2Sources
 	SPU2/RegTable.cpp
 	SPU2/Reverb.cpp
 	SPU2/SndOut.cpp
+	SPU2/SndOut_cubeb.cpp
 	SPU2/SndOut_SDL.cpp
 	SPU2/spu2freeze.cpp
 	SPU2/spu2sys.cpp
@@ -1081,6 +1082,7 @@ set(pcsx2FinalLibs
     Utilities
     x86emitter
     fmt::fmt
+    cubeb
     ${wxWidgets_LIBRARIES}
     ${GTK2_LIBRARIES}
     ${ZLIB_LIBRARIES}
