@@ -106,7 +106,7 @@ private:
 			int packets = framesPerBuffer / SndOutPacketSize;
 
 			for (int p = 0; p < packets; p++, p1 += SndOutPacketSize)
-				SndBuffer::ReadSamples(p1);
+				SndBuffer::ReadSamples(p1, SndOutPacketSize);
 
 			(*written) += packets * SndOutPacketSize;
 

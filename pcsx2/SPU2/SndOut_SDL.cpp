@@ -55,8 +55,8 @@ namespace
 		// Length should always be samples in bytes.
 		assert(len / sizeof(StereoOut_SDL) == samples);
 
-		for (Uint16 i = 0; i < samples; i += SndOutPacketSize)
-			SndBuffer::ReadSamples(&out[i]);
+		for (Uint16 i = 0; i < sdl_samples; i += SndOutPacketSize)
+			SndBuffer::ReadSamples(&out[i], SndOutPacketSize);
 	}
 } // namespace
 

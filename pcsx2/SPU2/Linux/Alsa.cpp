@@ -54,7 +54,7 @@ protected:
 			StereoOut16* p1 = buff;
 
 			for (int p = 0; p < PacketsPerBuffer; p++, p1 += SndOutPacketSize)
-				SndBuffer::ReadSamples(p1);
+				SndBuffer::ReadSamples(p1, SndOutPacketSize);
 
 			snd_pcm_writei(handle, buff, period_time);
 			avail = snd_pcm_avail_update(handle);
