@@ -365,6 +365,7 @@ Dialog::Dialog()
 	module_entries.Add("PortAudio (Cross-platform)");
 #endif
 	module_entries.Add("SDL Audio (Recommended for PulseAudio)");
+	module_entries.Add("Cubeb");
 	m_module_select = new wxChoice(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, module_entries);
 	module_box->Add(m_module_select, wxSizerFlags().Centre());
 
