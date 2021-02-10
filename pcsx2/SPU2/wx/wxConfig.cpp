@@ -14,11 +14,9 @@
  */
 
 #include "PrecompiledHeader.h"
-#include "SPU2/Config.h"
-#if defined(__linux__) || defined(__APPLE__)
-#include "SPU2/wx/Config.h"
-#endif
-#include "SPU2/Global.h"
+#include "../Config.h"
+#include "../wx/Config.h"
+#include "../Global.h"
 #include "wxConfig.h"
 
 MixerTab::MixerTab(wxWindow* parent)
@@ -361,10 +359,15 @@ Dialog::Dialog()
 
 	wxArrayString module_entries;
 	module_entries.Add("No Sound (Emulate SPU2 only)");
+#ifdef _WIN32
+	module_entries.Add("XAudio");
+#endif
 #ifdef SPU2X_PORTAUDIO
 	module_entries.Add("PortAudio (Cross-platform)");
 #endif
+#ifndef _WIN32
 	module_entries.Add("SDL Audio (Recommended for PulseAudio)");
+#endif
 	m_module_select = new wxChoice(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, module_entries);
 	module_box->Add(m_module_select, wxSizerFlags().Centre());
 
@@ -381,6 +384,8 @@ Dialog::Dialog()
 	portaudio_entries.Add("JACK");
 #elif defined(__APPLE__)
 	portaudio_entries.Add("CoreAudio");
+#elif defined(_WIN32)
+	portaudio_entries.Add("?"); // TODO
 #else
 	portaudio_entries.Add("OSS");
 #endif
@@ -388,6 +393,7 @@ Dialog::Dialog()
 	m_portaudio_box->Add(m_portaudio_select, wxSizerFlags().Centre());
 #endif
 
+#ifndef _WIN32
 	// SDL
 	m_sdl_box = new wxBoxSizer(wxVERTICAL);
 	m_sdl_text = new wxStaticText(this, wxID_ANY, "SDL API");
@@ -399,11 +405,12 @@ Dialog::Dialog()
 
 	m_sdl_select = new wxChoice(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, sdl_entries);
 	m_sdl_box->Add(m_sdl_select, wxSizerFlags().Centre());
+	module_box->Add(m_sdl_box, wxSizerFlags().Expand());
+#endif
 
 #ifdef SPU2X_PORTAUDIO
 	module_box->Add(m_portaudio_box, wxSizerFlags().Expand());
 #endif
-	module_box->Add(m_sdl_box, wxSizerFlags().Expand());
 
 	m_top_box->Add(module_box, wxSizerFlags().Centre().Border(wxALL, 5));
 
@@ -477,7 +484,9 @@ void Dialog::Load()
 #ifdef SPU2X_PORTAUDIO
 	m_portaudio_select->SetSelection(OutputAPI);
 #endif
+#ifndef _WIN32
 	m_sdl_select->SetSelection(SdlOutputAPI);
+#endif
 
 	m_mixer_panel->Load();
 	m_sync_panel->Load();
@@ -499,9 +508,10 @@ void Dialog::Save()
 		p_api = "OSS";
 	PortaudioOut->SetApiSettings(p_api);
 #endif
-
+#ifndef _WIN32
 	SdlOutputAPI = m_sdl_select->GetSelection();
 	SDLOut->SetApiSettings(m_sdl_select->GetStringSelection());
+#endif
 
 	m_mixer_panel->Save();
 	m_sync_panel->Save();

@@ -18,8 +18,6 @@
 #include "PrecompiledHeader.h"
 #include "Dialogs.h"
 #include <cstring>
-
-#if defined(__unix__) || defined(__APPLE__)
 #include <wx/wx.h>
 
 void SysMessage(const char* fmt, ...)
@@ -49,4 +47,3 @@ void SysMessage(const wchar_t* fmt, ...)
 	wxMessageDialog dialog(nullptr, msg, "Info", wxOK);
 	dialog.ShowModal();
 }
-#endif

@@ -15,7 +15,7 @@
 
 #include "PrecompiledHeader.h"
 #include "Global.h"
-#include "Dialogs.h"
+#include "wx/Dialogs.h"
 
 
 class WaveOutModule : public SndOutModule
