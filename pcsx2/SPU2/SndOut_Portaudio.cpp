@@ -24,7 +24,7 @@
 #include "Windows/Dialogs.h"
 #elif defined(__linux__) || defined(__APPLE__)
 #include "portaudio.h"
-#include "Linux/Dialogs.h"
+#include "wx/Dialogs.h"
 #endif
 
 

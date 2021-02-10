@@ -76,7 +76,6 @@ if(WIN32)
 		PCSX2.rc
 		GS/GS.rc
 		PAD/Windows/PAD.rc
-		SPU2/Windows/SPU2.rc
 		DEV9/Win32/DEV9ghzdrk.rc
 		USB/usb-pad/dx/versionproxy.rc
 		USB/usb-pad/raw/raw-config.rc
@@ -294,6 +293,12 @@ set(pcsx2SPU2Sources
 	SPU2/Timestretcher.cpp
 	SPU2/Wavedump_wav.cpp
 	SPU2/WavFile.cpp
+	SPU2/wx/CfgHelpers.cpp
+	SPU2/wx/Config.cpp
+	SPU2/wx/ConfigDebug.cpp
+	SPU2/wx/ConfigSoundTouch.cpp
+	SPU2/wx/Dialogs.cpp
+	SPU2/wx/wxConfig.cpp
 	)
 
 if(TARGET PkgConfig::PORTAUDIO)
@@ -314,6 +319,9 @@ set(pcsx2SPU2Headers
 	SPU2/SndOut.h
 	SPU2/spdif.h
 	SPU2/WavFile.h
+	SPU2/wx/Config.h
+	SPU2/wx/Dialogs.h
+	SPU2/wx/wxConfig.h
 )
 
 if(NOT WIN32)
@@ -750,23 +758,6 @@ set(pcsx2GSHeaders
 	)
 
 if(WIN32)
-	list(APPEND pcsx2SPU2Sources
-		SPU2/Windows/CfgHelpers.cpp
-		SPU2/Windows/Config.cpp
-		SPU2/Windows/ConfigDebug.cpp
-		SPU2/Windows/ConfigSoundTouch.cpp
-		SPU2/Windows/dsp.cpp
-		SPU2/Windows/RealtimeDebugger.cpp
-		SPU2/Windows/SndOut_XAudio2.cpp
-		SPU2/Windows/UIHelpers.cpp
-	)
-	list(APPEND pcsx2SPU2Headers
-		SPU2/Windows/Dialogs.h
-		SPU2/Windows/dsp.h
-		SPU2/Windows/resource.h
-		SPU2/Windows/WinConfig.h
-	)
-
 	list(APPEND pcsx2DEV9Sources
 		DEV9/Win32/DEV9WinConfig.cpp
 		DEV9/Win32/pcap_io_win32.cpp
@@ -833,20 +824,6 @@ if(WIN32)
 		GS/Window/GSWndWGL.h
 	)
 else(WIN32)
-	list(APPEND pcsx2SPU2Sources
-		SPU2/Linux/CfgHelpers.cpp
-		SPU2/Linux/Config.cpp
-		SPU2/Linux/ConfigDebug.cpp
-		SPU2/Linux/ConfigSoundTouch.cpp
-		SPU2/Linux/Dialogs.cpp
-		SPU2/wx/wxConfig.cpp
-	)
-	list(APPEND pcsx2SPU2Headers
-		SPU2/Linux/Config.h
-		SPU2/Linux/Dialogs.h
-		SPU2/wx/wxConfig.h
-	)
-
 	list(APPEND pcsx2DEV9Sources
 		DEV9/Linux/Config.cpp
 		DEV9/Linux/Linux.cpp
