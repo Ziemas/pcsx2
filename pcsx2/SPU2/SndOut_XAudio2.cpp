@@ -15,7 +15,7 @@
 
 #include "PrecompiledHeader.h"
 #include "SPU2/Global.h"
-#include "Dialogs.h"
+#include "wx/Dialogs.h"
 
 #include <xaudio2.h>
 #include <cguid.h>
@@ -91,7 +91,9 @@ private:
 
 		BaseStreamingVoice(uint numChannels)
 			: pSourceVoice(nullptr)
-			, m_nBuffers(Config_XAudio2.NumBuffers)
+			// TODO
+			//, m_nBuffers(Config_XAudio2.NumBuffers)
+			, m_nBuffers(2)
 			, m_nChannels(numChannels)
 			, m_BufferSize(SndOutPacketSize * m_nChannels * PacketsPerBuffer)
 			, m_BufferSizeBytes(m_BufferSize * sizeof(s16))
