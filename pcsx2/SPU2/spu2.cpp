@@ -224,46 +224,6 @@ s32 SPU2init()
 	return 0;
 }
 
-#ifdef _MSC_VER
-// Bit ugly to have this here instead of in RealttimeDebugger.cpp, but meh :p
-extern bool debugDialogOpen;
-extern HWND hDebugDialog;
-
-static INT_PTR CALLBACK DebugProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
-{
-	int wmId;
-
-	switch (uMsg)
-	{
-		case WM_PAINT:
-			return FALSE;
-		case WM_INITDIALOG:
-		{
-			debugDialogOpen = true;
-		}
-		break;
-
-		case WM_COMMAND:
-			wmId = LOWORD(wParam);
-			// Parse the menu selections:
-			switch (wmId)
-			{
-				case IDOK:
-				case IDCANCEL:
-					debugDialogOpen = false;
-					EndDialog(hWnd, 0);
-					break;
-				default:
-					return FALSE;
-			}
-			break;
-
-		default:
-			return FALSE;
-	}
-	return TRUE;
-}
-#endif
 uptr gsWindowHandle = 0;
 
 s32 SPU2open(void* pDsp)
@@ -278,25 +238,6 @@ s32 SPU2open(void* pDsp)
 		gsWindowHandle = *(uptr*)pDsp;
 	else
 		gsWindowHandle = 0;
-
-#ifdef _MSC_VER
-#ifdef PCSX2_DEVBUILD // Define may not be needed but not tested yet. Better make sure.
-	if (IsDevBuild && VisualDebug())
-	{
-		if (debugDialogOpen == 0)
-		{
-			hDebugDialog = CreateDialogParam(nullptr, MAKEINTRESOURCE(IDD_DEBUG), 0, DebugProc, 0);
-			ShowWindow(hDebugDialog, SW_SHOWNORMAL);
-			debugDialogOpen = 1;
-		}
-	}
-	else if (debugDialogOpen)
-	{
-		DestroyWindow(hDebugDialog);
-		debugDialogOpen = 0;
-	}
-#endif
-#endif
 
 	IsOpened = true;
 	lClocks = psxRegs.cycle;
