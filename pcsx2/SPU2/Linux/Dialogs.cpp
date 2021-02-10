@@ -50,12 +50,3 @@ void SysMessage(const wchar_t* fmt, ...)
 	dialog.ShowModal();
 }
 #endif
-
-void DspUpdate()
-{
-}
-
-s32 DspLoadLibrary(wchar_t* fileName, int modnum)
-{
-	return 0;
-}

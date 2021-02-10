@@ -268,10 +268,6 @@ s32 SPU2open(void* pDsp)
 	try
 	{
 		SndBuffer::Init();
-
-#ifndef __POSIX__
-		DspLoadLibrary(dspPlugin, dspPluginModule);
-#endif
 		WaveDump::Open();
 	}
 	catch (std::exception& ex)
@@ -292,10 +288,6 @@ void SPU2close()
 	IsOpened = false;
 
 	FileLog("[%10d] SPU2 Close\n", Cycles);
-
-#ifndef __POSIX__
-	DspCloseLibrary();
-#endif
 
 	SndBuffer::Cleanup();
 }
@@ -344,8 +336,6 @@ static bool lState[6];
 
 void SPU2async(u32 cycles)
 {
-	DspUpdate();
-
 	TimeUpdate(psxRegs.cycle);
 
 #ifdef DEBUG_KEYS
