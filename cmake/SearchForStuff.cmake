@@ -21,6 +21,8 @@ find_package(OpenGL)
 find_package(PNG)
 find_package(Vtune)
 
+add_subdirectory(3rdparty/FreeSurround)
+
 # The requirement of wxWidgets is checked in SelectPcsx2Plugins module
 # Does not require the module (allow to compile non-wx plugins)
 # Force the unicode build (the variable is only supported on cmake 2.8.3 and above)

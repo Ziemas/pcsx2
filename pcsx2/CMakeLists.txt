@@ -1055,6 +1055,7 @@ set(pcsx2FinalLibs
     Utilities
     x86emitter
     fmt::fmt
+	FreeSurround
     ${wxWidgets_LIBRARIES}
     ${GTK2_LIBRARIES}
     ${ZLIB_LIBRARIES}
