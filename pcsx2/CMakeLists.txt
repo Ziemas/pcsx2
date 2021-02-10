@@ -254,11 +254,11 @@ set(pcsx2SPU2Sources
 	SPU2/Timestretcher.cpp
 	SPU2/Wavedump_wav.cpp
 	SPU2/WavFile.cpp
-	SPU2/Linux/CfgHelpers.cpp
-	SPU2/Linux/Config.cpp
-	SPU2/Linux/ConfigDebug.cpp
-	SPU2/Linux/ConfigSoundTouch.cpp
-	SPU2/Linux/Dialogs.cpp
+	SPU2/wx/CfgHelpers.cpp
+	SPU2/wx/Config.cpp
+	SPU2/wx/ConfigDebug.cpp
+	SPU2/wx/ConfigSoundTouch.cpp
+	SPU2/wx/Dialogs.cpp
 	SPU2/wx/wxConfig.cpp
     )
 
@@ -281,8 +281,8 @@ set(pcsx2SPU2Headers
 	SPU2/SndOut.h
 	SPU2/spdif.h
 	SPU2/WavFile.h
-	SPU2/Linux/Config.h
-	SPU2/Linux/Dialogs.h
+	SPU2/wx/Config.h
+	SPU2/wx/Dialogs.h
 	SPU2/wx/wxConfig.h
 )
 

@@ -16,7 +16,7 @@
 #include "PrecompiledHeader.h"
 #include "SPU2/Config.h"
 #if defined(__linux__) || defined(__APPLE__)
-#include "SPU2/Linux/Config.h"
+#include "SPU2/wx/Config.h"
 #endif
 #include "SPU2/Global.h"
 #include "wxConfig.h"
