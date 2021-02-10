@@ -18,8 +18,8 @@
 #include "spu2.h"
 #include "Dma.h"
 #if defined(__linux__) || defined(__APPLE__)
-#include "Linux/Dialogs.h"
-#include "Linux/Config.h"
+#include "wx/Dialogs.h"
+#include "wx/Config.h"
 #elif defined(_WIN32)
 #include "Windows/Dialogs.h"
 #endif

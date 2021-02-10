@@ -20,7 +20,7 @@
 #include "Global.h"
 #include "SndOut.h"
 #if defined(__linux__) || defined(__APPLE__)
-#include "Linux/Dialogs.h"
+#include "wx/Dialogs.h"
 #elif defined(_WIN32)
 #include "Windows/Dialogs.h"
 #endif
