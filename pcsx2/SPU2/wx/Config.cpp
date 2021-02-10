@@ -17,11 +17,11 @@
 #include "SPU2/Global.h"
 #include "Dialogs.h"
 #include "Config.h"
+#include "SPU2/wx/wxConfig.h"
 
 #if defined(__unix__) || defined(__APPLE__)
 #include <SDL.h>
 #include <SDL_audio.h>
-#include "SPU2/wx/wxConfig.h"
 #endif
 
 int AutoDMAPlayRate[2] = {0, 0};
@@ -168,9 +168,11 @@ void ReadSettings()
 
 	if (mods[OutputModule] == nullptr)
 	{
+		#ifndef _WIN32
 		Console.Warning("* SPU2: Unknown output module '%s' specified in configuration file.", temp.wc_str());
 		Console.Warning("* SPU2: Defaulting to SDL (%s).", SDLOut->GetIdent());
 		OutputModule = FindOutputModuleById(SDLOut->GetIdent());
+		#endif
 	}
 
 	WriteSettings();

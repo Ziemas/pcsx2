@@ -17,12 +17,8 @@
 #include "Global.h"
 #include "spu2.h"
 #include "Dma.h"
-#if defined(__linux__) || defined(__APPLE__)
 #include "wx/Dialogs.h"
 #include "wx/Config.h"
-#elif defined(_WIN32)
-#include "Windows/Dialogs.h"
-#endif
 #include "R3000A.h"
 #include "Utilities/pxStreams.h"
 #include "AppCoreThread.h"
