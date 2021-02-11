@@ -176,7 +176,7 @@ bool V_ADSR::Calculate()
 					Value--;
 				}
 
-				if (Value > ADSR_MAX_VOL)
+				if (Value <= 0)
 				{
 					Value = 0;
 					Fraction = 0;
