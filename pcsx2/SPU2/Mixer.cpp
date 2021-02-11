@@ -908,8 +908,12 @@ __forceinline
 		// Edit: I'm sorry Jake, but I know of no good audio system that arbitrary distorts and clips
 		// output by design.
 		// Good thing though that this code gets the volume exactly right, as per tests :)
-		Out = clamp_mix(Out, SndOutVolumeShift);
+		Out = clamp_mix(Out);
 	}
+
+	// Outputs currently expcet 32bit range audio, shift up here.
+	Out.Left <<= SndOutVolumeShift;
+	Out.Right <<= SndOutVolumeShift;
 
 	// Configurable output volume
 	Out.Left *= FinalVolume;
