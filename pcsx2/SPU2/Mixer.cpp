@@ -70,12 +70,9 @@ __forceinline
 	StereoOut32
 	clamp_mix(const StereoOut32& sample, u8 bitshift)
 {
-	// We should clampify between -0x8000 and 0x7fff, however some audio output
-	// modules or sound drivers could (will :p) overshoot with that. So giving it a small safety.
-
 	return StereoOut32(
-		GetClamped(sample.Left, -(0x7f00 << bitshift), 0x7f00 << bitshift),
-		GetClamped(sample.Right, -(0x7f00 << bitshift), 0x7f00 << bitshift));
+		GetClamped(sample.Left, -(0x8000 << bitshift), 0x7fff << bitshift),
+		GetClamped(sample.Right, -(0x8000 << bitshift), 0x7fff << bitshift));
 }
 
 static void __forceinline XA_decode_block(s16* buffer, const s16* block, s32& prev1, s32& prev2)
