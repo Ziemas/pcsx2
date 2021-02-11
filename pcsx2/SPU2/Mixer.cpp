@@ -34,24 +34,6 @@ static const s32 tbl_XA_Factor[16][2] =
 		{122, -60}};
 
 
-// Performs a 64-bit multiplication between two values and returns the
-// high 32 bits as a result (discarding the fractional 32 bits).
-// The combined fractional bits of both inputs must be 32 bits for this
-// to work properly.
-//
-// This is meant to be a drop-in replacement for times when the 'div' part
-// of a MulDiv is a constant.  (example: 1<<8, or 4096, etc)
-//
-// [Air] Performance breakdown: This is over 10 times faster than MulDiv in
-//   a *worst case* scenario.  It's also more accurate since it forces the
-//   caller to  extend the inputs so that they make use of all 32 bits of
-//   precision.
-//
-static __forceinline s32 MulShr32(s32 srcval, s32 mulval)
-{
-	return (s64)srcval * mulval >> 32;
-}
-
 __forceinline s32 clamp_mix(s32 x, u8 bitshift)
 {
 	assert(bitshift <= 15);
@@ -903,8 +885,8 @@ __forceinline
 	}
 	else
 	{
-		Out.Left = MulShr32(Out.Left << SndOutVolumeShift, Cores[1].MasterVol.Left.Value << 16);
-		Out.Right = MulShr32(Out.Right << SndOutVolumeShift, Cores[1].MasterVol.Right.Value << 16);
+		Out.Left = ApplyVolume(Out.Left, Cores[1].MasterVol.Left.Value);
+		Out.Right = ApplyVolume(Out.Right, Cores[1].MasterVol.Right.Value);
 
 #ifdef DEBUG_KEYS
 		if (postprocess_filter_enabled)
