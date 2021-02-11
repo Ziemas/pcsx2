@@ -1360,6 +1360,9 @@
     <ClCompile Include="..\..\Recording\Utilities\InputRecordingLogger.cpp">
       <Filter>Recording\Utilities</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\SPU2\SndOut_cubeb.cpp">
+      <Filter>System\Ps2\SPU2</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\Patch.h">

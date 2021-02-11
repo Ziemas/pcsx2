@@ -245,7 +245,7 @@ private:
 			T* qb = (T*)context;
 
 			for (int p = 0; p < PacketsPerBuffer; p++, qb += SndOutPacketSize)
-				SndBuffer::ReadSamples(qb);
+				SndBuffer::ReadSamples(qb, SndOutPacketSize);
 
 			XAUDIO2_BUFFER buf = {0};
 			buf.AudioBytes = m_BufferSizeBytes;

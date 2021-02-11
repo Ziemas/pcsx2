@@ -9,7 +9,12 @@ public:
 	s32 Init()
 	{
 		ConLog("Starting Cubeb output\n");
-		cubeb_init(&m_ctx, "pcsx2", NULL);
+		int rv = cubeb_init(&m_ctx, "pcsx2", NULL);
+		if (rv != CUBEB_OK)
+		{
+			ConLog("Cubeb: init failed\n");
+			return -1;
+		}
 
 		cubeb_stream_params params = {};
 		params.format = CUBEB_SAMPLE_S16LE;
@@ -17,7 +22,7 @@ public:
 		params.layout = CUBEB_LAYOUT_STEREO;
 		params.rate = 48000;
 
-		int rv = cubeb_get_min_latency(m_ctx, &params, &m_latency);
+		rv = cubeb_get_min_latency(m_ctx, &params, &m_latency);
 		if (rv != CUBEB_OK)
 		{
 			ConLog("Cubeb: could not get minimum latency\n");

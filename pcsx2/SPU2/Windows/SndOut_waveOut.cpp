@@ -60,7 +60,7 @@ private:
 
 				T* t = (T*)buf->lpData;
 				for (int p = 0; p < PacketsPerBuffer; p++, t += SndOutPacketSize)
-					SndBuffer::ReadSamples(t);
+					SndBuffer::ReadSamples(t, SndOutPacketSize);
 
 				whbuffer[i].dwFlags &= ~WHDR_DONE;
 				waveOutWrite(hwodevice, buf, sizeof(WAVEHDR));
