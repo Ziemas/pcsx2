@@ -199,6 +199,7 @@ set(pcsx2Headers
 set(pcsx2CDVDSources
 	CDVD/BlockdumpFileReader.cpp
 	CDVD/CdRom.cpp
+	CDVD/CdXa.cpp
 	CDVD/CDVDaccess.cpp
 	CDVD/CDVD.cpp
 	CDVD/CDVDdiscReader.cpp
@@ -218,6 +219,7 @@ set(pcsx2CDVDSources
 # CDVD headers
 set(pcsx2CDVDHeaders
 	CDVD/CdRom.h
+	CDVD/CdXa.h
 	CDVD/CDVDaccess.h
 	CDVD/CDVD.h
 	CDVD/CDVD_internal.h

@@ -581,7 +581,7 @@ void cdrReadInterrupt()
 
 	if (cdr.Mode & MODE_STRSND && cdr.Transfer[3] == 2)
 	{
-		xa_subheader_t *xa = (xa_subheader_t *)&cdr.Transfer[4];
+		xa_subheader *xa = (xa_subheader *)&cdr.Transfer[4];
 		if (xa->channum == cdr.Channel && xa->filenum == cdr.File)
 		{
 			Console.Warning("XA sector passed filter: filen: %02x channel: %02x submod: %02x coding: %02x", xa->filenum, xa->channum, xa->submode, xa->coding);
