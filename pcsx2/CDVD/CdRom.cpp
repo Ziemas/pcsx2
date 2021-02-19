@@ -100,6 +100,12 @@ u8 Test23[] = {0x43, 0x58, 0x44, 0x32, 0x39, 0x34, 0x30, 0x51};
 #define MODE_AUTOPAUSE (1 << 1) // 0x02
 #define MODE_CDDA (1 << 0)      // 0x01
 
+/* XA submode */
+#define SUBMODE_AUDIO (1 << 2)
+
+/* XA-ADPCM Coding */
+#define XA_STEREO (1 << 0)
+
 /* Status flags, to go on cdr.StatP */
 #define STATUS_PLAY (1 << 7)      // 0x80
 #define STATUS_SEEK (1 << 6)      // 0x40
@@ -582,9 +588,13 @@ void cdrReadInterrupt()
 	if (cdr.Mode & MODE_STRSND && cdr.Transfer[3] == 2)
 	{
 		xa_subheader *xa = (xa_subheader *)&cdr.Transfer[4];
-		if (xa->channum == cdr.Channel && xa->filenum == cdr.File)
+		if (xa->submode & SUBMODE_AUDIO)
 		{
-			Console.Warning("XA sector passed filter: filen: %02x channel: %02x submod: %02x coding: %02x", xa->filenum, xa->channum, xa->submode, xa->coding);
+			if (xa->channum == cdr.Channel && xa->filenum == cdr.File)
+			{
+				DecodeADPCM(xa, &cdr.Transfer[4] + sizeof(xa_subheader));
+				Console.Warning("XA sector passed filter: filen: %02x channel: %02x submod: %02x coding: %02x", xa->filenum, xa->channum, xa->submode, xa->coding);
+			}
 		}
 	}
 	else

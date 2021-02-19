@@ -13,8 +13,11 @@ struct xa_subheader
 	u8 channum2;
 	u8 submode2;
 	u8 coding2;
-};
 
+	u32 Samplerate() { return (coding & (1 << 2)) ? 18900 : 37800; }
+	bool Stereo() { return (coding & 1) ? false : true; }
+	u8 Bits() { return (coding & (1 << 4))? 8 : 4; }
+};
 
 struct ADPCM_Decode
 {
@@ -29,8 +32,8 @@ struct xa_decode
 	s32 stereo;
 	s32 nsamples;
 	ADPCM_Decode left, right;
-	s16 pcm[16384];
+	s16 pcm[2][16384];
 };
 
-void DecodeADPCM(xa_decode& decoded, u8* xaData, s32 last_l, s32 last_r);
-void DecodeChunck(ADPCM_Decode* decp, u8 filter, u8* blk, s16* samples, s32 last_sampleL, s32 last_sampleR);
+void DecodeADPCM(xa_subheader* header, u8* xaData);
+//void DecodeChunck(ADPCM_Decode* decp, u8 filter, u8* blk, s16* samples, s32 last_sampleL, s32 last_sampleR);

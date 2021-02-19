@@ -15,7 +15,7 @@ static const s8 tbl_XA_Factor[16][2] = {
 	{98, -55},
 	{122, -60}};
 
-void DecodeChunck(ADPCM_Decode* decp, u8 filter, u8* blk, u16* samples, s32 last_sampleL, s32 last_sampleR)
+void DecodeChuncka(ADPCM_Decode* decp, u8 filter, u8* blk, u16* samples, s16 last_sampleL, s16 last_sampleR)
 {
 	for (u32 block = 0; block < cdr.Xa.nbits; block++)
 	{
@@ -49,14 +49,40 @@ void DecodeChunck(ADPCM_Decode* decp, u8 filter, u8* blk, u16* samples, s32 last
 
 			decp->y0 = pcm;
 			decp->y1 = pcm2;
-
-			std::cout << "PCM1: " << pcm << std::endl;
-			std::cout << "PCM2: " << pcm2 << std::endl;
 		}
 	}
 }
 
-void DecodeADPCM(xa_decode& decoded, u8* xaData, s32 last_left, s32 last_right)
+static void DecodeBlock(s16* buffer, int pass, const s16* block, ADPCM_Decode prev)
+{
+	const s32 header = *block;
+	const s32 shift = (header & 0xF) + 16; // TODO: cap at shift 9
+	const int id = header >> 4 & 0xF;
+	if (id > 4 && MsgToConsole())
+		ConLog("* SPU2: Unknown ADPCM coefficients table id %d\n", id);
+
+	const s32 pred1 = tbl_XA_Factor[id][0];
+	const s32 pred2 = tbl_XA_Factor[id][1];
+
+	const s8* blockbytes = (s8*)&block[1];
+	const s8* blockend = &blockbytes[13];
+
+	for (u32 dst = pass; blockbytes <= blockend; ++blockbytes, dst += 2)
+	{
+		s32 nibble = *blockbytes >> (pass * 4);
+		s32 data = (nibble << 28) & 0xF0000000;
+		s32 pcm = (data >> shift) + (((pred1 * prev.y0) + (pred2 * prev.y1) + 32) >> 6);
+
+		Clampify(pcm, -0x8000, 0x7fff);
+		buffer[dst] = pcm;
+
+		prev.y1 = prev.y0;
+		prev.y0 = pcm;
+	}
+}
+
+
+void DecodeADPCM(xa_subheader* header, u8* xaData)
 {
 	/*************************************************************************
 	* Taken from No$
@@ -77,32 +103,18 @@ void DecodeADPCM(xa_decode& decoded, u8* xaData, s32 last_left, s32 last_right)
 	*  src=src+14h+4    ;skip padding,edc
 	*******************************************************************************************/
 
-	const u8* sound_groupsp;
-	const u8 *sound_datap, *sound_datap2;
-	int i, j, k, nbits;
-	u16 data[4096];
-
-	nbits = decoded.nbits == 4 ? 4 : 2;
-	// 16 byte header. Shift, Filter
-	sound_groupsp = xaData + 4;
-	// 16 bytes after header
-	sound_datap = sound_groupsp + 16;
-
-	Console.Warning("DECODE ADPCM");
-
 	for (u32 block = 0; block < 18; block++)
 	{
-		if (decoded.stereo)
+		if (header->Stereo())
 		{
-			DecodeChunck(&decoded.left, sound_groupsp[tbl_XA_Factor[block][0]], xaData, data, last_left, last_right); // Note we access the positive table first
-			DecodeChunck(&decoded.right, sound_groupsp[tbl_XA_Factor[block][0]], xaData, data, last_left, last_right);
+			DecodeChunck(&decoded.left, 0, xaData, data, cdr.Xa.left);
+			DecodeChunck(&decoded.right, 1, xaData, data, cdr.Xa.right);
 		}
 		else
 		{
 			// Mono sound
-			DecodeChunck(&decoded.left, sound_groupsp[tbl_XA_Factor[block][0]], xaData, data, last_left, last_right); // Note we access the positive table first
+			//DecodeChunck(&decoded.left, xaData, data, cdr.Xa.Left);
+			//DecodeChunck(&decoded.left, xaData, data, cdr.Xa.Left);
 		}
-
-		std::cout << "Data: " << unsigned(data[block]) << std::endl;
 	}
 }
