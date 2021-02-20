@@ -250,19 +250,38 @@ void V_VolumeSlide::Update()
 	{
 		// Decrement
 
-
 		if (Mode & VOLFLAG_EXPONENTIAL)
 		{
-			//u32 off = InvExpOffsets[(value >> 28) & 7];
-			//value -= PsxRates[(Increment ^ 0x7f) - 0x1b + off + 32];
+			auto [v, f] = Step(false, Increment, true, Value);
+
+			Value += v;
+			Fraction += f;
+
+			if (Fraction < 0)
+			{
+				Fraction += MaxCycles;
+				Value--;
+			}
 		}
 		else
-			//value -= PsxRates[(Increment ^ 0x7f) - 0xf + 32];
+		{
+			auto [v, f] = Step(false, Increment, false, Value);
+
+			Value += v;
+			Fraction += f;
+
+			if (Fraction < 0)
+			{
+				Fraction += MaxCycles;
+				Value--;
+			}
+		}
 
 		if (value < 0)
 		{
 			value = 0;
 			Mode = 0; // disable slide
+			Fraction = 0;
 		}
 	}
 	else
@@ -271,17 +290,34 @@ void V_VolumeSlide::Update()
 		// Pseudo-exponential increments, as done by the SPU2 (really!)
 		// Above 75% slides slow, below 75% slides fast.  It's exponential, pseudo'ly speaking.
 
-		if ((Mode & VOLFLAG_EXPONENTIAL) && (value >= 0x60000000))
+		if (Mode & VOLFLAG_EXPONENTIAL)
 		{
+			auto [v, f] = Step(true, Increment, true, Value);
+
+			Value += v;
+			Fraction += f;
+
+			if (Fraction >= MaxCycles)
+			{
+				Fraction -= MaxCycles;
+				Value++;
+			}
 		}
-		//value += PsxRates[(Increment ^ 0x7f) - 0x18 + 32];
 		else
 		{
-		}
-		// linear / Pseudo below 75% (they're the same)
-		//value += PsxRates[(Increment ^ 0x7f) - 0x10 + 32];
+			auto [v, f] = Step(true, Increment, true, Value);
 
-		if (value > ADSR_MAX_VOL) // wrapped around the "top"?
+			Value += v;
+			Fraction += f;
+
+			if (Fraction >= MaxCycles)
+			{
+				Fraction -= MaxCycles;
+				Value++;
+			}
+		}
+
+		if (value > ADSR_MAX_VOL)
 		{
 			value = ADSR_MAX_VOL;
 			Mode = 0; // disable slide
