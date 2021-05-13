@@ -302,12 +302,12 @@ set(pcsx2CDVDHeaders
 
 # SPU2 sources
 set(pcsx2SPU2Sources
-	SPU2/spu2.cpp
+	SPU2/SPU2.cpp
 	)
 
 # SPU2 headers
 set(pcsx2SPU2Headers
-	SPU2/spu2.h
+	SPU2/SPU2.h
 	)
 
 # DEV9 sources
