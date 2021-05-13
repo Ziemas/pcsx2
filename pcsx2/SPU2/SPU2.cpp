@@ -15,6 +15,10 @@
 
 #include "SPU2.h"
 
+namespace SPU
+{
 
-void SPU2::write16() {}
-u16 SPU2::read16(u32 addr) { return 0; }
+	void SPUCore::write16() {}
+	u16 SPUCore::read16(u32 addr) { return 0; }
+
+} // namespace SPU
