@@ -23,7 +23,7 @@
 
 #include "ZipTools/ThreadedZipTools.h"
 #include "Utilities/pxStreams.h"
-#include "SPU2/spu2.h"
+#include "SPU2/SPU2.h"
 #include "USB/USB.h"
 #ifdef _WIN32
 #include "PAD/Windows/PAD.h"
@@ -60,7 +60,7 @@ int SysState_MTGSFreeze(int mode, freezeData* fP)
 	return sstate.retval;
 }
 
-static constexpr SysState_Component SPU2{"SPU2", SPU2freeze};
+static constexpr SysState_Component SPU2{"SPU2", SPU::Freeze};
 static constexpr SysState_Component PAD{"PAD", PADfreeze};
 static constexpr SysState_Component USB{"USB", USBfreeze};
 static constexpr SysState_Component GS{"GS", SysState_MTGSFreeze};

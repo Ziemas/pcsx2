@@ -27,7 +27,7 @@
 #include "MTVU.h"
 #include "IPC.h"
 #include "FW.h"
-#include "SPU2/spu2.h"
+#include "SPU2/SPU2.h"
 #include "DEV9/DEV9.h"
 #include "USB/USB.h"
 #include "gui/MemoryCardFile.h"
@@ -104,7 +104,7 @@ void SysCoreThread::OnStart()
 void SysCoreThread::Start()
 {
 	GSinit();
-	SPU2init();
+	SPU::Init();
 	PADinit();
 	DEV9init();
 	USBinit();
@@ -309,7 +309,7 @@ void SysCoreThread::OnSuspendInThread()
 	DoCDVDclose();
 	FWclose();
 	PADclose();
-	SPU2close();
+	SPU::Close();
 	FileMcd_EmuClose();
 	GetMTGS().Suspend();
 }
@@ -323,7 +323,7 @@ void SysCoreThread::OnResumeInThread(bool isSuspended)
 		USBopen((void*)pDsp);
 	}
 	FWopen();
-	SPU2open((void*)pDsp);
+	SPU::Open();
 	PADopen((void*)pDsp);
 	FileMcd_EmuOpen();
 }
@@ -341,7 +341,7 @@ void SysCoreThread::OnCleanupInThread()
 	// FIXME: temporary workaround for deadlock on exit, which actually should be a crash
 	vu1Thread.WaitVU();
 	USBclose();
-	SPU2close();
+	SPU::Close();
 	PADclose();
 	DEV9close();
 	DoCDVDclose();
@@ -349,7 +349,7 @@ void SysCoreThread::OnCleanupInThread()
 	FileMcd_EmuClose();
 	GetMTGS().Suspend();
 	USBshutdown();
-	SPU2shutdown();
+	SPU::Shutdown();
 	PADshutdown();
 	DEV9shutdown();
 	GetMTGS().Cancel();

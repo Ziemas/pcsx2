@@ -19,7 +19,7 @@
 #include "CDVD/CDVD.h"
 #include "GS.h"
 #include "GSFrame.h"
-#include "SPU2/spu2.h"
+#include "SPU2/SPU2.h"
 #include "System/SysThreads.h"
 #include "DEV9/DEV9.h"
 #include "USB/USB.h"
@@ -65,7 +65,7 @@ void MainEmuFrame::Menu_IPC_Settings_Click(wxCommandEvent& event)
 
 void MainEmuFrame::Menu_AudioSettings_Click(wxCommandEvent& event)
 {
-	SPU2configure();
+	SPU::Configure();
 }
 
 void MainEmuFrame::Menu_McdSettings_Click(wxCommandEvent& event)
@@ -969,7 +969,7 @@ void MainEmuFrame::VideoCaptureToggle()
 		std::string filename;
 		if (GSsetupRecording(filename))
 		{
-			if (!g_Conf->AudioCapture.EnableAudio || SPU2setupRecording(&filename))
+			if (!g_Conf->AudioCapture.EnableAudio || SPU::SetupRecording(&filename))
 			{
 				m_submenuVideoCapture.Enable(MenuId_Capture_Video_Record, false);
 				m_submenuVideoCapture.Enable(MenuId_Capture_Video_Stop, true);
@@ -992,7 +992,7 @@ void MainEmuFrame::VideoCaptureToggle()
 		// stop recording
 		GSendRecording();
 		if (g_Conf->AudioCapture.EnableAudio)
-			SPU2endRecording();
+			SPU::EndRecording();
 		m_submenuVideoCapture.Enable(MenuId_Capture_Video_Record, true);
 		m_submenuVideoCapture.Enable(MenuId_Capture_Video_Stop, false);
 		m_submenuVideoCapture.Enable(MenuId_Capture_Video_IncludeAudio, true);

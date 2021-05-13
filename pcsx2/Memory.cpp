@@ -45,7 +45,7 @@ BIOS
 
 #include "ps2/HwInternal.h"
 #include "ps2/BiosTools.h"
-#include "SPU2/spu2.h"
+#include "SPU2/SPU2.h"
 
 #include "Utilities/PageFaultSource.h"
 
@@ -293,7 +293,7 @@ static mem16_t __fastcall _ext_memRead16(u32 mem)
 		}
 
 		case 8: // spu2
-			return SPU2read(mem);
+			return SPU::Read(mem);
 
 		default: break;
 	}
@@ -387,7 +387,7 @@ static void __fastcall _ext_memWrite16(u32 mem, mem16_t value)
 			Console.WriteLn("DEV9 write16 %8.8lx: %4.4lx", mem & ~0xa4000000, value);
 			return;
 		case 8: // spu2
-			SPU2write(mem, value); return;
+			SPU::Write(mem, value); return;
 		default: break;
 	}
 	MEM_LOG("Unknown Memory write16  to  address %x with data %4.4x", mem, value);
