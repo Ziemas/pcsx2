@@ -15,34 +15,25 @@
 
 #pragma once
 
-#include <array>
-#include <string>
 #include "Pcsx2Types.h"
-#include "SaveState.h"
 
 namespace SPU
 {
-	void Run(u32 cycles);
-	void InterruptDMA4();
-	void InterruptDMA7();
-	void WriteDMA7Mem(u16* madr, u32 size);
-	void ReadDMA7Mem(u16* madr, u32 size);
-	void WriteDMA4Mem(u16* madr, u32 size);
-	void ReadDMA4Mem(u16* madr, u32 size);
-	u16 Read(u32 addr);
-	void Write(u32 addr, u16 value);
-	void Reset();
-	void PS1Reset();
-	bool SetupRecording(std::string* filename);
-	bool EndRecording();
-	void Configure();
-	void Close();
-	void Shutdown();
-	void Open();
+	class SPUCore;
 
-	s32 Freeze(int mode, freezeData* data);
-	//void FreezeIn(pxInputStream& reader);
-	//void FreezeOut(void *dest);
-	void Init();
+	class Voice
+	{
+	public:
+		Voice(SPUCore& spu, u32 id)
+			: m_spu(spu)
+			, m_id(id)
+		{
+		}
 
-} // namespace SPU
+		s16 GenSample();
+
+	private:
+		SPUCore& m_spu;
+		u32 m_id;
+	};
+}

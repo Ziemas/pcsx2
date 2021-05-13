@@ -13,37 +13,15 @@
  *  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "SPU2.h"
 #include "SpuCore.h"
 
 namespace SPU
 {
-	u16 SPU_RAM[1024 * 1024 * 2] = {};
-	//std::array<u16, 1024*1024*2> SPU_RAM = {};
-	SPUCore cores[2] = {
-		{*SPU_RAM, 0},
-		{*SPU_RAM, 1},
-	};
-
-	void Run(u32 cycles) {}
-	void InterruptDMA4() {}
-	void InterruptDMA7() {}
-	void WriteDMA7Mem(u16* madr, u32 size) {}
-	void ReadDMA7Mem(u16* madr, u32 size) {}
-	void WriteDMA4Mem(u16* madr, u32 size) {}
-	void ReadDMA4Mem(u16* madr, u32 size) {}
-	u16 Read(u32 addr) { return 0; }
-	void Write(u32 addr, u16 value) {}
-	void Reset() {}
-	void PS1Reset() {}
-	bool SetupRecording(std::string* filename) { return false; }
-	bool EndRecording() { return false; }
-	void Configure() {}
-	void Close() {}
-	void Shutdown() {}
-	void Open() {}
-
-	void Init() {}
-
-	s32 Freeze(int mode, freezeData* data) { return 0; }
+	void SPUCore::Write16()
+	{
+	}
+	u16 SPUCore::Read16(u32 addr)
+	{
+		return 0;
+	}
 } // namespace SPU
