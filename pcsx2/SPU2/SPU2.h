@@ -18,39 +18,41 @@
 
 #pragma once
 
-class SPU2;
-
-class Voice
+namespace SPU
 {
-public:
-	Voice(SPU2& spu, u32 id)
-		: m_spu(spu)
-		, m_id(id)
+	class SPUCore;
+
+	class Voice
 	{
-	}
+	public:
+		Voice(SPUCore& spu, u32 id)
+			: m_spu(spu)
+			, m_id(id)
+		{
+		}
 
-	s16 run();
+		s16 run();
 
-private:
-	SPU2& m_spu;
-	u32 m_id;
-};
+	private:
+		SPUCore& m_spu;
+		u32 m_id;
+	};
 
-class SPU2
-{
-public:
-	SPU2(u32 id)
-		: m_id(id)
+	class SPUCore
 	{
-	}
+	public:
+		SPUCore(u32 id)
+			: m_id(id)
+		{
+		}
 
-	void write16();
-	u16 read16(u32 addr);
+		void write16();
+		u16 read16(u32 addr);
 
-private:
-	u32 m_id;
-	std::array<u16, 1024 * 1024 * 2> m_RAM;
-	// clang-format off
+	private:
+		u32 m_id;
+		std::array<u16, 1024 * 1024 * 2> m_RAM;
+		// clang-format off
 	Voice m_voices[24] = {
 		{*this, 0},  {*this, 1},
 		{*this, 2},  {*this, 3},
@@ -65,5 +67,6 @@ private:
 		{*this, 20}, {*this, 21},
 		{*this, 22}, {*this, 23},
 	};
-	// clang-format on
-};
+		// clang-format on
+	};
+} // namespace SPU
