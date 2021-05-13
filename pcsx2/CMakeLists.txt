@@ -97,6 +97,7 @@ if(WIN32)
 	else()
 		set(MIN_WIN32 0x0603)
 	endif()
+
 	target_compile_definitions(PCSX2_FLAGS INTERFACE
 		__SSE4_1__
 		DIRECTINPUT_VERSION=0x0800
@@ -301,44 +302,13 @@ set(pcsx2CDVDHeaders
 
 # SPU2 sources
 set(pcsx2SPU2Sources
-	SPU2/ADSR.cpp
-	SPU2/Debug.cpp
-	SPU2/DplIIdecoder.cpp
-	SPU2/Dma.cpp
-	SPU2/Mixer.cpp
 	SPU2/spu2.cpp
-	SPU2/ReadInput.cpp
-	SPU2/RegLog.cpp
-	SPU2/RegTable.cpp
-	SPU2/Reverb.cpp
-	SPU2/SndOut.cpp
-	SPU2/spu2freeze.cpp
-	SPU2/spu2sys.cpp
-	SPU2/Timestretcher.cpp
-	SPU2/Wavedump_wav.cpp
 	)
-
-if(CUBEB_API)
-	list(APPEND pcsx2SPU2Sources SPU2/SndOut_Cubeb.cpp)
-	target_compile_definitions(PCSX2_FLAGS INTERFACE "SPU2X_CUBEB")
-	target_link_libraries(PCSX2_FLAGS INTERFACE cubeb)
-endif()
 
 # SPU2 headers
 set(pcsx2SPU2Headers
-	SPU2/Config.h
-	SPU2/Debug.h
-	SPU2/defs.h
-	SPU2/Dma.h
-	SPU2/Global.h
-	SPU2/interpolate_table.h
-	SPU2/Mixer.h
 	SPU2/spu2.h
-	SPU2/regs.h
-	SPU2/SndOut.h
-	SPU2/spdif.h
-	SPU2/WavFile.h
-)
+	)
 
 # DEV9 sources
 set(pcsx2DEV9Sources
@@ -800,67 +770,17 @@ set(pcsx2GSMetalShaders
 	GS/Renderers/Metal/fxaa.metal
 )
 
-if(PCSX2_CORE)
-	list(APPEND pcsx2SPU2Headers
-		SPU2/Host/Config.cpp
-		SPU2/Host/ConfigDebug.cpp
-		SPU2/Host/ConfigSoundTouch.cpp
-	)
-	list(APPEND pcsx2SPU2Headers
-		SPU2/Host/Config.h
-		SPU2/Host/Dialogs.h
-	)
-	if(NOT WIN32)
-		list(APPEND pcsx2SPU2Headers
-			SPU2/WavFile.cpp
-		)
-	endif()
-else()
+if(NOT PCSX2_CORE)
 	list(APPEND pcsx2GSSources
 		GS/Window/GSwxDialog.cpp
 	)
 	list(APPEND pcsx2GSHeaders
 		GS/Window/GSwxDialog.h
 	)
-	if(WIN32)
-		list(APPEND pcsx2SPU2Sources
-			SPU2/Windows/CfgHelpers.cpp
-			SPU2/Windows/Config.cpp
-			SPU2/Windows/ConfigDebug.cpp
-			SPU2/Windows/ConfigSoundTouch.cpp
-			SPU2/Windows/dsp.cpp
-			SPU2/Windows/RealtimeDebugger.cpp
-			SPU2/Windows/UIHelpers.cpp
-		)
-		list(APPEND pcsx2SPU2Headers
-			SPU2/Windows/Dialogs.h
-			SPU2/Windows/dsp.h
-			SPU2/Windows/resource.h
-			SPU2/Windows/WinConfig.h
-		)
-	else()
-		list(APPEND pcsx2SPU2Sources
-			SPU2/Linux/CfgHelpers.cpp
-			SPU2/Linux/Config.cpp
-			SPU2/Linux/ConfigDebug.cpp
-			SPU2/Linux/ConfigSoundTouch.cpp
-			SPU2/Linux/Dialogs.cpp
-			SPU2/WavFile.cpp
-			SPU2/wx/wxConfig.cpp
-		)
-		list(APPEND pcsx2SPU2Headers
-			SPU2/Linux/Config.h
-			SPU2/Linux/Dialogs.h
-			SPU2/wx/wxConfig.h
-		)
-	endif()
+
 endif()
 
 if(WIN32)
-	list(APPEND pcsx2SPU2Sources
-		SPU2/Windows/SndOut_XAudio2.cpp
-	)
-
 	list(APPEND pcsx2DEV9Sources
 		DEV9/Win32/pcap_io_win32.cpp
 		DEV9/Win32/tap-win32.cpp
@@ -1797,7 +1717,6 @@ function(setup_main_executable target)
 			target_sources(${target} PRIVATE
 				${PCSX2_SOURCE_DIR}/GS/GS.rc
 				${PCSX2_SOURCE_DIR}/PAD/Windows/PAD.rc
-				${PCSX2_SOURCE_DIR}/SPU2/Windows/SPU2.rc
 			)
 		endif()
 		target_sources(${target} PRIVATE
