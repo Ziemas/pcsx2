@@ -18,7 +18,7 @@
 namespace SPU
 {
 
-	void SPUCore::write16() {}
-	u16 SPUCore::read16(u32 addr) { return 0; }
+	void SPUCore::Write16() {}
+	u16 SPUCore::Read16(u32 addr) { return 0; }
 
 } // namespace SPU
