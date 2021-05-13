@@ -22,7 +22,7 @@
 #include "IopCounters.h"
 #include "R3000A.h"
 #include "Common.h"
-#include "SPU2/spu2.h"
+#include "SPU2/SPU2.h"
 #include "DEV9/DEV9.h"
 #ifdef PCSX2_CORE
 #include "USB/USB.h"
@@ -504,7 +504,7 @@ void psxRcntUpdate()
 	{
 		psxCounters[6].sCycleT = psxRegs.cycle;
 		psxCounters[6].CycleT = psxCounters[6].rate;
-		SPU2async(difference);
+		SPU::Run(difference);
 		c = psxCounters[6].CycleT;
 	}
 	else

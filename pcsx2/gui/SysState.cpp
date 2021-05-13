@@ -22,7 +22,6 @@
 #include "VUmicro.h"
 
 #include "common/StringUtil.h"
-#include "SPU2/spu2.h"
 #include "USB/USBNull.h"
 #include "PAD/Gamepad.h"
 

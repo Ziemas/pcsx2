@@ -19,7 +19,7 @@
 #include "Sio.h"
 #include "FW.h"
 #include "CDVD/Ps1CD.h"
-#include "SPU2/spu2.h"
+#include "SPU2/SPU2.h"
 #include "DEV9/DEV9.h"
 #ifdef PCSX2_CORE
 #include "USB/USB.h"
@@ -278,7 +278,7 @@ static __fi void _HwWrite_16or32_Page1( u32 addr, T val )
 	else if( (masked_addr >= pgmsk(HW_SPU2_START)) && (masked_addr < pgmsk(HW_SPU2_END)) )
 	{
 		if( sizeof(T) == 2 )
-			SPU2write( addr, val );
+			SPU::Write( addr, val );
 		else
 		{
 			DbgCon.Warning( "HwWrite32 to SPU2? @ 0x%08X .. What manner of trickery is this?!", addr );

@@ -24,7 +24,7 @@
 #include "ps2/eeHwTraceLog.inl"
 
 #include "ps2/pgif.h"
-#include "SPU2/spu2.h"
+#include "SPU2/SPU2.h"
 #include "R3000A.h"
 
 #include "CDVD/Ps1CD.h"
@@ -186,7 +186,7 @@ void _hwWrite32( u32 mem, u32 value )
 						//pgifInit();
 						psxReset();
 						PSXCLK =  33868800;
-						SPU2reset(PS2Modes::PSX);
+						SPU::Reset(SPU::PS2Modes::PSX);
 						setPs1CDVDSpeed(cdvd.Speed);
 						psxHu32(0x1f801450) = 0x8;
 						psxHu32(0x1f801078) = 1;

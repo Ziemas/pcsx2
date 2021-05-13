@@ -39,7 +39,7 @@
 #include "Host.h"
 #include "GS.h"
 #include "GS/GS.h"
-#include "SPU2/spu2.h"
+#include "SPU2/SPU2.h"
 #include "PAD/Gamepad.h"
 
 #ifndef PCSX2_CORE
@@ -423,7 +423,7 @@ static int SysState_MTGSFreeze(FreezeAction mode, freezeData* fP)
 	return sstate.retval;
 }
 
-static constexpr SysState_Component SPU2{ "SPU2", SPU2freeze };
+static constexpr SysState_Component SPU2{ "SPU2", SPU::Freeze};
 static constexpr SysState_Component PAD_{ "PAD", PADfreeze };
 static constexpr SysState_Component USB_{ "USB", USBfreeze };
 static constexpr SysState_Component GS{ "GS", SysState_MTGSFreeze };

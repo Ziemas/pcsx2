@@ -32,6 +32,7 @@
 
 #include "CDVD/CDVD.h"
 #include "USB/USBNull.h"
+#include "SPU2/SPU2.h"
 #include "Elfheader.h"
 #include "Patch.h"
 #include "R5900Exceptions.h"

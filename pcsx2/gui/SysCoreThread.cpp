@@ -31,7 +31,7 @@ extern WindowInfo g_gs_window_info;
 #include "MTVU.h"
 #include "PINE.h"
 #include "FW.h"
-#include "SPU2/spu2.h"
+#include "SPU2/SPU2.h"
 #include "DEV9/DEV9.h"
 #include "USB/USBNull.h"
 #include "MemoryCardFile.h"
@@ -111,7 +111,7 @@ void SysCoreThread::OnSuspendInThread()
 
 void SysCoreThread::Start()
 {
-	SPU2init();
+	SPU::Init();
 	PADinit();
 	DEV9init();
 	USBinit();
@@ -329,7 +329,7 @@ void SysCoreThread::TearDownSystems(SystemsMask systemsToTearDown)
 	if (systemsToTearDown & System_CDVD) DoCDVDclose();
 	if (systemsToTearDown & System_FW) FWclose();
 	if (systemsToTearDown & System_PAD) PADclose();
-	if (systemsToTearDown & System_SPU2) SPU2close();
+	if (systemsToTearDown & System_SPU2) SPU::Close();
 	if (systemsToTearDown & System_MCD) FileMcd_EmuClose();
 
 	if (GetMTGS().IsOpen())
@@ -352,7 +352,7 @@ void SysCoreThread::OnResumeInThread(SystemsMask systemsToReinstate)
 	if (systemsToReinstate & System_DEV9) DEV9open();
 	if (systemsToReinstate & System_USB) USBopen(g_gs_window_info);
 	if (systemsToReinstate & System_FW) FWopen();
-	if (systemsToReinstate & System_SPU2) SPU2open();
+	if (systemsToReinstate & System_SPU2) SPU::Open();
 	if (systemsToReinstate & System_PAD) PADopen(g_gs_window_info);
 	if (systemsToReinstate & System_MCD) FileMcd_EmuOpen();
 }
@@ -369,7 +369,7 @@ void SysCoreThread::OnCleanupInThread()
 	R3000A::ioman::reset();
 	vu1Thread.Close();
 	USBclose();
-	SPU2close();
+	SPU::Close();
 	PADclose();
 	DEV9close();
 	DoCDVDclose();
@@ -377,7 +377,7 @@ void SysCoreThread::OnCleanupInThread()
 	FileMcd_EmuClose();
 	GetMTGS().WaitForClose();
 	USBshutdown();
-	SPU2shutdown();
+	SPU::Shutdown();
 	PADshutdown();
 	DEV9shutdown();
 	GetMTGS().ShutdownThread();
