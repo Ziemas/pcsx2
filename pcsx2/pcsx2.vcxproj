@@ -403,6 +403,8 @@
     <ClCompile Include="PerformanceMetrics.cpp" />
     <ClCompile Include="Recording\Utilities\InputRecordingLogger.cpp" />
     <ClCompile Include="SPU2\SPU2.cpp" />
+    <ClCompile Include="SPU2\SpuCore.cpp" />
+    <ClCompile Include="SPU2\Voice.cpp" />
     <ClCompile Include="IPU\IPUdma.cpp" />
     <ClCompile Include="IPU\IPUdither.cpp" />
     <ClCompile Include="Linux\LnxConsolePipe.cpp">
@@ -838,6 +840,8 @@
     <ClInclude Include="PAD\Windows\WndProcEater.h" />
     <ClInclude Include="PAD\Windows\XInputEnum.h" />
     <ClInclude Include="SPU2\SPU2.h" />
+    <ClInclude Include="SPU2\SpuCore.h" />
+    <ClInclude Include="SPU2\Voice.h" />
     <ClInclude Include="GS\config.h" />
     <ClInclude Include="GS\Renderers\OpenGL\GLLoader.h" />
     <ClInclude Include="GS\Renderers\OpenGL\GLState.h" />

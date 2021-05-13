@@ -14,6 +14,7 @@
  */
 
 #include "SPU2.h"
+#include "SpuCore.h"
 
 namespace SPU
 {
@@ -23,9 +24,6 @@ namespace SPU
 		{*SPU_RAM, 0},
 		{*SPU_RAM, 1},
 	};
-
-	void SPUCore::Write16() {}
-	u16 SPUCore::Read16(u32 addr) { return 0; }
 
 	void Run(u32 cycles) {}
 	void InterruptDMA4() {}

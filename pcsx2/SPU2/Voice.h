@@ -15,40 +15,25 @@
 
 #pragma once
 
-#include <array>
-#include <string>
 #include "common/Pcsx2Types.h"
-#include "SaveState.h"
 
 namespace SPU
 {
-	enum class PS2Modes
+	class SPUCore;
+
+	class Voice
 	{
-		PS2,
-		PSX,
+	public:
+		Voice(SPUCore& spu, u32 id)
+			: m_spu(spu)
+			, m_id(id)
+		{
+		}
+
+		s16 GenSample();
+
+	private:
+		SPUCore& m_spu;
+		u32 m_id;
 	};
-
-	void Run(u32 cycles);
-	void InterruptDMA4();
-	void InterruptDMA7();
-	void WriteDMA7Mem(u16* madr, u32 size);
-	void ReadDMA7Mem(u16* madr, u32 size);
-	void WriteDMA4Mem(u16* madr, u32 size);
-	void ReadDMA4Mem(u16* madr, u32 size);
-	u16 Read(u32 addr);
-	void Write(u32 addr, u16 value);
-	void Reset(PS2Modes isRunningPSXMode);
-	bool SetupRecording(std::string* filename);
-	bool EndRecording();
-	void Configure();
-	void Close();
-	void Shutdown();
-	s32 Open();
-
-	s32 Freeze(FreezeAction mode, freezeData* data);
-	//void FreezeIn(pxInputStream& reader);
-	//void FreezeOut(void *dest);
-	s32 Init();
-	void SetOutputPaused(bool paused);
-
-} // namespace SPU
+}
