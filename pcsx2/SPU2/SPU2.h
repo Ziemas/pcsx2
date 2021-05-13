@@ -31,7 +31,7 @@ namespace SPU
 		{
 		}
 
-		s16 run();
+		s16 GenSample();
 
 	private:
 		SPUCore& m_spu;
@@ -41,17 +41,21 @@ namespace SPU
 	class SPUCore
 	{
 	public:
-		SPUCore(u32 id)
-			: m_id(id)
+		SPUCore(u16& ram ,u32 id)
+			: m_RAM(ram)
+			, m_id(id)
 		{
 		}
 
-		void write16();
-		u16 read16(u32 addr);
+		s16 GenSample();
+
+		void Write16();
+		u16 Read16(u32 addr);
 
 	private:
 		u32 m_id;
-		std::array<u16, 1024 * 1024 * 2> m_RAM;
+		u16& m_RAM;
+
 		// clang-format off
 	Voice m_voices[24] = {
 		{*this, 0},  {*this, 1},
