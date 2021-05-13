@@ -20,7 +20,7 @@
 #include "Sio.h"
 #include "CDVD/Ps1CD.h"
 #include "FW.h"
-#include "SPU2/spu2.h"
+#include "SPU2/SPU2.h"
 #include "DEV9/DEV9.h"
 #include "USB/USB.h"
 #include "IopCounters.h"
@@ -230,7 +230,7 @@ static __fi T _HwRead_16or32_Page1( u32 addr )
 	else if( masked_addr >= pgmsk(HW_SPU2_START) && masked_addr < pgmsk(HW_SPU2_END) )
 	{
 		if( sizeof(T) == 2 )
-			ret = SPU2read( addr );
+			ret = SPU::Read( addr );
 		else
 		{
 			DevCon.Warning( "HwRead32 from SPU2? @ 0x%08X .. What manner of trickery is this?!", addr );

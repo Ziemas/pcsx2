@@ -31,6 +31,7 @@
 #include "GS.h"
 
 #include "CDVD/CDVD.h"
+#include "SPU2/SPU2.h"
 #include "USB/USB.h"
 #include "Elfheader.h"
 #include "Patch.h"

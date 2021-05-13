@@ -31,7 +31,7 @@
 #include "Dump.h"
 #include "DebugTools/Debug.h"
 #include "R3000A.h"
-#include "SPU2/spu2.h"
+#include "SPU2/SPU2.h"
 #include "gui/Dialogs/ModalPopups.h"
 
 static bool g_Pcsx2Recording = false; // true if recording video and sound
@@ -389,7 +389,7 @@ namespace Implementations
 			std::string filename;
 			if (GSsetupRecording(filename))
 			{
-				if (g_Conf->AudioCapture.EnableAudio && !SPU2setupRecording(&filename))
+				if (g_Conf->AudioCapture.EnableAudio && !SPU::SetupRecording(&filename))
 				{
 					GSendRecording();
 					g_Pcsx2Recording = false;
@@ -403,7 +403,7 @@ namespace Implementations
 			// stop recording
 			GSendRecording();
 			if (g_Conf->AudioCapture.EnableAudio)
-				SPU2endRecording();
+				SPU::EndRecording();
 		}
 	}
 
