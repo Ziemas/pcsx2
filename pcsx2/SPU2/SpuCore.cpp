@@ -18,23 +18,44 @@
 
 namespace SPU
 {
+	s16 SPUCore::GenSample()
+	{
+		for (auto& v : m_voices)
+		{
+			v.GenSample();
+		}
+
+		return 0;
+	}
+
 	u16 SPUCore::Read(u32 addr)
 	{
+
 		switch (addr)
 		{
+			//case 0x19A: // core att, probably not readable
+			//	break;
+			case 0x1b0:
+				return m_adma;
 			default:
 				Console.WriteLn("UNHANDLED SPU[%d] READ ---- <- %04x", m_id, addr);
 				pxAssertMsg(false, "Unhandled SPU Write");
 				return 0;
 		}
 
-        return 0;
+		return 0;
 	}
 
 	void SPUCore::Write(u32 addr, u16 value)
 	{
 		switch (addr)
 		{
+			case 0x19A:
+				m_attr.bits = value;
+				break;
+			case 0x1B0:
+				m_adma = value;
+				break;
 			default:
 				Console.WriteLn("UNHANDLED SPU[%d] WRITE %04x -> %04x", m_id, value, addr);
 				pxAssertMsg(false, "Unhandled SPU Read");
