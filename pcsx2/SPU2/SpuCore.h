@@ -29,7 +29,7 @@ namespace SPU
 	public:
 		SPUCore(u16& ram, u32 id)
 			: m_RAM(ram)
-			, m_id(id)
+			, m_Id(id)
 		{
 		}
 
@@ -47,7 +47,7 @@ namespace SPU
 			DMARead = 3,
 		};
 
-		union SPUAttr
+		union Attr
 		{
 			u16 bits;
 
@@ -62,13 +62,40 @@ namespace SPU
 			// On ps1 the bits below are for mix parameters
 		};
 
+		union Status
+		{
+			u16 bits;
+
+			BitField<u16, bool, 10, 1> DMABusy;
+			BitField<u16, bool, 7, 1> DMAReady;
+		};
+
+		union ADMA
+		{
+			u16 bits;
+
+			BitField<u16, bool, 2, 1> ReadMode;
+			// Separate bits for each core
+			// despite the fact that they're separate regs... (aifai)
+			BitField<u16, bool, 1, 1> Core2;
+			BitField<u16, bool, 0, 1> Core1;
+		};
+
 
 		u16& m_RAM;
-		u32 m_id{0};
+		u32 m_Id{0};
 
-		SPUAttr m_attr{0};
+		Attr m_Attr{0};
+		Status m_Stat{0};
 
-		u32 m_adma{0};
+		ADMA m_Adma{0};
+
+		// TODO: i want a FIFO
+
+		//u32 m_KeyOn{0};
+		//u32 m_KeyOff{0};
+		//u32 m_PitchMod{0};
+		//u32 m_Noise{0};
 
 		// clang-format off
 		Voice m_voices[NUM_VOICES] = {
