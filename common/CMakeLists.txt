@@ -69,6 +69,7 @@ target_sources(common PRIVATE
 	EventSource.h
 	Exceptions.h
 	FastJmp.h
+	fifo.h
 	FileSystem.h
 	General.h
 	HashCombine.h
