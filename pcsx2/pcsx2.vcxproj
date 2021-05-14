@@ -329,6 +329,7 @@
     <ClCompile Include="Recording\Utilities\InputRecordingLogger.cpp" />
     <ClCompile Include="SPU2\SPU2.cpp" />
     <ClCompile Include="SPU2\SpuCore.cpp" />
+    <ClCompile Include="SPU2\Reverb.cpp" />
     <ClCompile Include="SPU2\Voice.cpp" />
     <ClCompile Include="IPU\IPUdma.cpp" />
     <ClCompile Include="IPU\IPUdither.cpp" />
@@ -728,6 +729,7 @@
     <ClInclude Include="ShaderCacheVersion.h" />
     <ClInclude Include="SPU2\SPU2.h" />
     <ClInclude Include="SPU2\SpuCore.h" />
+    <ClInclude Include="SPU2\Reverb.h" />
     <ClInclude Include="SPU2\Voice.h" />
     <ClInclude Include="GS\config.h" />
     <ClInclude Include="GS\Renderers\OpenGL\GLLoader.h" />
