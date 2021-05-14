@@ -115,6 +115,7 @@
     <None Include="..\..\include\Utilities\EventSource.inl" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\..\include\Utilities\Bitfield.h" />
     <ClInclude Include="..\..\include\Utilities\EmbeddedImage.h" />
     <ClInclude Include="..\..\include\Utilities\boost_spsc_queue.hpp" />
     <ClInclude Include="..\..\include\Utilities\ScopedAlloc.h" />
