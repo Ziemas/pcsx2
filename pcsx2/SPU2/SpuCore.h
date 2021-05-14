@@ -16,6 +16,7 @@
 #pragma once
 
 #include "Pcsx2Types.h"
+#include "Utilities/Bitfield.h"
 #include "Voice.h"
 
 
@@ -38,8 +39,37 @@ namespace SPU
 		u16 Read(u32 addr);
 
 	private:
+		enum class TransferMode : u8
+		{
+			Stopped,
+			ManualWrite,
+			ManualRead,
+			DMAWrite,
+			DMARead,
+		};
+
+		union SPUAttr
+		{
+			u16 bits;
+
+			// iirc enable works like a reset switch here
+			// driver flips enable on and expects DMA stuff to be reset
+			BitField<u16, bool, 15, 1> enable;
+			BitField<u16, bool, 14, 1> outputEnable;
+			BitField<u16, u8, 8, 6> noiseClock;
+			BitField<u16, bool, 7, 1> effectEnable;
+			BitField<u16, bool, 6, 1> IRQEnable;
+			BitField<u16, TransferMode, 4, 2> transferMode;
+			// On ps1 the bits below are for mix parameters
+		};
+
+
 		u16& m_RAM;
-		u32 m_id;
+		u32 m_id{0};
+
+		SPUAttr m_attr{0};
+
+		u32 m_adma{0};
 
 		// clang-format off
 		Voice m_voices[NUM_VOICES] = {
