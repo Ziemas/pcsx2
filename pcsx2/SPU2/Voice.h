@@ -16,24 +16,31 @@
 #pragma once
 
 #include "common/Pcsx2Types.h"
+#include "common/fifo.h"
 
 namespace SPU
 {
 	class SPUCore;
 
-	class Voice
+	struct Voice
 	{
-	public:
 		Voice(SPUCore& spu, u32 id)
-			: m_spu(spu)
-			, m_id(id)
+			: m_SPU(spu)
+			, m_Id(id)
 		{
 		}
 
+
 		s16 GenSample();
 
-	private:
-		SPUCore& m_spu;
-		u32 m_id;
+		SPUCore& m_SPU;
+		u32 m_Id{0};
+
+		FIFO<u16, 0x20> DecodeBuf{};
+
+		bool m_Noise{false};
+		bool m_PitchMod{false};
+		bool m_KeyOn{false};
+		bool m_KeyOff{false};
 	};
 } // namespace SPU
