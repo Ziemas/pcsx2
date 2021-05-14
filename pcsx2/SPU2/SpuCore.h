@@ -18,8 +18,11 @@
 #include "common/Pcsx2Types.h"
 #include "Voice.h"
 
+
 namespace SPU
 {
+	static constexpr u32 NUM_VOICES = 24;
+
 	class SPUCore
 	{
 	public:
@@ -31,27 +34,21 @@ namespace SPU
 
 		s16 GenSample();
 
-		void Write16();
-		u16 Read16(u32 addr);
+		void Write(u32 addr, u16 value);
+		u16 Read(u32 addr);
 
 	private:
 		u16& m_RAM;
 		u32 m_id;
 
 		// clang-format off
-		Voice m_voices[24] = {
-			{*this, 0},  {*this, 1},
-			{*this, 2},  {*this, 3},
-			{*this, 4},  {*this, 5},
-			{*this, 6},  {*this, 7},
-			{*this, 8},  {*this, 9},
-			{*this, 10}, {*this, 11},
-			{*this, 12}, {*this, 13},
-			{*this, 14}, {*this, 15},
-			{*this, 16}, {*this, 17},
-			{*this, 18}, {*this, 19},
-			{*this, 20}, {*this, 21},
-			{*this, 22}, {*this, 23},
+		Voice m_voices[NUM_VOICES] = {
+			{*this, 0},  {*this, 1},  {*this, 2},  {*this, 3},
+			{*this, 4},  {*this, 5},  {*this, 6},  {*this, 7},
+			{*this, 8},  {*this, 9},  {*this, 10}, {*this, 11},
+			{*this, 12}, {*this, 13}, {*this, 14}, {*this, 15},
+			{*this, 16}, {*this, 17}, {*this, 18}, {*this, 19},
+			{*this, 20}, {*this, 21}, {*this, 22}, {*this, 23},
 		};
 		// clang-format on
 	};

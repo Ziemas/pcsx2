@@ -14,14 +14,32 @@
  */
 
 #include "SpuCore.h"
+#include "common/Console.h"
 
 namespace SPU
 {
-	void SPUCore::Write16()
+	u16 SPUCore::Read(u32 addr)
 	{
+		switch (addr)
+		{
+			default:
+				Console.WriteLn("UNHANDLED SPU[%d] READ ---- <- %04x", m_id, addr);
+				pxAssertMsg(false, "Unhandled SPU Write");
+				return 0;
+		}
+
+        return 0;
 	}
-	u16 SPUCore::Read16(u32 addr)
+
+	void SPUCore::Write(u32 addr, u16 value)
 	{
-		return 0;
+		switch (addr)
+		{
+			default:
+				Console.WriteLn("UNHANDLED SPU[%d] WRITE %04x -> %04x", m_id, value, addr);
+				pxAssertMsg(false, "Unhandled SPU Read");
+		}
+
+		return;
 	}
 } // namespace SPU

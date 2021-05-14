@@ -30,69 +30,100 @@ namespace SPU
 	{
 		//Console.WriteLn("SPU run %d cycles", cycles);
 	}
+
 	void InterruptDMA4()
 	{
 		Console.WriteLn("SPU irq dma4");
 	}
+
 	void InterruptDMA7()
 	{
 		Console.WriteLn("SPU irq dma7");
 	}
+
 	void WriteDMA7Mem(u16* madr, u32 size)
 	{
 		Console.WriteLn("SPU DMA7 WRITE");
 	}
+
 	void ReadDMA7Mem(u16* madr, u32 size)
 	{
 		Console.WriteLn("SPU DMA7 READ");
 	}
+
 	void WriteDMA4Mem(u16* madr, u32 size)
 	{
 		Console.WriteLn("SPU DMA4 WRITE");
 	}
+
 	void ReadDMA4Mem(u16* madr, u32 size)
 	{
 		Console.WriteLn("SPU DMA4 READ");
 	}
+
 	u16 Read(u32 addr)
 	{
-		u32 core = (addr >> 10) & 1;
-
 		addr &= 0x7FF;
-		if (addr > 0x760) // SPDIF regs range
+
+		if (addr < 0x760)
+		{
+			u32 core = (addr >> 10) & 1;
+			addr &= 0x3FF;
+			return cores[core].Read(addr);
+		}
+
+		if (addr <= 0x7B0) // reverb addrs
+		{
+		}
+
+		if (addr >= 0x7C0) // shared?
+		{
 			return 0;
+		}
 
-		addr &= 0x3FF;
-
-		Console.WriteLn("SPU %d READ %04x", core, addr);
 		return 0;
 	}
+
 	void Write(u32 addr, u16 value)
 	{
-		u32 core = (addr >> 10) & 1;
-
 		addr &= 0x7FF;
-		if (addr > 0x760) // SPDIF regs range
+
+		if (addr < 0x760)
+		{
+			u32 core = (addr >> 10) & 1;
+			addr &= 0x3FF;
+			cores[core].Write(addr, value);
+		}
+
+		if (addr <= 0x7B0) // reverb addrs
+		{
+		}
+
+		if (addr >= 0x7C0) // shared?
+		{
 			return;
-
-		addr &= 0x3FF;
-
-		Console.WriteLn("SPU %d write %04x -> %04x", core, value, addr);
+		}
 	}
+
 	void Reset(PS2Modes isRunningPSXMode)
 	{
 		Console.WriteLn("SPU RESET");
 	}
+
 	bool SetupRecording(std::string* filename)
 	{
 		return false;
 	}
+
 	bool EndRecording()
 	{
 		return false;
 	}
+
 	void Configure() {}
+
 	void Close() {}
+
 	void Shutdown() {}
 
 	s32 Open(PS2Modes mode)

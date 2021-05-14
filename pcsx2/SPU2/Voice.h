@@ -36,4 +36,4 @@ namespace SPU
 		SPUCore& m_spu;
 		u32 m_id;
 	};
-}
+} // namespace SPU

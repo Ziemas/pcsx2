@@ -18,7 +18,7 @@
 namespace SPU
 {
 	s16 Voice::GenSample()
-    {
-        return 0;
-    }
-}
+	{
+		return 0;
+	}
+} // namespace SPU
