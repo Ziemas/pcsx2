@@ -127,6 +127,7 @@
     <ClInclude Include="..\..\include\Utilities\EventSource.h" />
     <ClInclude Include="..\..\include\Utilities\Exceptions.h" />
     <ClInclude Include="..\..\include\Utilities\FixedPointTypes.h" />
+    <ClInclude Include="..\..\include\Utilities\fifo.h" />
     <ClInclude Include="..\..\include\Utilities\General.h" />
     <ClInclude Include="..\..\include\Utilities\MathUtils.h" />
     <ClInclude Include="..\..\include\Utilities\MakeUnique.h" />

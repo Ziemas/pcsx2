@@ -56,6 +56,7 @@ set(UtilitiesHeaders
 	../../include/Utilities/EventSource.h
 	../../include/Utilities/Exceptions.h
 	../../include/Utilities/FixedPointTypes.h
+	../../include/Utilities/fifo.h
 	../../include/Utilities/General.h
 	../../include/Utilities/MakeUnique.h
 	../../include/Utilities/MemcpyFast.h
