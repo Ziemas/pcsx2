@@ -15,10 +15,16 @@
 
 #pragma once
 
+#include "common/Pcsx2Types.h"
+#include "Util.h"
+
 namespace SPU
 {
     struct Reverb
     {
+        Reg32 m_ESA{0};
+        Reg32 m_EEA{0};
+        u32 m_pos{0};
 
     };
 }

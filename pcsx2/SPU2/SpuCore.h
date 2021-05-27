@@ -17,7 +17,9 @@
 
 #include "common/Pcsx2Types.h"
 #include "common/Bitfield.h"
+#include "Reverb.h"
 #include "Voice.h"
+#include "Util.h"
 
 namespace SPU
 {
@@ -89,6 +91,13 @@ namespace SPU
 
 		ADMA m_Adma{0};
 
+		Reverb m_Reverb{0};
+
+		Reg32 m_TSA{0};
+		u32 m_InternalTSA{0};
+
+		void WriteMem(u32& addr, u16 value);
+
 		// TODO: i want a FIFO
 
 		//u32 m_KeyOn{0};
@@ -97,14 +106,14 @@ namespace SPU
 		//u32 m_Noise{0};
 
 		// clang-format off
-		Voice m_voices[NUM_VOICES] = {
+		std::array<Voice, NUM_VOICES> m_voices = {{
 			{*this, 0},  {*this, 1},  {*this, 2},  {*this, 3},
 			{*this, 4},  {*this, 5},  {*this, 6},  {*this, 7},
 			{*this, 8},  {*this, 9},  {*this, 10}, {*this, 11},
 			{*this, 12}, {*this, 13}, {*this, 14}, {*this, 15},
 			{*this, 16}, {*this, 17}, {*this, 18}, {*this, 19},
 			{*this, 20}, {*this, 21}, {*this, 22}, {*this, 23},
-		};
+		}};
 		// clang-format on
 	};
 
