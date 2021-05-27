@@ -28,16 +28,27 @@ namespace SPU
 		return 0;
 	}
 
+	void SPUCore::WriteMem(u32& addr, u16 value)
+	{
+		printf("SPU[%d] Writing %04x to %08x", addr, value);
+		m_RAM[addr] = value;
+		++addr &= 0xFFFFF;
+	}
+
 	u16 SPUCore::Read(u32 addr)
 	{
-
+		if (addr < 0x180)
+		{
+			// voice
+		}
 		switch (addr)
 		{
-			//case 0x19A:
-			//  core att, probably not readable
-			//	break;
+			case 0x19A:
+				return m_Attr.bits;
 			case 0x1b0:
 				return m_Adma.bits;
+			case 0x33c:
+				return m_Reverb.m_EEA.hi.GetValue();
 			case 0x344:
 				return m_Stat.bits;
 			default:
@@ -51,6 +62,9 @@ namespace SPU
 
 	void SPUCore::Write(u32 addr, u16 value)
 	{
+		if (addr < 0x180)
+		{
+		}
 		switch (addr)
 		{
 			case 0x180:
@@ -106,6 +120,25 @@ namespace SPU
 				{
 					m_voices[i].m_KeyOff = (value >> i) & 1;
 				}
+				break;
+			case 0x1A8:
+				m_TSA.hi = value & 0xF;
+				m_InternalTSA = m_TSA.full;
+				break;
+			case 0x1AA:
+				m_TSA.lo = value;
+				m_InternalTSA = m_TSA.full;
+				break;
+			case 0x1AC:
+				WriteMem(m_InternalTSA, value);
+				break;
+			case 0x2E0:
+				m_Reverb.m_pos = 0;
+				m_Reverb.m_EEA.hi = value & 0x3f;
+				break;
+			case 0x2E2:
+				m_Reverb.m_pos = 0;
+				m_Reverb.m_EEA.lo = value;
 				break;
 			//case 0x344:
 			//	// SPU Status R/O
