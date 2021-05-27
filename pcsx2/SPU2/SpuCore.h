@@ -26,7 +26,7 @@ namespace SPU
 	class SPUCore
 	{
 	public:
-		SPUCore(u16& ram, u32 id)
+		SPUCore(u16* ram, u32 id)
 			: m_RAM(ram)
 			, m_Id(id)
 		{
@@ -81,7 +81,7 @@ namespace SPU
 		};
 
 
-		u16& m_RAM;
+		u16* m_RAM;
 		u32 m_Id{0};
 
 		Attr m_Attr{0};

@@ -22,8 +22,8 @@ namespace SPU
 	u16 SPU_RAM[1024 * 1024 * 2] = {};
 	//std::array<u16, 1024*1024*2> SPU_RAM = {};
 	SPUCore cores[2] = {
-		{*SPU_RAM, 0},
-		{*SPU_RAM, 1},
+		{SPU_RAM, 0},
+		{SPU_RAM, 1},
 	};
 
 	void Run(u32 cycles)
