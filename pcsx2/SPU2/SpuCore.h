@@ -54,13 +54,17 @@ namespace SPU
 
 			// iirc enable works like a reset switch here
 			// driver flips enable on and expects DMA stuff to be reset
-			BitField<u16, bool, 15, 1> enable;
-			BitField<u16, bool, 14, 1> outputEnable;
-			BitField<u16, u8, 8, 6> noiseClock;
-			BitField<u16, bool, 7, 1> effectEnable;
+			BitField<u16, bool, 15, 1> Enable;
+			BitField<u16, bool, 14, 1> OutputEnable;
+			BitField<u16, u8, 8, 6> NoiseClock;
+			BitField<u16, bool, 7, 1> EffectEnable;
 			BitField<u16, bool, 6, 1> IRQEnable;
-			BitField<u16, TransferMode, 4, 2> transferMode;
-			// On ps1 the bits below are for mix parameters
+			BitField<u16, TransferMode, 4, 2> TransferMode;
+			// unknown if these do anything in ps2 mode
+			BitField<u16, bool, 3, 1> ExtReverb;
+			BitField<u16, bool, 2, 1> CDAReverb;
+			BitField<u16, bool, 1, 1> EXTEnable;
+			BitField<u16, bool, 0, 1> CDAEnable;
 		};
 
 		union Status
