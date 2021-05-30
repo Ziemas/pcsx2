@@ -70,25 +70,25 @@ namespace SPU
 			case 0x180:
 				for (int i = 0; i < 16; i++)
 				{
-					m_voices[i].m_PitchMod = (value >> i) & 1;
+					m_voices[i].m_PitchMod = GET_BIT(i, value);
 				}
 				break;
 			case 0x182:
-				for (int i = 16; i < 8; i++)
+				for (int i = 0; i < 8; i++)
 				{
-					m_voices[i].m_PitchMod = (value >> i) & 1;
+					m_voices[i + 16].m_PitchMod = GET_BIT(i, value);
 				}
 				break;
 			case 0x184:
 				for (int i = 0; i < 16; i++)
 				{
-					m_voices[i].m_Noise = (value >> i) & 1;
+					m_voices[i].m_Noise = GET_BIT(i, value);
 				}
 				break;
 			case 0x186:
-				for (int i = 16; i < 8; i++)
+				for (int i = 0; i < 8; i++)
 				{
-					m_voices[i].m_Noise = (value >> i) & 1;
+					m_voices[i + 16].m_Noise = GET_BIT(i, value);
 				}
 				break;
 			case 0x19A:
@@ -100,25 +100,25 @@ namespace SPU
 			case 0x1A0:
 				for (int i = 0; i < 16; i++)
 				{
-					m_voices[i].m_KeyOn = (value >> i) & 1;
+					m_voices[i].m_KeyOn = GET_BIT(i, value);
 				}
 				break;
 			case 0x1A2:
-				for (int i = 16; i < 8; i++)
+				for (int i = 0; i < 8; i++)
 				{
-					m_voices[i].m_KeyOn = (value >> i) & 1;
+					m_voices[i + 16].m_KeyOn = GET_BIT(i, value);
 				}
 				break;
 			case 0x1A4:
 				for (int i = 0; i < 16; i++)
 				{
-					m_voices[i].m_KeyOff = (value >> i) & 1;
+					m_voices[i].m_KeyOff = GET_BIT(i, value);
 				}
 				break;
 			case 0x1A6:
-				for (int i = 16; i < 8; i++)
+				for (int i = 0; i < 8; i++)
 				{
-					m_voices[i].m_KeyOff = (value >> i) & 1;
+					m_voices[i + 16].m_KeyOff = GET_BIT(i, value);
 				}
 				break;
 			case 0x1A8:
