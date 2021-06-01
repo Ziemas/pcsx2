@@ -30,10 +30,12 @@ namespace SPU
 	{
 	public:
 		SPUCore(u16* ram, u32 id)
-			: m_RAM(ram)
-			, m_Id(id)
+			: m_Id(id)
+			, m_RAM(ram)
 		{
 		}
+
+		u32 m_Id{0};
 
 		s16 GenSample();
 
@@ -89,7 +91,6 @@ namespace SPU
 
 
 		u16* m_RAM;
-		u32 m_Id{0};
 
 		Attr m_Attr{0};
 		Status m_Stat{0};

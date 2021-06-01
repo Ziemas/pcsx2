@@ -17,6 +17,7 @@
 
 #include "common/Pcsx2Types.h"
 #include "common/fifo.h"
+#include "Util.h"
 
 namespace SPU
 {
@@ -33,10 +34,29 @@ namespace SPU
 
 		s16 GenSample();
 
+		u16 Read(u32 addr);
+		void Write(u32 addr, u16 value);
+
+		// The new (for SPU2) full addr regs are a separate range
+		u16 ReadAddr(u32 addr);
+		void WriteAddr(u32 addr, u16 value);
+
 		SPUCore& m_SPU;
 		u32 m_Id{0};
 
 		FIFO<u16, 0x20> DecodeBuf{};
+
+		u32 m_Pitch{0};
+
+		Reg32 m_SSA{0};
+
+		// TODO Envelope
+		u32 m_ADSR1{0};
+		u32 m_ADSR2{0};
+
+		// TODO vol envelope
+		u32 m_Voll{0};
+		u32 m_Volr{0};
 
 		bool m_Noise{false};
 		bool m_PitchMod{false};
