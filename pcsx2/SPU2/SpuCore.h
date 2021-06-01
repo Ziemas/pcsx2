@@ -111,6 +111,12 @@ namespace SPU
 		//u32 m_PitchMod{0};
 		//u32 m_Noise{0};
 
+		u32 m_MMIX{0};
+		Reg32 m_VMIXL{0};
+		Reg32 m_VMIXR{0};
+		Reg32 m_VMIXEL{0};
+		Reg32 m_VMIXER{0};
+
 		// clang-format off
 		std::array<Voice, NUM_VOICES> m_voices = {{
 			{*this, 0},  {*this, 1},  {*this, 2},  {*this, 3},
