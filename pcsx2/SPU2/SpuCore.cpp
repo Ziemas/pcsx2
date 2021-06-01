@@ -39,7 +39,16 @@ namespace SPU
 	{
 		if (addr < 0x180)
 		{
-			// voice
+			u32 id = addr >> 4;
+			addr &= 0xF;
+			return m_voices[id].Read(addr);
+		}
+		if (addr >= 0x1C0 && addr < 0x2E0)
+		{
+			addr -= 0x1C0;
+			u32 id = addr / 0xC;
+			addr %= 0xC;
+			return m_voices[id].ReadAddr(addr);
 		}
 		switch (addr)
 		{
@@ -64,6 +73,18 @@ namespace SPU
 	{
 		if (addr < 0x180)
 		{
+			u32 id = addr >> 4;
+			addr &= 0xF;
+			m_voices[id].Write(addr, value);
+			return;
+		}
+		if (addr >= 0x1C0 && addr < 0x2E0)
+		{
+			addr -= 0x1C0;
+			u32 id = addr / 0xC;
+			addr %= 0xC;
+			m_voices[id].WriteAddr(addr, value);
+			return;
 		}
 		switch (addr)
 		{
