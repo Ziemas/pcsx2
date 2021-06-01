@@ -54,10 +54,70 @@ namespace SPU
 		{
 			case 0x19A:
 				return m_Attr.bits;
+			case 0x1A0:
+			{
+				u32 ret = 0;
+				for (int i = 0; i < 24; i++)
+				{
+					if (m_voices[i].m_KeyOn)
+						SET_BIT(ret, i);
+				}
+				return GET_LOW(ret);
+			}
+			case 0x1A2:
+			{
+				u32 ret = 0;
+				for (int i = 0; i < 24; i++)
+				{
+					if (m_voices[i].m_KeyOn)
+						SET_BIT(ret, i);
+				}
+				return GET_HIGH(ret);
+			}
+			case 0x1A4:
+			{
+				u32 ret = 0;
+				for (int i = 0; i < 24; i++)
+				{
+					if (m_voices[i].m_KeyOff)
+						SET_BIT(ret, i);
+				}
+				return GET_LOW(ret);
+			}
+			case 0x1A6:
+			{
+				u32 ret = 0;
+				for (int i = 0; i < 24; i++)
+				{
+					if (m_voices[i].m_KeyOff)
+						SET_BIT(ret, i);
+				}
+				return GET_HIGH(ret);
+			}
 			case 0x1b0:
 				return m_Adma.bits;
 			case 0x33c:
 				return m_Reverb.m_EEA.hi.GetValue();
+			case 0x340:
+			{
+				u32 ret = 0;
+				for (int i = 0; i < 24; i++)
+				{
+					if (m_voices[i].m_KeyOff)
+						SET_BIT(ret, i);
+				}
+				return GET_LOW(ret);
+			}
+			case 0x342:
+			{
+				u32 ret = 0;
+				for (int i = 0; i < 24; i++)
+				{
+					if (m_voices[i].m_KeyOff)
+						SET_BIT(ret, i);
+				}
+				return GET_HIGH(ret);
+			}
 			case 0x344:
 				return m_Stat.bits;
 			default:
@@ -112,6 +172,34 @@ namespace SPU
 					m_voices[i + 16].m_Noise = GET_BIT(i, value);
 				}
 				break;
+			case 0x188:
+				// TODO verify hi/lo order of all of these
+				m_VMIXL.lo = value;
+				break;
+			case 0x18A:
+				m_VMIXL.hi = value;
+				break;
+			case 0x18C:
+				m_VMIXEL.lo = value;
+				break;
+			case 0x18E:
+				m_VMIXEL.hi = value;
+				break;
+			case 0x190:
+				m_VMIXR.lo = value;
+				break;
+			case 0x192:
+				m_VMIXR.hi = value;
+				break;
+			case 0x194:
+				m_VMIXER.lo = value;
+				break;
+			case 0x196:
+				m_VMIXER.hi = value;
+				break;
+			case 0x198:
+				m_MMIX = value;
+				break;
 			case 0x19A:
 				m_Attr.bits = value;
 				break;
@@ -156,11 +244,27 @@ namespace SPU
 				break;
 			case 0x2E0:
 				m_Reverb.m_pos = 0;
-				m_Reverb.m_EEA.hi = value & 0x3f;
+				m_Reverb.m_ESA.hi = value & 0x3f;
 				break;
 			case 0x2E2:
 				m_Reverb.m_pos = 0;
-				m_Reverb.m_EEA.lo = value;
+				m_Reverb.m_ESA.lo = value;
+				break;
+			case 0x33C:
+				m_Reverb.m_EEA.hi = value;
+				m_Reverb.m_EEA.lo = 0xFFFF;
+				break;
+			case 0x340:
+				for (int i = 0; i < 16; i++)
+				{
+					m_voices[i].m_ENDX = GET_BIT(i, value);
+				}
+				break;
+			case 0x342:
+				for (int i = 0; i < 8; i++)
+				{
+					m_voices[i + 16].m_ENDX = GET_BIT(i, value);
+				}
 				break;
 			//case 0x344:
 			//	// SPU Status R/O

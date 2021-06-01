@@ -63,12 +63,14 @@ namespace SPU
 
 	u16 Read(u32 addr)
 	{
+		Console.WriteLn("read addr %08x", addr );
 		addr &= 0x7FF;
 
 		if (addr < 0x760)
 		{
 			u32 core = (addr >> 10) & 1;
 			addr &= 0x3FF;
+			Console.WriteLn("became addr %08x on core %d", addr, core);
 			return cores[core].Read(addr);
 		}
 

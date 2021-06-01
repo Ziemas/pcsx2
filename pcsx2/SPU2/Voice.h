@@ -62,5 +62,6 @@ namespace SPU
 		bool m_PitchMod{false};
 		bool m_KeyOn{false};
 		bool m_KeyOff{false};
+		bool m_ENDX{false};
 	};
 } // namespace SPU
