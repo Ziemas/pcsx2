@@ -62,7 +62,7 @@ namespace SPU
 				return m_Stat.bits;
 			default:
 				Console.WriteLn("UNHANDLED SPU[%d] READ ---- <- %04x", m_Id, addr);
-				pxAssertMsg(false, "Unhandled SPU Write");
+				pxAssertMsg(false, "Unhandled SPU Read");
 				return 0;
 		}
 
@@ -167,7 +167,7 @@ namespace SPU
 			//	break;
 			default:
 				Console.WriteLn("UNHANDLED SPU[%d] WRITE %04x -> %04x", m_Id, value, addr);
-				pxAssertMsg(false, "Unhandled SPU Read");
+				pxAssertMsg(false, "Unhandled SPU Write");
 		}
 
 		return;
