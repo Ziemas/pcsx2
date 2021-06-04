@@ -142,7 +142,11 @@ namespace SPU
 				}
 				return GET_HIGH(ret);
 			}
-			case 0x1b0:
+			case 0x1A8:
+				return m_TSA.hi.GetValue();
+			case 0x1AA:
+				return m_TSA.lo.GetValue();
+			case 0x1B0:
 				return m_Adma.bits;
 			case 0x33c:
 				return m_Reverb.m_EEA.hi.GetValue();
