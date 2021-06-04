@@ -49,6 +49,7 @@ namespace SPU
 		u32 m_Pitch{0};
 
 		Reg32 m_SSA{0};
+		Reg32 m_NAX{0};
 
 		// TODO Envelope
 		u32 m_ADSR1{0};
