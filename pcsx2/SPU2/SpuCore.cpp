@@ -86,6 +86,20 @@ namespace SPU
 		}
 		switch (addr)
 		{
+			case 0x188:
+				return m_VMIXL.lo.GetValue();
+			case 0x18A:
+				return m_VMIXL.hi.GetValue();
+			case 0x190:
+				return m_VMIXR.lo.GetValue();
+			case 0x192:
+				return m_VMIXR.hi.GetValue();
+			case 0x194:
+				return m_VMIXER.hi.GetValue();
+			case 0x196:
+				return m_VMIXER.hi.GetValue();
+			case 0x198:
+				return m_MMIX;
 			case 0x19A:
 				return m_Attr.bits;
 			case 0x1A0:
