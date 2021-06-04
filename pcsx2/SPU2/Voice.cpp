@@ -57,6 +57,10 @@ namespace SPU
 				return m_SSA.hi.GetValue();
 			case 2:
 				return m_SSA.lo.GetValue();
+			case 8:
+				return m_NAX.hi.GetValue();
+			case 10:
+				return m_NAX.lo.GetValue();
 			default:
 				Console.WriteLn("UNHANDLED SPU[%d]:VOICE[%d] ReadAddr ---- <- %04x", m_SPU.m_Id, m_Id, addr);
 				pxAssertMsg(false, "Unhandled SPU Write");
