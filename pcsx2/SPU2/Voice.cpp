@@ -40,6 +40,8 @@ namespace SPU
 				return m_ADSR1;
 			case 8:
 				return m_ADSR2;
+			case 10:
+				return m_ENVX;
 			default:
 				Console.WriteLn("UNHANDLED SPU[%d]:VOICE[%d] READ ---- <- %04x", m_SPU.m_Id, m_Id, addr);
 				pxAssertMsg(false, "Unhandled SPU Write");
