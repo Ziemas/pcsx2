@@ -42,6 +42,11 @@ namespace SPU
 		void Write(u32 addr, u16 value);
 		u16 Read(u32 addr);
 
+		void WriteMem(u32& addr, u16 value);
+
+		void DmaWrite(u16* madr, u32 size);
+		void DmaRead(u16* madr, u32 size);
+
 	private:
 		enum class TransferMode : u8
 		{
@@ -101,8 +106,6 @@ namespace SPU
 
 		Reg32 m_TSA{0};
 		u32 m_InternalTSA{0};
-
-		void WriteMem(u32& addr, u16 value);
 
 		FIFO<u16, 0x20> m_TransferFIFO{};
 

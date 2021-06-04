@@ -45,18 +45,12 @@ static void psxDmaGeneric(u32 madr, u32 bcr, u32 chcr, u32 spuCore)
 	{
 		case 0x01000201: //cpu to spu2 transfer
 			PSXDMA_LOG("*** DMA %d - mem2spu *** %x addr = %x size = %x", dmaNum, chcr, madr, bcr);
-			if (dmaNum == 7)
-				SPU::WriteDMA7Mem((u16*)iopPhysMem(madr), size * 2);
-			else if (dmaNum == 4)
-				SPU::WriteDMA4Mem((u16*)iopPhysMem(madr), size * 2);
+			SPU::WriteDMA(spuCore, (u16*)iopPhysMem(madr), size * 2);
 			break;
 
 		case 0x01000200: //spu2 to cpu transfer
 			PSXDMA_LOG("*** DMA %d - spu2mem *** %x addr = %x size = %x", dmaNum, chcr, madr, bcr);
-			if (dmaNum == 7)
-				SPU::ReadDMA7Mem((u16*)iopPhysMem(madr), size * 2);
-			else if (dmaNum == 4)
-				SPU::ReadDMA4Mem((u16*)iopPhysMem(madr), size * 2);
+			SPU::ReadDMA(spuCore, (u16*)iopPhysMem(madr), size * 2);
 			psxCpu->Clear(spuCore ? HW_DMA7_MADR : HW_DMA4_MADR, size);
 			break;
 
