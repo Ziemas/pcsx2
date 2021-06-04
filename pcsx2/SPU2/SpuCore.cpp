@@ -15,6 +15,8 @@
 
 #include "SpuCore.h"
 #include "common/Console.h"
+#include "IopDma.h"
+#include "IopHw.h"
 
 namespace SPU
 {
@@ -33,6 +35,38 @@ namespace SPU
 		printf("SPU[%d] Writing %04x to %08x", addr, value);
 		m_RAM[addr] = value;
 		++addr &= 0xFFFFF;
+	}
+
+	void SPUCore::DmaWrite(u16* madr, u32 size)
+	{
+		memcpy(&m_RAM[m_TSA.full], madr, size * 2);
+		m_Stat.DMABusy = false;
+		m_Stat.DMAReady = true;
+		if (m_Id == 0)
+		{
+			HW_DMA4_MADR += size * 2;
+			spu2DMA4Irq();
+		}
+		else
+		{
+			HW_DMA7_MADR += size * 2;
+			spu2DMA7Irq();
+		}
+	}
+
+	void SPUCore::DmaRead(u16* madr, u32 size)
+	{
+		memcpy(madr, &m_RAM[m_TSA.full], size * 2);
+		if (m_Id == 0)
+		{
+			HW_DMA4_MADR += size * 2;
+			spu2DMA4Irq();
+		}
+		else
+		{
+			HW_DMA7_MADR += size * 2;
+			spu2DMA7Irq();
+		}
 	}
 
 	u16 SPUCore::Read(u32 addr)

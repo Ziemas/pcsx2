@@ -41,36 +41,26 @@ namespace SPU
 		Console.WriteLn("SPU irq dma7");
 	}
 
-	void WriteDMA7Mem(u16* madr, u32 size)
+	void WriteDMA(u32 core, u16* madr, u32 size)
 	{
-		Console.WriteLn("SPU DMA7 WRITE");
+		cores[core].DmaWrite(madr, size);
 	}
 
-	void ReadDMA7Mem(u16* madr, u32 size)
+	void ReadDMA(u32 core, u16* madr, u32 size)
 	{
-		Console.WriteLn("SPU DMA7 READ");
-	}
-
-	void WriteDMA4Mem(u16* madr, u32 size)
-	{
-		Console.WriteLn("SPU DMA4 WRITE");
-	}
-
-	void ReadDMA4Mem(u16* madr, u32 size)
-	{
-		Console.WriteLn("SPU DMA4 READ");
+		Console.WriteLn("test");
+		cores[core].DmaRead(madr, size);
+		cores[core].DmaRead(madr, size);
 	}
 
 	u16 Read(u32 addr)
 	{
-		Console.WriteLn("read addr %08x", addr );
 		addr &= 0x7FF;
 
 		if (addr < 0x760)
 		{
 			u32 core = (addr >> 10) & 1;
 			addr &= 0x3FF;
-			Console.WriteLn("became addr %08x on core %d", addr, core);
 			return cores[core].Read(addr);
 		}
 

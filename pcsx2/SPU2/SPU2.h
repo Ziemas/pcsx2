@@ -44,10 +44,8 @@ namespace SPU
 	void Run(u32 cycles);
 	void InterruptDMA4();
 	void InterruptDMA7();
-	void WriteDMA7Mem(u16* madr, u32 size);
-	void ReadDMA7Mem(u16* madr, u32 size);
-	void WriteDMA4Mem(u16* madr, u32 size);
-	void ReadDMA4Mem(u16* madr, u32 size);
+	void WriteDMA(u32 channel, u16* madr, u32 size);
+	void ReadDMA(u32 channel, u16* madr, u32 size);
 	u16 Read(u32 addr);
 	void Write(u32 addr, u16 value);
 	void Reset(PS2Modes isRunningPSXMode);
