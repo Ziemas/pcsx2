@@ -116,7 +116,12 @@ namespace SPU
 		return false;
 	}
 
-	void Configure() {}
+	void Configure()
+	{
+		auto f = fopen("spumem", "wb");
+		fwrite(SPU_RAM, 1024*1024*2, 1, f);
+		fclose(f);
+	}
 
 	void Close() {}
 
