@@ -53,6 +53,7 @@ namespace SPU
 		// TODO Envelope
 		u32 m_ADSR1{0};
 		u32 m_ADSR2{0};
+		u32 m_ENVX{0};
 
 		// TODO vol envelope
 		u32 m_Voll{0};
