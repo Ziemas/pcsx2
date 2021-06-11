@@ -26,9 +26,18 @@ namespace SPU
 		{SPU_RAM, 1},
 	};
 
+	u32 spuCycles = 0;
+
 	void Run(u32 cycles)
 	{
-		//Console.WriteLn("SPU run %d cycles", cycles);
+		spuCycles += cycles;
+		while (spuCycles >= 768)
+		{
+			u32 sample = 0;
+			sample += cores[0].GenSample();
+			sample += cores[1].GenSample();
+			spuCycles -= 768;
+		}
 	}
 
 	void InterruptDMA4()
