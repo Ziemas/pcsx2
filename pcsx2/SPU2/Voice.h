@@ -16,6 +16,7 @@
 #pragma once
 
 #include "common/Pcsx2Types.h"
+#include "common/Bitfield.h"
 #include "common/fifo.h"
 #include "Util.h"
 
@@ -23,14 +24,14 @@ namespace SPU
 {
 	class SPUCore;
 
-	struct Voice
+	class Voice
 	{
+	public:
 		Voice(SPUCore& spu, u32 id)
 			: m_SPU(spu)
 			, m_Id(id)
 		{
 		}
-
 
 		s16 GenSample();
 
@@ -41,15 +42,38 @@ namespace SPU
 		u16 ReadAddr(u32 addr);
 		void WriteAddr(u32 addr, u16 value);
 
+		bool m_Noise{false};
+		bool m_PitchMod{false};
+		bool m_KeyOn{false};
+		bool m_KeyOff{false};
+		bool m_ENDX{false};
+
+	private:
+		union ADPCMHeader
+		{
+			u16 bits;
+			BitField<u16, bool, 10, 1> LoopStart;
+			BitField<u16, bool, 9, 1> LoopRepeat;
+			BitField<u16, bool, 8, 1> LoopEnd;
+			BitField<u16, u8, 4, 3> Filter;
+			BitField<u16, u8, 0, 4> Shift;
+		};
+
+		void DecodeSamples();
+
 		SPUCore& m_SPU;
 		u32 m_Id{0};
 
-		FIFO<u16, 0x20> DecodeBuf{};
+		FIFO<u16, 0x20> m_DecodeBuf{};
+		u32 m_Counter{0};
 
 		u32 m_Pitch{0};
 
 		Reg32 m_SSA{0};
 		Reg32 m_NAX{0};
+		Reg32 m_LSA{0};
+
+		ADPCMHeader m_CurHeader{};
 
 		// TODO Envelope
 		u32 m_ADSR1{0};
@@ -59,11 +83,5 @@ namespace SPU
 		// TODO vol envelope
 		u32 m_Voll{0};
 		u32 m_Volr{0};
-
-		bool m_Noise{false};
-		bool m_PitchMod{false};
-		bool m_KeyOn{false};
-		bool m_KeyOff{false};
-		bool m_ENDX{false};
 	};
 } // namespace SPU
