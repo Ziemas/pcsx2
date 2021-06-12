@@ -69,23 +69,16 @@ namespace SPU
 
 	void Voice::DecodeSamples()
 	{
-		if (m_DecodeBuf.Size() > 11)
+		// This doesn't exactly match the real behaviour,
+		// it seems to initially decode a bigger chunk
+		// and then decode more data after a bit has drained
+		if (m_DecodeBuf.Size() >= 16)
 		{
 			// sufficient data buffered
 			return;
 		}
 
-		// full block decode
-		//  shift  = 12 - (src[4+blk*2+nibble] AND 0Fh)
-		//  filter =      (src[4+blk*2+nibble] AND 30h) SHR 4
-		//  f0 = pos_xa_adpcm_table[filter]
-		//  f1 = neg_xa_adpcm_table[filter]
-		//  for j=0 to 27
-		//    t = signed4bit((src[16+blk+j*4] SHR (nibble*4)) AND 0Fh)
-		//    s = (t SHL shift) + ((old*f0 + older*f1+32)/64);
-		//    s = MinMax(s,-8000h,+7FFFh)
-		//    halfword[dst]=s, dst=dst+2, older=old, old=s
-		//  next j
+		// TODO irq testing
 
 		if ((m_NAX.full & 0x7) == 0)
 		{
@@ -96,7 +89,8 @@ namespace SPU
 
 				if (!m_CurHeader.LoopRepeat)
 				{
-					//release adsr and set to 0
+					// TODO release adsr and set to 0
+					m_ENVX = 0;
 				}
 			}
 
@@ -104,6 +98,28 @@ namespace SPU
 			if (m_CurHeader.LoopStart)
 				m_LSA.full = m_NAX.full & ~0x7;
 		}
+
+		u32 data = m_SPU.Ram(m_NAX.full);
+		for (int i = 0; i < 4; i++)
+		{
+			s32 sample = (s16)((data & 0xF) << 12);
+			sample >>= m_CurHeader.Shift.GetValue();
+
+			// TODO do the right thing for invalid shift/filter values
+			sample += (adpcm_coefs_i[m_CurHeader.Filter.GetValue()][0] * m_DecodeHist1) >> 6;
+			sample += (adpcm_coefs_i[m_CurHeader.Filter.GetValue()][1] * m_DecodeHist2) >> 6;
+
+			// We do get overflow here otherwise, should we?
+			sample = std::clamp(sample, -0x8000, 0x7FFF);
+
+			m_DecodeHist2 = m_DecodeHist1;
+			m_DecodeHist1 = sample;
+
+			m_DecodeBuf.Push(sample);
+			data >>= 4;
+		}
+
+		m_NAX.full++;
 	}
 
 	s16 Voice::GenSample()
@@ -123,6 +139,8 @@ namespace SPU
 			m_NAX.full = m_SSA.full;
 			m_LSA.full = m_SSA.full;
 			m_Counter = 0;
+			m_DecodeHist1 = 0;
+			m_DecodeHist2 = 0;
 			m_DecodeBuf.Reset();
 			Console.WriteLn("SPU[%d]:VOICE[%d] Key On, SSA %08x", m_SPU.m_Id, m_Id, m_SSA);
 		}
@@ -135,7 +153,8 @@ namespace SPU
 		//   or do we decode 4 samples and interpolate using the first 4?
 		//   mednafen does the latter, and i could see why that might make sense
 
-		u32 sample = 0;
+		// TODO noise
+		s16 sample = 0;
 		u32 index = (m_Counter & 0x0FF0) >> 4;
 		sample += (m_DecodeBuf.Peek(0) * gaussianTable[index][0]) >> 15;
 		sample += (m_DecodeBuf.Peek(1) * gaussianTable[index][1]) >> 15;
@@ -163,7 +182,8 @@ namespace SPU
 			m_DecodeBuf.Pop();
 		}
 
-		return 0;
+		// TODO left right vol
+		return (((sample * m_Voll) >> 15) * m_ENVX) >> 15;
 	}
 
 	u16 Voice::Read(u32 addr)
