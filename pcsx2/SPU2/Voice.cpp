@@ -187,7 +187,7 @@ namespace SPU
 		}
 
 		// TODO left right vol
-		return (((sample * m_Voll) >> 15) * m_ENVX) >> 15;
+		return (((sample * m_Voll.Get()) >> 15) * m_ENVX) >> 15;
 	}
 
 	u16 Voice::Read(u32 addr)
@@ -195,9 +195,9 @@ namespace SPU
 		switch (addr)
 		{
 			case 0:
-				return m_Voll;
+				return m_Voll.Get();
 			case 2:
-				return m_Volr;
+				return m_Volr.Get();
 			case 4:
 				return m_Pitch;
 			case 6:
@@ -237,10 +237,10 @@ namespace SPU
 		switch (addr)
 		{
 			case 0:
-				m_Voll = value;
+				m_Voll.Set(value);
 				return;
 			case 2:
-				m_Volr = value;
+				m_Volr.Set(value);
 				return;
 			case 4:
 				m_Pitch = value;
