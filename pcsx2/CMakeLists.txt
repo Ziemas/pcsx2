@@ -313,6 +313,7 @@ set(pcsx2SPU2Headers
 	SPU2/SPU2.h
 	SPU2/SpuCore.h
 	SPU2/Reverb.h
+	SPU2/Util.h
 	SPU2/Voice.h
 	)
 

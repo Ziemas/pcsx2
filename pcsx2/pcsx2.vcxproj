@@ -730,6 +730,7 @@
     <ClInclude Include="SPU2\SPU2.h" />
     <ClInclude Include="SPU2\SpuCore.h" />
     <ClInclude Include="SPU2\Reverb.h" />
+    <ClInclude Include="SPU2\Util.h" />
     <ClInclude Include="SPU2\Voice.h" />
     <ClInclude Include="GS\config.h" />
     <ClInclude Include="GS\Renderers\OpenGL\GLLoader.h" />
