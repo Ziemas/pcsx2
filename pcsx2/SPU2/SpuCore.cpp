@@ -41,6 +41,10 @@ namespace SPU
 
 	void SPUCore::DmaWrite(u16* madr, u32 size)
 	{
+		if (m_Id == 0 && m_Adma.Core1)
+			return;
+		if (m_Id == 1 && m_Adma.Core2)
+			return;
 		memcpy(&m_RAM[m_TSA.full], madr, size * 2);
 		m_Stat.DMABusy = false;
 		m_Stat.DMAReady = true;
