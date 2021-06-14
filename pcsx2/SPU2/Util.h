@@ -20,6 +20,13 @@
 
 namespace SPU
 {
+	__fi static void SET_HIGH(u32& number, u32 upper) { number = (number & 0x0000FFFF) | upper << 16; }
+	__fi static void SET_LOW(u32& number, u32 low) { number = (number & 0xFFFF0000) | low; }
+	__fi static u32 GET_HIGH(u32 number) { return (number & 0xFFFF0000) >> 16; }
+	__fi static u32 GET_LOW(u32 number) { return number & 0x0000FFFF; }
+	__fi static u32 GET_BIT(u32 idx, u32 value) { return (value >> idx) & 1; }
+	__fi static void SET_BIT(u32& number, u32 idx) { number |= (1 << idx); }
+
 	union Reg32
 	{
 		u32 full;
