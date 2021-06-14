@@ -28,15 +28,20 @@ namespace SPU
 
 	u32 spuCycles = 0;
 
+	FILE* output{nullptr};
+
 	void Run(u32 cycles)
 	{
 		spuCycles += cycles;
 		while (spuCycles >= 768)
 		{
-			u32 sample = 0;
+			s32 sample = 0;
 			sample += cores[0].GenSample();
 			sample += cores[1].GenSample();
 			spuCycles -= 768;
+
+			s16 s = std::clamp<s32>(sample, -0x8000, 0x7FFF);
+			fwrite(&s, sizeof(s16), 1, output);
 		}
 	}
 
@@ -109,6 +114,9 @@ namespace SPU
 	void Reset()
 	{
 		Console.WriteLn("SPU RESET");
+		if (output != nullptr)
+			fclose(output);
+		output = fopen("output.pcm", "wb");
 	}
 
 	void PS1Reset()
@@ -129,17 +137,26 @@ namespace SPU
 	{
 		auto f = fopen("spumem", "wb");
 		fwrite(SPU_RAM, 1024*1024*2, 1, f);
-		fclose(f);
 	}
 
-	void Close() {}
+	void Close()
+	{
+		Console.WriteLn("SPU CLOSE");
+	}
 
-	void Shutdown() {}
+	void Shutdown()
+	{
+		Console.WriteLn("SPU SHUTDOWN");
+	}
 
-	void Open() {}
+	void Open()
+	{
+		Console.WriteLn("SPU OPEN");
+	}
 
 	void Init()
 	{
+		Console.WriteLn("SPU INIT");
 	}
 
 	s32 Freeze(int mode, freezeData* data)

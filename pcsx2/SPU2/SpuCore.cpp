@@ -22,12 +22,14 @@ namespace SPU
 {
 	s16 SPUCore::GenSample()
 	{
+		s16 sample = 0;
 		for (auto& v : m_voices)
 		{
-			v.GenSample();
+			s16 nexts = v.GenSample();
+			sample = std::clamp(sample+nexts, -0x8000, 0x7fff);
 		}
 
-		return 0;
+		return sample;
 	}
 
 	void SPUCore::WriteMem(u32& addr, u16 value)
