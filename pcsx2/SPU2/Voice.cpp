@@ -79,6 +79,7 @@ namespace SPU
 		}
 
 		// TODO irq testing
+		// TODO nax should never point at the block headers
 
 		if ((m_NAX.full & 0x7) == 0)
 		{
@@ -97,6 +98,8 @@ namespace SPU
 			m_CurHeader.bits = m_SPU.Ram(m_NAX.full & ~0x7);
 			if (m_CurHeader.LoopStart)
 				m_LSA.full = m_NAX.full & ~0x7;
+
+			m_NAX.full++;
 		}
 
 		u32 data = m_SPU.Ram(m_NAX.full);
