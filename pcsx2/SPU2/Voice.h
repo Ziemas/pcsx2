@@ -15,6 +15,7 @@
 
 #pragma once
 
+#include "Envelope.h"
 #include "Pcsx2Types.h"
 #include "Utilities/Bitfield.h"
 #include "Utilities/fifo.h"
@@ -84,7 +85,7 @@ namespace SPU
 		u32 m_ENVX{0};
 
 		// TODO vol envelope
-		u32 m_Voll{0};
-		u32 m_Volr{0};
+		VolReg m_Voll{};
+		VolReg m_Volr{};
 	};
 } // namespace SPU
