@@ -96,7 +96,7 @@ namespace SPU
 			}
 
 			m_CurHeader.bits = m_SPU.Ram(m_NAX.full & ~0x7);
-			if (m_CurHeader.LoopStart)
+			if (m_CurHeader.LoopStart && !m_CustomLoop)
 				m_LSA.full = m_NAX.full & ~0x7;
 
 			m_NAX.full++;
@@ -145,6 +145,7 @@ namespace SPU
 			m_DecodeHist1 = 0;
 			m_DecodeHist2 = 0;
 			m_DecodeBuf.Reset();
+			m_CustomLoop = false;
 			Console.WriteLn("SPU[%d]:VOICE[%d] Key On, SSA %08x", m_SPU.m_Id, m_Id, m_SSA);
 		}
 
@@ -265,6 +266,14 @@ namespace SPU
 				return;
 			case 2:
 				m_SSA.lo = value;
+				return;
+			case 4:
+				m_LSA.hi = value;
+				m_CustomLoop = true;
+				return;
+			case 6:
+				m_LSA.lo = value;
+				m_CustomLoop = true;
 				return;
 			default:
 				Console.WriteLn("UNHANDLED SPU[%d]:VOICE[%d] WriteAddr %04x -> %04x", m_SPU.m_Id, m_Id, value, addr);
