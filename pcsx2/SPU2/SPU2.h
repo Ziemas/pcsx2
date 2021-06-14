@@ -25,7 +25,9 @@
  *   - Does it toggle the DMA busy bit?
  *
  * Voice decode buffers
- *   - try to figure out decoding rate/buffer size
+ *   - try to figure out decoding rate/buffer size.
+ *     a 16 sample buffer with 4 samples per spu cycle
+ *     seems about right.
  *
  * Try to work out an ADSR method without cycle counting
  *    - lookup table with modifiers for exp would be nice
