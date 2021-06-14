@@ -74,6 +74,7 @@ namespace SPU
 		Reg32 m_SSA{0};
 		Reg32 m_NAX{0};
 		Reg32 m_LSA{0};
+		bool m_CustomLoop{false};
 
 		ADPCMHeader m_CurHeader{};
 
