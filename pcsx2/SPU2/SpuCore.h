@@ -19,7 +19,6 @@
 #include "common/Bitfield.h"
 #include "Voice.h"
 
-
 namespace SPU
 {
 	static constexpr u32 NUM_VOICES = 24;
