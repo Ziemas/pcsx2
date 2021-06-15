@@ -34,7 +34,7 @@ namespace SPU
 		{
 		}
 
-		s16 GenSample();
+		std::pair<s16, s16> GenSample();
 
 		u16 Read(u32 addr);
 		void Write(u32 addr, u16 value);
@@ -84,8 +84,6 @@ namespace SPU
 		u32 m_ADSR2{0};
 		u32 m_ENVX{0};
 
-		// TODO vol envelope
-		VolReg m_Voll{};
-		VolReg m_Volr{};
+		VolumePair m_Volume{};
 	};
 } // namespace SPU

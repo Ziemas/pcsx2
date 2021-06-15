@@ -20,16 +20,17 @@
 
 namespace SPU
 {
-	s16 SPUCore::GenSample()
+	std::pair<s16, s16> SPUCore::GenSample()
 	{
-		s16 sample = 0;
+		s16 left = 0, right = 0;
 		for (auto& v : m_voices)
 		{
-			s16 nexts = v.GenSample();
-			sample = std::clamp(sample+nexts, -0x8000, 0x7fff);
+			auto sample = v.GenSample();
+			left = std::clamp<s16>(left + sample.first, -0x8000, 0x7FFF);
+			right = std::clamp<s16>(right + sample.second, -0x8000, 0x7FFF);
 		}
 
-		return sample;
+		return std::make_pair(left, right);
 	}
 
 	void SPUCore::WriteMem(u32& addr, u16 value)
