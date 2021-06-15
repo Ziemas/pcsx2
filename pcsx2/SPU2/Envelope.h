@@ -42,6 +42,18 @@ namespace SPU
 		BitField<u32, u8, 0, 4> SustainLevel;
 	};
 
+	union VolReg
+	{
+		u16 bits;
+
+		BitField<u16, bool, 15, 1> EnableSweep;
+		BitField<u16, bool, 14, 1> SweepExp;
+		BitField<u16, bool, 13, 1> SweepDecrease;
+		BitField<u16, bool, 12, 1> NegativePhase;
+		BitField<u16, u8, 2, 5> SweepShift;
+		BitField<u16, u8, 0, 2> SweepStep;
+	};
+
 	class Envelope
 	{
 	};
@@ -52,15 +64,28 @@ namespace SPU
 		void Run();
 	};
 
-	class VolReg : Envelope
+	class Volume : Envelope
 	{
 	public:
 		void Run();
-		void Set(s16 volume);
+		void Set(u16 volume);
 		s16 Get();
 
 	private:
+		VolReg m_Sweep{0};
 		s16 m_Vol{0};
+	};
+
+	struct VolumePair
+	{
+		Volume left{};
+		Volume right{};
+
+		void Run()
+		{
+			left.Run();
+			right.Run();
+		}
 	};
 
 } // namespace SPU

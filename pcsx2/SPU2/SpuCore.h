@@ -37,7 +37,7 @@ namespace SPU
 
 		u32 m_Id{0};
 
-		s16 GenSample();
+		std::pair<s16, s16> GenSample();
 
 		void Write(u32 addr, u16 value);
 		u16 Read(u32 addr);

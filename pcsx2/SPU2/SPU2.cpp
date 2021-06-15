@@ -35,13 +35,14 @@ namespace SPU
 		spuCycles += cycles;
 		while (spuCycles >= 768)
 		{
-			s32 sample = 0;
-			sample += cores[0].GenSample();
-			sample += cores[1].GenSample();
+			auto core0 = cores[0].GenSample();
+			auto core1 = cores[1].GenSample();
 			spuCycles -= 768;
 
-			s16 s = std::clamp<s32>(sample, -0x8000, 0x7FFF);
-			fwrite(&s, sizeof(s16), 1, output);
+			s16 left = core0.first + core1.first;
+			fwrite(&left, sizeof(s16), 1, output);
+			s16 right = core0.second + core1.second;
+			fwrite(&right, sizeof(s16), 1, output);
 		}
 	}
 

@@ -125,7 +125,7 @@ namespace SPU
 		m_NAX.full++;
 	}
 
-	s16 Voice::GenSample()
+	std::pair<s16, s16> Voice::GenSample()
 	{
 		if (m_KeyOff)
 		{
@@ -186,8 +186,11 @@ namespace SPU
 			m_DecodeBuf.Pop();
 		}
 
-		// TODO left right vol
-		return (((sample * m_Voll.Get()) >> 15) * m_ENVX) >> 15;
+		sample = ApplyVolume(sample, m_ENVX);
+		s16 left = ApplyVolume(sample, m_Volume.left.Get());
+		s16 right = ApplyVolume(sample, m_Volume.right.Get());
+
+		return std::make_pair(left, right);
 	}
 
 	u16 Voice::Read(u32 addr)
@@ -195,9 +198,9 @@ namespace SPU
 		switch (addr)
 		{
 			case 0:
-				return m_Voll.Get();
+				return m_Volume.left.Get();
 			case 2:
-				return m_Volr.Get();
+				return m_Volume.right.Get();
 			case 4:
 				return m_Pitch;
 			case 6:
@@ -237,10 +240,10 @@ namespace SPU
 		switch (addr)
 		{
 			case 0:
-				m_Voll.Set(value);
+				m_Volume.left.Set(value);
 				return;
 			case 2:
-				m_Volr.Set(value);
+				m_Volume.right.Set(value);
 				return;
 			case 4:
 				m_Pitch = value;

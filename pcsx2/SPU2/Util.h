@@ -27,6 +27,11 @@ namespace SPU
 	__fi static u32 GET_BIT(u32 idx, u32 value) { return (value >> idx) & 1; }
 	__fi static void SET_BIT(u32& number, u32 idx) { number |= (1 << idx); }
 
+	__fi static s16 ApplyVolume(s16 sample, s32 volume)
+	{
+		return sample * volume >> 15;
+	}
+
 	union Reg32
 	{
 		u32 full;
