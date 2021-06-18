@@ -18,34 +18,35 @@
 
 namespace SPU
 {
-    //static constexpr std::array<u32, 0x7F> RateTableGenerate()
-    //{
-    //    std::array<u32, 0x7F> rates{};
-    //    return rates;
-    //}
+	//static constexpr std::array<u32, 0x7F> RateTableGenerate()
+	//{
+	//    std::array<u32, 0x7F> rates{};
+	//    return rates;
+	//}
 
-    //static constexpr std::array<u32, 0x7F> RateTable = RateTableGenerate();
+	//static constexpr std::array<u32, 0x7F> RateTable = RateTableGenerate();
 
-    void ADSR::Run() {}
+	void ADSR::Run() {}
 
-    void Volume::Run() {}
-    void Volume::Set(u16 volume)
-    {
-        VolReg reg{0};
-        reg.bits = volume;
+	void Volume::Run() {}
 
-        if (!reg.EnableSweep)
-        {
-            m_Vol = static_cast<s16>(volume << 1);
-            return;
-        }
+	void Volume::Set(u16 volume)
+	{
+		VolReg reg{0};
+		reg.bits = volume;
 
-        m_Sweep.bits = reg.bits;
-        // TODO Sweep
-    }
+		if (!reg.EnableSweep)
+		{
+			m_Vol = static_cast<s16>(volume << 1);
+			return;
+		}
 
-    s16 Volume::Get()
-    {
-        return m_Vol;
-    }
-}
+		m_Sweep.bits = reg.bits;
+		// TODO Sweep
+	}
+
+	s16 Volume::Get()
+	{
+		return m_Vol;
+	}
+} // namespace SPU
