@@ -29,7 +29,7 @@ namespace SPU
 
 	__fi static s16 ApplyVolume(s16 sample, s32 volume)
 	{
-		return sample * volume >> 15;
+		return (sample * volume) >> 15;
 	}
 
 	union Reg32
