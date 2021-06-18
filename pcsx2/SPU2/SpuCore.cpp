@@ -106,7 +106,7 @@ namespace SPU
 			case 0x196:
 				return m_VMIXER.hi.GetValue();
 			case 0x198:
-				return m_MMIX;
+				return m_MMIX.bits;
 			case 0x19A:
 				return m_Attr.bits;
 			case 0x1A0:
@@ -257,7 +257,7 @@ namespace SPU
 				m_VMIXER.hi = value;
 				break;
 			case 0x198:
-				m_MMIX = value;
+				m_MMIX.bits = value;
 				break;
 			case 0x19A:
 				m_Attr.bits = value;
