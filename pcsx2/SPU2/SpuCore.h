@@ -95,6 +95,24 @@ namespace SPU
 			BitField<u16, bool, 0, 1> Core1;
 		};
 
+		union MMIX
+		{
+			u16 bits;
+
+			BitField<u16, bool, 11, 1> VoiceR;
+			BitField<u16, bool, 10, 1> VoiceL;
+			BitField<u16, bool, 9, 1> VoiceWetR;
+			BitField<u16, bool, 8, 1> VoiceWetL;
+			BitField<u16, bool, 7, 1> MeminR;
+			BitField<u16, bool, 6, 1> MeminL;
+			BitField<u16, bool, 5, 1> MeminWetR;
+			BitField<u16, bool, 4, 1> MeminWetL;
+			BitField<u16, bool, 3, 1> SinR;
+			BitField<u16, bool, 2, 1> SinL;
+			BitField<u16, bool, 1, 1> SinWetR;
+			BitField<u16, bool, 0, 1> SinWetL;
+		};
+
 
 		u16* m_RAM;
 
@@ -115,7 +133,7 @@ namespace SPU
 		//u32 m_PitchMod{0};
 		//u32 m_Noise{0};
 
-		u32 m_MMIX{0};
+		MMIX m_MMIX{0};
 		Reg32 m_VMIXL{0};
 		Reg32 m_VMIXR{0};
 		Reg32 m_VMIXEL{0};
