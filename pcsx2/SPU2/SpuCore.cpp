@@ -26,8 +26,8 @@ namespace SPU
 		for (auto& v : m_voices)
 		{
 			auto sample = v.GenSample();
-			left = std::clamp<s16>(left + sample.first, -0x8000, 0x7FFF);
-			right = std::clamp<s16>(right + sample.second, -0x8000, 0x7FFF);
+			left = std::clamp<s32>(left + sample.first, -0x8000, 0x7FFF);
+			right = std::clamp<s32>(right + sample.second, -0x8000, 0x7FFF);
 		}
 
 		return std::make_pair(left, right);
