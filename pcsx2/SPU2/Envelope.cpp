@@ -14,19 +14,106 @@
  */
 
 #include "Envelope.h"
+#include <algorithm>
 #include <array>
 
 namespace SPU
 {
-	//static constexpr std::array<u32, 0x7F> RateTableGenerate()
-	//{
-	//    std::array<u32, 0x7F> rates{};
-	//    return rates;
-	//}
+	void Envelope::Step()
+	{
+		// arbitrary number of bits, this is probably incorrect for the
+		// "reserved" and infinite duration values
+		// test hw or copy mednafen instead?
+		u32 cStep = 0x800000;
 
-	//static constexpr std::array<u32, 0x7F> RateTable = RateTableGenerate();
+		u32 shift = m_Shift - 11;
+		if (shift > 0)
+		{
+			cStep >>= shift;
+		}
 
-	void ADSR::Run() {}
+		u32 step = m_Step << std::max<u32>(0, 11 - m_Shift);
+
+		if (m_Exp)
+		{
+			if (!m_Decrease && m_Level > 0x6000)
+				cStep >>= 2;
+
+			if (m_Decrease)
+				step = (step * m_Level) >> 15;
+		}
+
+		if (m_Counter >= 0x800000)
+		{
+			m_Counter = 0;
+			m_Level = std::clamp<u32>(m_Level + step, 0, 0x7FFF);
+		}
+
+		m_Counter += cStep;
+	}
+
+	void ADSR::Run()
+	{
+		// Let's not waste time calculating silent voices
+		if (m_Phase == Phase::Stopped)
+			return;
+
+		Step();
+
+		if (m_Phase == Phase::Sustain)
+			return;
+
+		if ((!m_Decrease && m_Level >= m_Target) || (m_Decrease && m_Level <= m_Target))
+		{
+			switch (m_Phase)
+			{
+				case Phase::Attack:
+					m_Phase = Phase::Decay;
+					break;
+				case Phase::Decay:
+					m_Phase = Phase::Sustain;
+					break;
+				case Phase::Release:
+					m_Phase = Phase::Stopped;
+					break;
+				default:
+					break;
+			}
+
+			UpdateSettings();
+		}
+	}
+
+	void ADSR::UpdateSettings()
+	{
+		switch (m_Phase)
+		{
+			case Phase::Attack:
+				m_Exp = m_Reg.AttackExp;
+				m_Decrease = false;
+				m_Shift = m_Reg.AttackShift;
+				m_Step = m_Reg.AttackStep;
+				m_Target = 0x7FFF;
+				break;
+		}
+	}
+
+	void ADSR::Attack()
+	{
+		m_Phase = Phase::Attack;
+		UpdateSettings();
+	}
+
+	void ADSR::Release()
+	{
+		m_Phase = Phase::Release;
+		UpdateSettings();
+	}
+
+	u32 ADSR::Level()
+	{
+		return m_Level;
+	}
 
 	void Volume::Run() {}
 
