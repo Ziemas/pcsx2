@@ -56,12 +56,41 @@ namespace SPU
 
 	class Envelope
 	{
+	public:
+		void Step();
+
+	protected:
+		u8 m_Shift{0};
+		u8 m_Step{0};
+		bool m_Exp{0};
+		bool m_Decrease{0};
+
+		u32 m_Counter{0};
+		u32 m_Level{0};
 	};
 
 	class ADSR : Envelope
 	{
+		enum class Phase
+		{
+			Attack,
+			Decay,
+			Sustain,
+			Release,
+			Stopped,
+		};
+
 	public:
 		void Run();
+		void Attack();
+		void Release();
+		u32 Level();
+
+	private:
+		void UpdateSettings();
+		Phase m_Phase{Phase::Stopped};
+		u32 m_Target{0};
+		ADSRReg m_Reg{0};
 	};
 
 	class Volume : Envelope
