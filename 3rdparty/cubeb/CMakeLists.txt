@@ -19,14 +19,6 @@ set(CMAKE_C_STANDARD 99)
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-if(NOT COMMAND add_sanitizers)
-  list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake/sanitizers-cmake/cmake")
-  find_package(Sanitizers)
-  if(NOT COMMAND add_sanitizers)
-    message(FATAL_ERROR "Could not find sanitizers-cmake: run\n\tgit submodule update --init --recursive\nin base git checkout")
-  endif()
-endif()
-
 set(CMAKE_C_VISIBILITY_PRESET hidden)
 set(CMAKE_CXX_VISIBILITY_PRESET hidden)
 set(CMAKE_VISIBILITY_INLINES_HIDDEN 1)
@@ -53,8 +45,6 @@ target_compile_definitions(cubeb PRIVATE OUTSIDE_SPEEX)
 target_compile_definitions(cubeb PRIVATE FLOATING_POINT)
 target_compile_definitions(cubeb PRIVATE EXPORT=)
 target_compile_definitions(cubeb PRIVATE RANDOM_PREFIX=speex)
-
-add_sanitizers(cubeb)
 
 include(GenerateExportHeader)
 generate_export_header(cubeb EXPORT_FILE_NAME ${CMAKE_BINARY_DIR}/exports/cubeb_export.h)
