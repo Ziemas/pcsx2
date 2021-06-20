@@ -135,9 +135,10 @@ namespace SPU
 		if (m_KeyOn)
 		{
 			m_KeyOn = false;
+			m_NAX.full = m_SSA.full;
+			m_CurHeader.bits = m_SPU.Ram(m_NAX.full & ~0x7);
 			m_ENDX = false;
 			m_ADSR.Attack();
-			m_NAX.full = m_SSA.full;
 			m_Counter = 0;
 			m_DecodeHist1 = 0;
 			m_DecodeHist2 = 0;
