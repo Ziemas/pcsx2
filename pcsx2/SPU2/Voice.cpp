@@ -90,8 +90,7 @@ namespace SPU
 
 				if (!m_CurHeader.LoopRepeat)
 				{
-					// TODO release adsr and set to 0
-					m_ENVX = 0;
+					m_ADSR.Stop();
 				}
 			}
 
@@ -130,15 +129,13 @@ namespace SPU
 		if (m_KeyOff)
 		{
 			m_KeyOff = false;
-			// TODO release env
-			m_ENVX = 0;
+			m_ADSR.Release();
 			Console.WriteLn("SPU[%d]:VOICE[%d] Key Off", m_SPU.m_Id, m_Id);
 		}
 		if (m_KeyOn)
 		{
 			m_KeyOn = false;
-			// TODO env attack
-			m_ENVX = 0x7fff;
+			m_ADSR.Attack();
 			m_NAX.full = m_SSA.full;
 			m_LSA.full = m_SSA.full;
 			m_Counter = 0;
@@ -186,7 +183,9 @@ namespace SPU
 			m_DecodeBuf.Pop();
 		}
 
-		sample = ApplyVolume(sample, m_ENVX);
+		m_ADSR.Run();
+
+		sample = ApplyVolume(sample, m_ADSR.Level());
 		s16 left = ApplyVolume(sample, m_Volume.left.Get());
 		s16 right = ApplyVolume(sample, m_Volume.right.Get());
 
@@ -204,11 +203,11 @@ namespace SPU
 			case 4:
 				return m_Pitch;
 			case 6:
-				return m_ADSR1;
+				return m_ADSR.m_Reg.lo.GetValue();
 			case 8:
-				return m_ADSR2;
+				return m_ADSR.m_Reg.hi.GetValue();
 			case 10:
-				return m_ENVX;
+				return m_ADSR.Level();
 			default:
 				Console.WriteLn("UNHANDLED SPU[%d]:VOICE[%d] READ ---- <- %04x", m_SPU.m_Id, m_Id, addr);
 				pxAssertMsg(false, "Unhandled SPU Write");
@@ -249,10 +248,12 @@ namespace SPU
 				m_Pitch = value;
 				return;
 			case 6:
-				m_ADSR1 = value;
+				m_ADSR.m_Reg.lo = value;
+				m_ADSR.UpdateSettings();
 				return;
 			case 8:
-				m_ADSR2 = value;
+				m_ADSR.m_Reg.hi = value;
+				m_ADSR.UpdateSettings();
 				return;
 			default:
 				Console.WriteLn("UNHANDLED SPU[%d]:VOICE[%d] WRITE %04x -> %04x", m_SPU.m_Id, m_Id, value, addr);

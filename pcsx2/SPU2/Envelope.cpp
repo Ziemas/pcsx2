@@ -26,13 +26,11 @@ namespace SPU
 		// test hw or copy mednafen instead?
 		u32 cStep = 0x800000;
 
-		u32 shift = m_Shift - 11;
+		s32 shift = m_Shift - 11;
 		if (shift > 0)
-		{
 			cStep >>= shift;
-		}
 
-		u32 step = m_Step << std::max<u32>(0, 11 - m_Shift);
+		s16 step = m_Step << std::max<s16>(0, 11 - m_Shift);
 
 		if (m_Exp)
 		{
@@ -43,13 +41,13 @@ namespace SPU
 				step = (step * m_Level) >> 15;
 		}
 
+		m_Counter += cStep;
+
 		if (m_Counter >= 0x800000)
 		{
 			m_Counter = 0;
-			m_Level = std::clamp<u32>(m_Level + step, 0, 0x7FFF);
+			m_Level = std::clamp<s32>(m_Level + step, 0, 0x7FFF);
 		}
-
-		m_Counter += cStep;
 	}
 
 	void ADSR::Run()
@@ -92,8 +90,31 @@ namespace SPU
 				m_Exp = m_Reg.AttackExp;
 				m_Decrease = false;
 				m_Shift = m_Reg.AttackShift;
-				m_Step = m_Reg.AttackStep;
+				m_Step = 7 - m_Reg.AttackStep.GetValue();
 				m_Target = 0x7FFF;
+				break;
+			case Phase::Decay:
+				m_Exp = true;
+				m_Decrease = true;
+				m_Shift = m_Reg.DecayShift;
+				m_Step = -8;
+				m_Target = (m_Reg.SustainLevel.GetValue() + 1) << 11;
+				break;
+			case Phase::Sustain:
+				m_Exp = m_Reg.SustainExp;
+				m_Decrease = m_Reg.SustainDecr;
+				m_Shift = m_Reg.SustainShift;
+				m_Step = m_Decrease ? (-8 + m_Reg.SustainStep.GetValue()) : (7 - m_Reg.SustainStep.GetValue());
+				m_Target = 0; // unused for sustain
+				break;
+			case Phase::Release:
+				m_Exp = m_Reg.ReleaseExp;
+				m_Decrease = true;
+				m_Shift = m_Reg.ReleaseShift;
+				m_Step = -8;
+				m_Target = 0;
+				break;
+			default:
 				break;
 		}
 	}
@@ -101,13 +122,22 @@ namespace SPU
 	void ADSR::Attack()
 	{
 		m_Phase = Phase::Attack;
+		m_Level = 0;
+		m_Counter = 0;
 		UpdateSettings();
 	}
 
 	void ADSR::Release()
 	{
 		m_Phase = Phase::Release;
+		m_Counter = 0;
 		UpdateSettings();
+	}
+
+	void ADSR::Stop()
+	{
+		m_Phase = Phase::Stopped;
+		m_Level = 0;
 	}
 
 	u32 ADSR::Level()
