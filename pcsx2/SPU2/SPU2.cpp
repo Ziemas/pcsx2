@@ -16,6 +16,7 @@
 #include "SPU2.h"
 #include "SpuCore.h"
 #include "common/Console.h"
+#include "Output.h"
 
 namespace SPU
 {
@@ -27,6 +28,8 @@ namespace SPU
 	};
 
 	u32 spuCycles = 0;
+
+	SndOutput snd{};
 
 	FILE* output{nullptr};
 
@@ -143,7 +146,7 @@ namespace SPU
 
 	void Shutdown()
 	{
-		Console.WriteLn("SPU SHUTDOWN");
+		snd.Shutdown();
 	}
 
 	s32 Open()
@@ -154,7 +157,7 @@ namespace SPU
 
 	s32 Init()
 	{
-		Console.WriteLn("SPU INIT");
+		snd.Init();
 		return 0;
 	}
 
