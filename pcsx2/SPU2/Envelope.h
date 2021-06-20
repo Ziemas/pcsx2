@@ -51,7 +51,7 @@ namespace SPU
 		BitField<u16, bool, 13, 1> SweepDecrease;
 		BitField<u16, bool, 12, 1> NegativePhase;
 		BitField<u16, u8, 2, 5> SweepShift;
-		BitField<u16, u8, 0, 2> SweepStep;
+		BitField<u16, s8, 0, 2> SweepStep;
 	};
 
 	class Envelope
@@ -61,7 +61,7 @@ namespace SPU
 
 	protected:
 		u8 m_Shift{0};
-		u8 m_Step{0};
+		s8 m_Step{0};
 		bool m_Exp{0};
 		bool m_Decrease{0};
 
@@ -84,13 +84,14 @@ namespace SPU
 		void Run();
 		void Attack();
 		void Release();
+		void Stop();
 		u32 Level();
+		void UpdateSettings();
+		ADSRReg m_Reg{0};
 
 	private:
-		void UpdateSettings();
 		Phase m_Phase{Phase::Stopped};
 		u32 m_Target{0};
-		ADSRReg m_Reg{0};
 	};
 
 	class Volume : Envelope
