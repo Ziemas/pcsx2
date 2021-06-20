@@ -234,6 +234,7 @@ set(pcsx2CDVDHeaders
 # SPU2 sources
 set(pcsx2SPU2Sources
 	SPU2/SPU2.cpp
+	SPU2/Output.cpp
 	SPU2/SpuCore.cpp
 	SPU2/Envelope.cpp
 	SPU2/Reverb.cpp
@@ -243,6 +244,7 @@ set(pcsx2SPU2Sources
 # SPU2 headers
 set(pcsx2SPU2Headers
 	SPU2/SPU2.h
+	SPU2/Output.h
 	SPU2/SpuCore.h
 	SPU2/Envelope.h
 	SPU2/Reverb.h
