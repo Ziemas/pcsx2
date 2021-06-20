@@ -54,14 +54,14 @@ namespace SPU
 		}
 
 		err = cubeb_stream_init(m_Ctx, &m_Stream, "SPU Output", nullptr, nullptr, nullptr,
-			&outparam, latency, &SoundCB, &StateCB, nullptr);
+			&outparam, latency, &SoundCB, &StateCB, &m_SampleBuf);
 		if (err != CUBEB_OK)
 		{
 			Console.Error("Audio backend: Could not open stream");
 			return;
 		}
 
-		cubeb_set_log_callback(CUBEB_LOG_VERBOSE, &LogCB);
+		cubeb_set_log_callback(CUBEB_LOG_NORMAL, &LogCB);
 
 		err = cubeb_stream_start(m_Stream);
 		if (err != CUBEB_OK)
@@ -83,14 +83,11 @@ namespace SPU
 
 	void SndOutput::Push(S16Out sample)
 	{
-		write.fetch_add(1, std::memory_order_relaxed);
-	}
-
-	S16Out SndOutput::Pop()
-	{
-		S16Out s;
-		read.fetch_add(1, std::memory_order_relaxed);
-		return s;
+		size_t size = m_SampleBuf.write - m_SampleBuf.read;
+		if (size == 0x1000)
+			return;
+		size_t prev = m_SampleBuf.write.fetch_add(1, std::memory_order_relaxed);
+		m_SampleBuf.buffer[prev & 0xFFF] = sample;
 	}
 
 	void SndOutput::LogCB(char const* fmt, ...)
@@ -106,7 +103,26 @@ namespace SPU
 	long SndOutput::SoundCB(cubeb_stream* stream, void* user, const void* input_buffer,
 		void* output_buffer, long nframes)
 	{
-		return 0;
+		Buffer* buf = static_cast<Buffer*>(user);
+		S16Out* out = static_cast<S16Out*>(output_buffer);
+		size_t avail = buf->write - buf->read;
+
+		for (u32 i = 0; i < nframes; i++)
+		{
+			if (avail)
+			{
+				size_t idx = buf->read.fetch_add(1, std::memory_order_relaxed);
+
+				*out++ = buf->buffer[idx & 0xFFF];
+				avail--;
+			}
+			else
+			{
+				*out++ = S16Out{};
+			}
+		}
+
+		return nframes;
 	}
 
 	void SndOutput::StateCB(cubeb_stream* stream, void* user, cubeb_state state)
