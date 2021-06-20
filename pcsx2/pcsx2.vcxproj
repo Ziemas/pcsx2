@@ -328,6 +328,7 @@
     <ClCompile Include="PerformanceMetrics.cpp" />
     <ClCompile Include="Recording\Utilities\InputRecordingLogger.cpp" />
     <ClCompile Include="SPU2\SPU2.cpp" />
+    <ClCompile Include="SPU2\Output.cpp" />
     <ClCompile Include="SPU2\SpuCore.cpp" />
     <ClCompile Include="SPU2\Envelope.cpp" />
     <ClCompile Include="SPU2\Reverb.cpp" />
@@ -729,6 +730,7 @@
     <ClInclude Include="PerformanceMetrics.h" />
     <ClInclude Include="ShaderCacheVersion.h" />
     <ClInclude Include="SPU2\SPU2.h" />
+    <ClInclude Include="SPU2\Output.h" />
     <ClInclude Include="SPU2\SpuCore.h" />
     <ClInclude Include="SPU2\Envelope.h" />
     <ClInclude Include="SPU2\Reverb.h" />
