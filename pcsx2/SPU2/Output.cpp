@@ -81,6 +81,18 @@ namespace SPU
 		m_Init = false;
 	}
 
+	void SndOutput::Push(S16Out sample)
+	{
+		write.fetch_add(1, std::memory_order_relaxed);
+	}
+
+	S16Out SndOutput::Pop()
+	{
+		S16Out s;
+		read.fetch_add(1, std::memory_order_relaxed);
+		return s;
+	}
+
 	void SndOutput::LogCB(char const* fmt, ...)
 	{
 		va_list args;

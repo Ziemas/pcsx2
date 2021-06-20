@@ -42,10 +42,13 @@ namespace SPU
 			auto core1 = cores[1].GenSample();
 			spuCycles -= 768;
 
-			s16 left = core0.first + core1.first;
-			fwrite(&left, sizeof(s16), 1, output);
-			s16 right = core0.second + core1.second;
-			fwrite(&right, sizeof(s16), 1, output);
+			S16Out out{};
+			out.left = core0.first + core1.first;
+			fwrite(&out.left, sizeof(s16), 1, output);
+			out.right = core0.second + core1.second;
+			fwrite(&out.right, sizeof(s16), 1, output);
+
+			snd.Push(out);
 		}
 	}
 
