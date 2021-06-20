@@ -17,6 +17,7 @@
 
 #include "cubeb/cubeb.h"
 #include "common/Pcsx2Types.h"
+#include <array>
 #include <atomic>
 #include <memory>
 
@@ -35,7 +36,9 @@ namespace SPU
 	public:
 		void Init();
 		void Shutdown();
+		void Clear();
 		void Push(S16Out sample);
+
 
 	private:
 		static long SoundCB(cubeb_stream* stream, void* user, const void* input_buffer,
@@ -44,12 +47,9 @@ namespace SPU
 		static void StateCB(cubeb_stream* stream, void* user, cubeb_state state);
 		static void LogCB(char const* fmt, ...);
 
-		S16Out Pop();
-
 		struct Buffer
 		{
-			std::unique_ptr<S16Out> buffer;
-			size_t bufsize{0};
+			std::array<S16Out, 0x1000> buffer;
 			std::atomic<size_t> read{0};
 			std::atomic<size_t> write{0};
 		};
