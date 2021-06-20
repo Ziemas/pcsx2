@@ -79,27 +79,6 @@ namespace SPU
 		}
 
 		// TODO irq testing
-		// TODO nax should never point at the block headers
-
-		if ((m_NAX.full & 0x7) == 0)
-		{
-			if (m_CurHeader.LoopEnd)
-			{
-				m_NAX.full = m_LSA.full;
-				m_ENDX = true;
-
-				if (!m_CurHeader.LoopRepeat)
-				{
-					m_ADSR.Stop();
-				}
-			}
-
-			m_CurHeader.bits = m_SPU.Ram(m_NAX.full & ~0x7);
-			if (m_CurHeader.LoopStart && !m_CustomLoop)
-				m_LSA.full = m_NAX.full & ~0x7;
-
-			m_NAX.full++;
-		}
 
 		u32 data = m_SPU.Ram(m_NAX.full);
 		for (int i = 0; i < 4; i++)
@@ -122,6 +101,26 @@ namespace SPU
 		}
 
 		m_NAX.full++;
+
+		if ((m_NAX.full & 0x7) == 0)
+		{
+			if (m_CurHeader.LoopEnd)
+			{
+				m_NAX.full = m_LSA.full;
+				m_ENDX = true;
+
+				if (!m_CurHeader.LoopRepeat)
+				{
+					m_ADSR.Stop();
+				}
+			}
+
+			m_CurHeader.bits = m_SPU.Ram(m_NAX.full & ~0x7);
+			if (m_CurHeader.LoopStart && !m_CustomLoop)
+				m_LSA.full = m_NAX.full & ~0x7;
+
+			m_NAX.full++;
+		}
 	}
 
 	std::pair<s16, s16> Voice::GenSample()
@@ -137,6 +136,7 @@ namespace SPU
 			m_KeyOn = false;
 			m_NAX.full = m_SSA.full;
 			m_CurHeader.bits = m_SPU.Ram(m_NAX.full & ~0x7);
+			m_NAX.full++;
 			m_ENDX = false;
 			m_ADSR.Attack();
 			m_Counter = 0;
