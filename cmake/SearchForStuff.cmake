@@ -119,6 +119,10 @@ if(PORTAUDIO_API)
 endif()
 check_lib(SOUNDTOUCH SoundTouch soundtouch/SoundTouch.h)
 
+if(CUBEB_API)
+    add_subdirectory(3rdparty/cubeb EXCLUDE_FROM_ALL)
+endif()
+
 if(SDL2_API)
     check_lib(SDL2 SDL2 SDL.h PATH_SUFFIXES SDL2)
 else()

@@ -1242,6 +1242,7 @@ set(pcsx2FinalLibs
     Utilities
     x86emitter
     fmt::fmt
+    cubeb
     ${wxWidgets_LIBRARIES}
     ${GTK2_LIBRARIES}
     ${ZLIB_LIBRARIES}
