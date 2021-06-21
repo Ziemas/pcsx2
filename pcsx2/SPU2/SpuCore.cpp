@@ -91,6 +91,12 @@ namespace SPU
 			addr %= 0xC;
 			return m_voices[id].ReadAddr(addr);
 		}
+		if (addr >= 0x2E4 && addr <= 0x33A)
+		{
+			// ignore reverb stuff for now
+			// TODO
+			return 0;
+		}
 		switch (addr)
 		{
 			case 0x188:
@@ -211,6 +217,12 @@ namespace SPU
 			u32 id = addr / 0xC;
 			addr %= 0xC;
 			m_voices[id].WriteAddr(addr, value);
+			return;
+		}
+		if (addr >= 0x2E4 && addr <= 0x33A)
+		{
+			// ignore reverb stuff for now
+			// TODO
 			return;
 		}
 		switch (addr)
