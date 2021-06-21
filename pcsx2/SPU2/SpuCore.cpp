@@ -97,6 +97,10 @@ namespace SPU
 				return m_VMIXL.lo.GetValue();
 			case 0x18A:
 				return m_VMIXL.hi.GetValue();
+			case 0x18c:
+				return m_VMIXEL.lo.GetValue();
+			case 0x18e:
+				return m_VMIXEL.hi.GetValue();
 			case 0x190:
 				return m_VMIXR.lo.GetValue();
 			case 0x192:
