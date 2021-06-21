@@ -84,10 +84,13 @@ namespace SPU
 	void SndOutput::Push(S16Out sample)
 	{
 		size_t size = m_SampleBuf.write - m_SampleBuf.read;
-		if (size == 0x1000)
+		if (size == 0x2000)
+		{
+			Console.Warning("Buffer overrun, stopping write");
 			return;
+		}
 		size_t prev = m_SampleBuf.write.fetch_add(1, std::memory_order_relaxed);
-		m_SampleBuf.buffer[prev & 0xFFF] = sample;
+		m_SampleBuf.buffer[prev & 0x1FFF] = sample;
 	}
 
 	void SndOutput::LogCB(char const* fmt, ...)
@@ -107,13 +110,34 @@ namespace SPU
 		S16Out* out = static_cast<S16Out*>(output_buffer);
 		size_t avail = buf->write - buf->read;
 
+		if (avail < nframes && !buf->underrun)
+		{
+			buf->underrun = true;
+			Console.Warning("underrun detected, building buffer\n");
+		}
+
+		// TODO Arbitrary buffer targets
+		// TODO tracking consumption rate
+		// TODO stretching
+		if (buf->underrun && avail > 0x1000)
+		{
+			Console.WriteLn("buffer filled\n");
+			buf->underrun = false;
+		}
+
+		if (buf->underrun)
+		{
+			memset(out, 0, sizeof(S16Out)*nframes);
+			return nframes;
+		}
+
 		for (u32 i = 0; i < nframes; i++)
 		{
 			if (avail)
 			{
 				size_t idx = buf->read.fetch_add(1, std::memory_order_relaxed);
 
-				*out++ = buf->buffer[idx & 0xFFF];
+				*out++ = buf->buffer[idx & 0x1FFF];
 				avail--;
 			}
 			else
