@@ -43,9 +43,9 @@ namespace SPU
 			spuCycles -= 768;
 
 			S16Out out{};
-			out.left = core0.first + core1.first;
+			out.left = std::clamp<s32>(core0.first + core1.first, -0x8000, 0x7fff);
 			fwrite(&out.left, sizeof(s16), 1, output);
-			out.right = core0.second + core1.second;
+			out.right = std::clamp<s32>(core0.second + core1.second, -0x8000, 0x7fff);
 			fwrite(&out.right, sizeof(s16), 1, output);
 
 			snd.Push(out);
