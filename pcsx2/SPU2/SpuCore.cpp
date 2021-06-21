@@ -159,6 +159,10 @@ namespace SPU
 				return m_TSA.lo.GetValue();
 			case 0x1B0:
 				return m_Adma.bits;
+			case 0x2e0:
+				return m_Reverb.m_ESA.hi.GetValue();
+			case 0x2e2:
+				return m_Reverb.m_ESA.lo.GetValue();
 			case 0x33c:
 				return m_Reverb.m_EEA.hi.GetValue();
 			case 0x340:
