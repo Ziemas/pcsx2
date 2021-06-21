@@ -35,7 +35,6 @@ namespace SPU
 
 	void SPUCore::WriteMem(u32& addr, u16 value)
 	{
-		Console.WriteLn("SPU[%d] Writing %04x to %08x", m_Id, addr, value);
 		m_RAM[addr] = value;
 		++addr &= 0xFFFFF;
 	}
