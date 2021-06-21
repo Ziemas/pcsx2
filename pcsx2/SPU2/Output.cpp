@@ -108,7 +108,7 @@ namespace SPU
 	{
 		Buffer* buf = static_cast<Buffer*>(user);
 		S16Out* out = static_cast<S16Out*>(output_buffer);
-		size_t avail = buf->write - buf->read;
+		s32 avail = buf->write - buf->read;
 
 		if (avail < nframes && !buf->underrun)
 		{
