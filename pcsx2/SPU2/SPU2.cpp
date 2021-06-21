@@ -69,8 +69,6 @@ namespace SPU
 
 	void ReadDMA(u32 core, u16* madr, u32 size)
 	{
-		Console.WriteLn("test");
-		cores[core].DmaRead(madr, size);
 		cores[core].DmaRead(madr, size);
 	}
 
