@@ -123,7 +123,7 @@ namespace SPU
 		}
 	}
 
-	std::pair<s16, s16> Voice::GenSample()
+	AudioSample Voice::GenSample()
 	{
 		if (m_KeyOff)
 		{
@@ -196,7 +196,7 @@ namespace SPU
 		s16 left = ApplyVolume(sample, m_Volume.left.Get());
 		s16 right = ApplyVolume(sample, m_Volume.right.Get());
 
-		return std::make_pair(left, right);
+		return AudioSample(left, right);
 	}
 
 	u16 Voice::Read(u32 addr)

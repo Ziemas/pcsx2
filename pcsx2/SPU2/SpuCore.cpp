@@ -22,15 +22,31 @@ namespace SPU
 {
 	std::pair<s16, s16> SPUCore::GenSample()
 	{
-		s16 left = 0, right = 0;
+		AudioSample Dry(0 , 0);
+		AudioSample Wet(0 , 0);
+
+		// TODO this is bit ugly isn't it
+		u32 vDryL = m_VMIXL.full;
+		u32 vDryR = m_VMIXL.full;
+		u32 vWetL = m_VMIXL.full;
+		u32 vWetR = m_VMIXL.full;
 		for (auto& v : m_voices)
 		{
 			auto sample = v.GenSample();
-			left = std::clamp<s32>(left + sample.first, -0x8000, 0x7FFF);
-			right = std::clamp<s32>(right + sample.second, -0x8000, 0x7FFF);
+			Dry.mix(sample, vDryL & 1, vDryR & 1);
+			Wet.mix(sample, vWetL & 1, vWetR & 1);
+
+			vDryL >>= 1;
+			vDryR >>= 1;
+			vWetL >>= 1;
+			vWetR >>= 1;
 		}
 
-		return std::make_pair(left, right);
+		// TODO memout
+		// TODO memin
+		// TODO effect
+
+		return std::make_pair(Dry.left, Dry.right);
 	}
 
 	void SPUCore::WriteMem(u32& addr, u16 value)
