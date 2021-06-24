@@ -34,7 +34,7 @@ namespace SPU
 		{
 		}
 
-		std::pair<s16, s16> GenSample();
+		AudioSample GenSample();
 
 		u16 Read(u32 addr);
 		void Write(u32 addr, u16 value);

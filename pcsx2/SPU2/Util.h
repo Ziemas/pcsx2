@@ -17,6 +17,7 @@
 
 #include "common/Bitfield.h"
 #include "common/Pcsx2Types.h"
+#include <algorithm>
 
 namespace SPU
 {
@@ -31,6 +32,26 @@ namespace SPU
 	{
 		return (sample * volume) >> 15;
 	}
+
+	struct AudioSample
+	{
+		AudioSample(s16 left, s16 right)
+			: left(left)
+			, right(right)
+		{
+		}
+
+		s16 left;
+		s16 right;
+
+		void mix(AudioSample src, bool lgate, bool rgate)
+		{
+			if (lgate)
+				left = std::clamp<s32>(left + src.left, -0x8000, 0x7FFF);
+			if (rgate)
+				right = std::clamp<s32>(right + src.right, -0x8000, 0x7FFF);
+		}
+	};
 
 	union Reg32
 	{
