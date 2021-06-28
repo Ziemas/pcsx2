@@ -16,25 +16,21 @@
 #pragma once
 
 #include <array>
-#include <stddef.h>
+#include <cstddef>
 
 // This class is only valid for sizes that are power of two
-template <typename _Tp, size_t _Nm>
+template <typename Tp, size_t Nm>
 class FIFO
 {
 public:
-	size_t Mask(size_t val) { return val & (capacity - 1); }
+	Tp Pop() { return array[Mask(read++)]; }
+	void Push(Tp val) { array[Mask(write++)] = val; }
 
-	size_t Rpos() { return Mask(read); }
-	size_t Wpos() { return Mask(write); }
+	Tp& Front() { return array[Mask(read)]; }
+	Tp& Back() { return array[Mask(write)]; }
 
-	_Tp& Front() { return array[Mask(read)]; }
-	_Tp& Back() { return array[Mask(write)]; }
-	_Tp Pop() { return array[Mask(read++)]; }
-	void Push(_Tp val) { array[Mask(write++)] = val; }
-
-	_Tp Peek() { return array[Mask(read + 1)]; }
-	_Tp Peek(size_t offset) { return array[Mask(read + offset)]; }
+	Tp Peek() { return array[Mask(read + 1)]; }
+	Tp Peek(size_t offset) { return array[Mask(read + offset)]; }
 
 	size_t Size() { return write - read; }
 	bool Full() { return Size() == capacity; }
@@ -42,20 +38,22 @@ public:
 
 	void Reset()
 	{
-		array.fill(_Tp{});
+		array.fill(Tp{});
 		read = 0;
 		write = 0;
 	}
 
 private:
-	static constexpr bool is_powerof2(int v)
+	static constexpr bool isPowerOf2(int v)
 	{
 		return v && ((v & (v - 1)) == 0);
 	}
-	static_assert(is_powerof2(_Nm), "FIFO size must be power of 2 for correct operation");
+	static_assert(isPowerOf2(Nm), "FIFO size must be power of 2 for correct operation");
 
-	std::array<_Tp, _Nm> array = {};
-	size_t capacity = _Nm;
+	size_t Mask(size_t val) { return val & (capacity - 1); }
+
+	std::array<Tp, Nm> array = {};
+	size_t capacity = Nm;
 	size_t read = {};
 	size_t write = {};
 };
