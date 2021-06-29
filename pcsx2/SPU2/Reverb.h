@@ -16,6 +16,7 @@
 #pragma once
 
 #include "common/Pcsx2Types.h"
+#include "common/fifo.h"
 #include "Util.h"
 
 namespace SPU
@@ -26,5 +27,6 @@ namespace SPU
         Reg32 m_EEA{0};
         u32 m_pos{0};
 
+        FIFO<AudioSample, 0x20> ReverbIn;
     };
 }
