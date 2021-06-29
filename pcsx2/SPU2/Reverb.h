@@ -21,12 +21,20 @@
 
 namespace SPU
 {
-    struct Reverb
-    {
-        Reg32 m_ESA{0};
-        Reg32 m_EEA{0};
-        u32 m_pos{0};
+	class Reverb
+	{
+	public:
+		AudioSample Run(AudioSample input);
 
-        FIFO<AudioSample, 0x20> ReverbIn;
-    };
-}
+		Reg32 m_ESA{0};
+		Reg32 m_EEA{0};
+		u32 m_pos{0};
+
+	private:
+		AudioSample ReverbIn[64]{};
+		AudioSample ReverbOut[64]{};
+
+		u32 m_SamplePos{0};
+		u32 m_Phase{0};
+	};
+} // namespace SPU
