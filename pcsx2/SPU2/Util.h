@@ -35,21 +35,22 @@ namespace SPU
 
 	struct AudioSample
 	{
+		AudioSample() {}
 		AudioSample(s16 left, s16 right)
 			: left(left)
 			, right(right)
 		{
 		}
 
-		s16 left;
-		s16 right;
+		s16 left{0};
+		s16 right{0};
 
 		void mix(AudioSample src, bool lgate, bool rgate)
 		{
 			if (lgate)
-				left = std::clamp<s32>(left + src.left, -0x8000, 0x7FFF);
+				left = std::clamp<s32>(left + src.left, INT16_MIN, INT16_MAX);
 			if (rgate)
-				right = std::clamp<s32>(right + src.right, -0x8000, 0x7FFF);
+				right = std::clamp<s32>(right + src.right, INT16_MIN, INT16_MAX);
 		}
 	};
 
