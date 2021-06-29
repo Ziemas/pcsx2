@@ -26,6 +26,7 @@ namespace SPU
 		AudioSample Wet(0 , 0);
 
 		// TODO this is bit ugly isn't it
+		// tempting to do the union thing spu2x does
 		u32 vDryL = m_VMIXL.full;
 		u32 vDryR = m_VMIXL.full;
 		u32 vWetL = m_VMIXL.full;
@@ -41,6 +42,8 @@ namespace SPU
 			vWetL >>= 1;
 			vWetR >>= 1;
 		}
+
+		m_Reverb.ReverbIn.Push(Wet);
 
 		// TODO memout
 		// TODO memin
@@ -215,8 +218,6 @@ namespace SPU
 				pxAssertMsg(false, "Unhandled SPU Read");
 				return 0;
 		}
-
-		return 0;
 	}
 
 	void SPUCore::Write(u32 addr, u16 value)
