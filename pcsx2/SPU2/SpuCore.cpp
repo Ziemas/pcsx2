@@ -130,6 +130,7 @@ namespace SPU
 				m_InternalTSA = m_TSA.full;
 				break;
 			case 0x1AC:
+				// TODO: FIFO
 				WriteMem(m_InternalTSA, value);
 				break;
 			case 0x2E0:
