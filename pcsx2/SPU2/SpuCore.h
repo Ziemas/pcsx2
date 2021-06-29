@@ -17,6 +17,7 @@
 
 #include "common/Pcsx2Types.h"
 #include "common/Bitfield.h"
+#include "common/fifo.h"
 #include "Reverb.h"
 #include "Voice.h"
 #include "Util.h"
@@ -59,7 +60,7 @@ namespace SPU
 			BitField<u16, u8, 8, 6> NoiseClock;
 			BitField<u16, bool, 7, 1> EffectEnable;
 			BitField<u16, bool, 6, 1> IRQEnable;
-			BitField<u16, TransferMode, 4, 2> TransferMode;
+			BitField<u16, TransferMode, 4, 2> CurrentTransMode;
 			// unknown if these do anything in ps2 mode
 			BitField<u16, bool, 3, 1> ExtReverb;
 			BitField<u16, bool, 2, 1> CDAReverb;
@@ -102,7 +103,7 @@ namespace SPU
 
 		void WriteMem(u32& addr, u16 value);
 
-		// TODO: i want a FIFO
+		FIFO<u16, 0x20> m_TransferFIFO{};
 
 		//u32 m_KeyOn{0};
 		//u32 m_KeyOff{0};
