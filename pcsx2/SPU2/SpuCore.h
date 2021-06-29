@@ -121,7 +121,7 @@ namespace SPU
 
 		ADMA m_Adma{0};
 
-		Reverb m_Reverb{0};
+		Reverb m_Reverb{};
 
 		Reg32 m_TSA{0};
 		u32 m_InternalTSA{0};

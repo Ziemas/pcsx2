@@ -83,7 +83,7 @@ namespace SPU
 			return cores[core].Read(addr);
 		}
 
-		if (addr <= 0x7B0) // reverb addrs
+		if (addr <= 0x7B0) // core volume, reverb addrs
 		{
 		}
 

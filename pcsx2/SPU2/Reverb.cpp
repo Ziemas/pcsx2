@@ -14,3 +14,54 @@
  */
 
 #include "Reverb.h"
+
+namespace SPU
+{
+	static constexpr u32 NUM_TAPS = 39;
+	static constexpr std::array<s32, NUM_TAPS> FilterCoefficients = {
+		-1,
+		0,
+		2,
+		0,
+		-10,
+		0,
+		35,
+		0,
+		-103,
+		0,
+		266,
+		0,
+		-616,
+		0,
+		1332,
+		0,
+		-2960,
+		0,
+		10246,
+		16384,
+		10246,
+		0,
+		-2960,
+		0,
+		1332,
+		0,
+		-616,
+		0,
+		266,
+		0,
+		-103,
+		0,
+		35,
+		0,
+		-10,
+		0,
+		2,
+		0,
+		-1,
+	};
+
+	AudioSample Reverb::Run(AudioSample input)
+	{
+		return AudioSample();
+	}
+} // namespace SPU

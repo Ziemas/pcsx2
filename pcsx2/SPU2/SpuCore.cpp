@@ -22,8 +22,8 @@ namespace SPU
 {
 	std::pair<s16, s16> SPUCore::GenSample()
 	{
-		AudioSample Dry(0 , 0);
-		AudioSample Wet(0 , 0);
+		AudioSample Dry(0, 0);
+		AudioSample Wet(0, 0);
 
 		// TODO this is bit ugly isn't it
 		// tempting to do the union thing spu2x does
@@ -43,13 +43,17 @@ namespace SPU
 			vWetR >>= 1;
 		}
 
-		m_Reverb.ReverbIn.Push(Wet);
+		auto EOut = m_Reverb.Run(Wet);
+
+		AudioSample Out;
+		Out.mix(Dry, m_MMIX.VoiceL, m_MMIX.VoiceR);
+		Out.mix(EOut, m_MMIX.VoiceWetL, m_MMIX.VoiceWetR);
 
 		// TODO memout
 		// TODO memin
 		// TODO effect
 
-		return std::make_pair(Dry.left, Dry.right);
+		return std::make_pair(Out.left, Out.right);
 	}
 
 	void SPUCore::WriteMem(u32& addr, u16 value)
