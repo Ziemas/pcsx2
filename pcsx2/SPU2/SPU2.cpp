@@ -83,8 +83,15 @@ namespace SPU
 			return cores[core].Read(addr);
 		}
 
-		if (addr <= 0x7B0) // core volume, reverb addrs
+        if (addr < 0x788) // core0 volume, reverb addrs
+        {
+			return cores[0].Read(addr);
+        }
+
+        if (addr < 0x7C0) // core1 volume, reverb addrs
 		{
+			addr -= 0x28;
+            return cores[1].Read(addr);
 		}
 
 		if (addr >= 0x7C0) // shared?
@@ -104,11 +111,21 @@ namespace SPU
 			u32 core = (addr >> 10) & 1;
 			addr &= 0x3FF;
 			cores[core].Write(addr, value);
+			return;
 		}
 
-		if (addr <= 0x7B0) // reverb addrs
-		{
-		}
+        if (addr < 0x788) // core0 volume, reverb addrs
+        {
+            cores[0].Write(addr, value);
+            return;
+        }
+
+        if (addr < 0x7C0) // core1 volume, reverb addrs
+        {
+            addr -= 0x28;
+            cores[1].Write(addr, value);
+            return;
+        }
 
 		if (addr >= 0x7C0) // shared?
 		{
