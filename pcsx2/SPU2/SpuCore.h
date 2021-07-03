@@ -128,6 +128,18 @@ namespace SPU
 
 		FIFO<u16, 0x20> m_TransferFIFO{};
 
+		VolumePair m_MVOL{};
+
+		struct PlainVolReg
+		{
+			s16 left;
+            s16 right;
+		};
+
+		PlainVolReg m_EVOL{0};
+        PlainVolReg m_AVOL{0};
+        PlainVolReg m_BVOL{0};
+
 		//u32 m_KeyOn{0};
 		//u32 m_KeyOff{0};
 		//u32 m_PitchMod{0};
