@@ -223,6 +223,22 @@ namespace SPU
 			}
 			case 0x344:
 				return m_Stat.bits;
+			case 0x760:
+				return m_MVOL.left.Get();
+            case 0x762:
+                return m_MVOL.right.Get();
+            case 0x764:
+                return m_EVOL.left;
+            case 0x766:
+                return m_EVOL.right;
+            case 0x768:
+                return m_AVOL.left;
+            case 0x76A:
+                return m_AVOL.right;
+            case 0x76C:
+                return m_BVOL.left;
+            case 0x76E:
+                return m_BVOL.right;
 			default:
 				Console.WriteLn("UNHANDLED SPU[%d] READ ---- <- %04x", m_Id, addr);
 				pxAssertMsg(false, "Unhandled SPU Read");
@@ -382,6 +398,30 @@ namespace SPU
 			//case 0x344:
 			//	// SPU Status R/O
 			//	break;
+            case 0x760:
+                m_MVOL.left.Set(value);
+				break;
+            case 0x762:
+                m_MVOL.right.Set(value);
+				break;
+            case 0x764:
+                m_EVOL.left = value;
+                break;
+            case 0x766:
+                m_EVOL.right = value;
+                break;
+            case 0x768:
+                m_AVOL.left = value;
+                break;
+            case 0x76A:
+                m_AVOL.right = value;
+                break;
+            case 0x76C:
+                m_BVOL.left = value;
+                break;
+            case 0x76E:
+                m_BVOL.right = value;
+                break;
 			default:
 				Console.WriteLn("UNHANDLED SPU[%d] WRITE %04x -> %04x", m_Id, value, addr);
 				pxAssertMsg(false, "Unhandled SPU Write");
