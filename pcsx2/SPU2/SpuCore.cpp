@@ -142,7 +142,7 @@ namespace SPU
 			case 0x192:
 				return m_VMIXR.hi.GetValue();
 			case 0x194:
-				return m_VMIXER.hi.GetValue();
+				return m_VMIXER.lo.GetValue();
 			case 0x196:
 				return m_VMIXER.hi.GetValue();
 			case 0x198:
