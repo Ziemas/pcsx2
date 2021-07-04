@@ -66,7 +66,7 @@ namespace SPU
 		bool m_Decrease{0};
 
 		u32 m_Counter{0};
-		u32 m_Level{0};
+		s32 m_Level{0};
 	};
 
 	class ADSR : Envelope
@@ -85,7 +85,7 @@ namespace SPU
 		void Attack();
 		void Release();
 		void Stop();
-		u32 Level();
+		s16 Level();
 		void UpdateSettings();
 		ADSRReg m_Reg{0};
 

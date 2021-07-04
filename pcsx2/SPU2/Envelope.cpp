@@ -140,9 +140,9 @@ namespace SPU
 		m_Level = 0;
 	}
 
-	u32 ADSR::Level()
+	s16 ADSR::Level()
 	{
-		return m_Level;
+		return static_cast<s16>(m_Level);
 	}
 
 	void Volume::Run() {}
