@@ -405,28 +405,26 @@ namespace SPU
                 m_MVOL.right.Set(value);
 				break;
             case 0x764:
-                m_EVOL.left = value;
+                m_EVOL.left = static_cast<s16>(value);
                 break;
             case 0x766:
-                m_EVOL.right = value;
+                m_EVOL.right = static_cast<s16>(value);
                 break;
             case 0x768:
-                m_AVOL.left = value;
+                m_AVOL.left = static_cast<s16>(value);
                 break;
             case 0x76A:
-                m_AVOL.right = value;
+                m_AVOL.right = static_cast<s16>(value);
                 break;
             case 0x76C:
-                m_BVOL.left = value;
+                m_BVOL.left = static_cast<s16>(value);
                 break;
             case 0x76E:
-                m_BVOL.right = value;
+                m_BVOL.right = static_cast<s16>(value);
                 break;
 			default:
 				Console.WriteLn("UNHANDLED SPU[%d] WRITE %04x -> %04x", m_Id, value, addr);
 				pxAssertMsg(false, "Unhandled SPU Write");
 		}
-
-		return;
 	}
 } // namespace SPU
