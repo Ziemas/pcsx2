@@ -91,12 +91,12 @@ namespace SPU
 			sample += (adpcm_coefs_i[m_CurHeader.Filter.GetValue()][1] * m_DecodeHist2) >> 6;
 
 			// We do get overflow here otherwise, should we?
-			sample = std::clamp(sample, -0x8000, 0x7FFF);
+			sample = std::clamp<s32>(sample, INT16_MIN, INT16_MAX);
 
 			m_DecodeHist2 = m_DecodeHist1;
-			m_DecodeHist1 = sample;
+			m_DecodeHist1 = static_cast<s16>(sample);
 
-			m_DecodeBuf.Push(sample);
+			m_DecodeBuf.Push(static_cast<s16>(sample));
 			data >>= 4;
 		}
 
@@ -164,10 +164,10 @@ namespace SPU
 		// TODO noise
 		s16 sample = 0;
 		u32 index = (m_Counter & 0x0FF0) >> 4;
-		sample += (m_DecodeBuf.Peek(0) * gaussianTable[index][0]) >> 15;
-		sample += (m_DecodeBuf.Peek(1) * gaussianTable[index][1]) >> 15;
-		sample += (m_DecodeBuf.Peek(2) * gaussianTable[index][2]) >> 15;
-		sample += (m_DecodeBuf.Peek(3) * gaussianTable[index][3]) >> 15;
+		sample = static_cast<s16>(sample + ((m_DecodeBuf.Peek(0) * gaussianTable[index][0]) >> 15));
+		sample = static_cast<s16>(sample + ((m_DecodeBuf.Peek(1) * gaussianTable[index][1]) >> 15));
+		sample = static_cast<s16>(sample + ((m_DecodeBuf.Peek(2) * gaussianTable[index][2]) >> 15));
+		sample = static_cast<s16>(sample + ((m_DecodeBuf.Peek(3) * gaussianTable[index][3]) >> 15));
 
 		// Step = VxPitch                  ;range +0000h..+FFFFh (0...705.6 kHz)
 		//  IF PMON.Bit(x)=1 AND (x>0)      ;pitch modulation enable
