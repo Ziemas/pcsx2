@@ -121,6 +121,12 @@ namespace SPU
 			// TODO
 			return 0;
 		}
+        if (addr >= 0x774 && addr <= 0x786)
+        {
+            // ignore reverb stuff for now
+            // TODO
+            return 0;
+        }
 		switch (addr)
 		{
 			case 0x188:
@@ -247,6 +253,12 @@ namespace SPU
 			// TODO
 			return;
 		}
+        if (addr >= 0x774 && addr <= 0x786)
+        {
+            // ignore reverb stuff for now
+            // TODO
+            return;
+        }
 		switch (addr)
 		{
 			case 0x180:
