@@ -199,7 +199,7 @@ namespace SPU
 		return AudioSample(left, right);
 	}
 
-	u16 Voice::Read(u32 addr)
+	u16 Voice::Read(u32 addr) const
 	{
 		switch (addr)
 		{
@@ -222,7 +222,7 @@ namespace SPU
 		}
 	}
 
-	u16 Voice::ReadAddr(u32 addr)
+	u16 Voice::ReadAddr(u32 addr) const
 	{
 		switch (addr)
 		{

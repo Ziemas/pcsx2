@@ -36,11 +36,11 @@ namespace SPU
 
 		AudioSample GenSample();
 
-		u16 Read(u32 addr);
+		u16 Read(u32 addr) const;
 		void Write(u32 addr, u16 value);
 
 		// The new (for SPU2) full addr regs are a separate range
-		u16 ReadAddr(u32 addr);
+		u16 ReadAddr(u32 addr) const;
 		void WriteAddr(u32 addr, u16 value);
 
 		bool m_Noise{false};

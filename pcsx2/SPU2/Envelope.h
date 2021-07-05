@@ -85,7 +85,7 @@ namespace SPU
 		void Attack();
 		void Release();
 		void Stop();
-		s16 Level();
+		[[nodiscard]] s16 Level() const;
 		void UpdateSettings();
 		ADSRReg m_Reg{0};
 
@@ -99,7 +99,7 @@ namespace SPU
 	public:
 		void Run();
 		void Set(u16 volume);
-		s16 Get();
+		[[nodiscard]] s16 Get() const;
 
 	private:
 		VolReg m_Sweep{0};
