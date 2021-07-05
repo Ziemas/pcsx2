@@ -140,7 +140,7 @@ namespace SPU
 		m_Level = 0;
 	}
 
-	s16 ADSR::Level()
+	s16 ADSR::Level() const
 	{
 		return static_cast<s16>(m_Level);
 	}
@@ -162,7 +162,7 @@ namespace SPU
 		// TODO Sweep
 	}
 
-	s16 Volume::Get()
+	s16 Volume::Get() const
 	{
 		return m_Vol;
 	}
