@@ -379,9 +379,6 @@
     <ClCompile Include="SPU2\Timestretcher.cpp" />
     <ClCompile Include="SPU2\Windows\SndOut_waveOut.cpp" />
     <ClCompile Include="SPU2\Windows\SndOut_XAudio2.cpp" />
-    <ClCompile Include="SPU2\Linux\Alsa.cpp">
-      <ExcludedFromBuild>true</ExcludedFromBuild>
-    </ClCompile>
     <ClCompile Include="SPU2\dma.cpp" />
     <ClCompile Include="SPU2\RegTable.cpp" />
     <ClCompile Include="SPU2\spu2freeze.cpp" />
