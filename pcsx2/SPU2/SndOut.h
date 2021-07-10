@@ -636,11 +636,11 @@ public:
 
 	// Returns a unique identification string for this driver.
 	// (usually just matches the driver's cpp filename)
-	virtual const wchar_t* GetIdent() const = 0;
+	virtual const std::string GetIdent() const = 0;
 
 	// Returns the long name / description for this driver.
 	// (for use in configuration screen)
-	virtual const wchar_t* GetLongName() const = 0;
+	virtual const std::string GetLongName() const = 0;
 
 	virtual s32 Init() = 0;
 	virtual void Close() = 0;
