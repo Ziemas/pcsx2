@@ -343,18 +343,41 @@ void Dialog::handleModuleConfig(wxCommandEvent& event)
 	auto mod = m_module_select->GetSelection();
 	printf("configuring module %d \n", mod);
 
+    wxDialog *dialog = nullptr;
+
 	if (mods[mod] != nullptr)
-		mods[mod]->Configure(NULL);
+	{
+		auto ident = mods[mod]->GetIdent();
+
+        if (ident == "nullout")
+			printf("penis0\n");
+        else if (ident == "SDLAudio")
+            printf("penis3\n");
+        else if (ident == "xaudio2")
+			printf("penis2\n");
+        else if (ident == "portaudio")
+            dialog = new PortAudioConfig(this);
+
+		dialog->ShowModal();
+		dialog->Destroy();
+	}
+}
+
+PortAudioConfig::PortAudioConfig(wxDialog* parent)
+    : wxDialog(parent, wxID_ANY, "PortAudio Settings", wxDefaultPosition, wxDefaultSize, wxCAPTION | wxCLOSE_BOX)
+{
+    auto top_box = new wxBoxSizer(wxVERTICAL);
+    top_box->Add(CreateStdDialogButtonSizer(wxOK | wxCANCEL), wxSizerFlags().Right());
 }
 
 Dialog::Dialog()
 	: wxDialog(nullptr, wxID_ANY, "Audio Settings", wxDefaultPosition, wxDefaultSize, wxCAPTION | wxCLOSE_BOX)
 {
 	m_top_box = new wxBoxSizer(wxVERTICAL);
-	auto* module_box = new wxBoxSizer(wxHORIZONTAL);
+	auto* module_box = new wxBoxSizer(wxVERTICAL);
 
 	// Module
-	m_top_box->Add(new wxStaticText(this, wxID_ANY, "Module"), wxSizerFlags().Centre());
+	module_box->Add(new wxStaticText(this, wxID_ANY, "Module"), wxSizerFlags().Centre());
 
 	wxArrayString module_entries;
 
@@ -363,11 +386,13 @@ Dialog::Dialog()
 		module_entries.Add(mods[i]->GetLongName());
     }
 
+    auto* module_contents = new wxBoxSizer(wxHORIZONTAL);
+	module_box->Add(module_contents);
 	m_module_select = new wxChoice(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, module_entries);
 	m_backend_config = new wxButton(this, wxID_PREFERENCES);
 	m_backend_config->Bind(wxEVT_BUTTON, &Dialog::handleModuleConfig, this);
-	module_box->Add(m_module_select, wxSizerFlags().Centre());
-	module_box->Add(m_backend_config);
+	module_contents->Add(m_module_select, wxSizerFlags().Centre());
+	module_contents->Add(m_backend_config);
 
 	m_top_box->Add(module_box, wxSizerFlags().Centre().Border(wxALL, 5));
 
