@@ -54,14 +54,14 @@ public:
 	s32 Test() const { return 0; }
 	int GetEmptySampleCount() { return 0; }
 
-	const wchar_t* GetIdent() const
+	const std::string GetIdent() const
 	{
-		return L"nullout";
+		return "nullout";
 	}
 
-	const wchar_t* GetLongName() const
+	const std::string GetLongName() const
 	{
-		return L"No Sound (Emulate SPU2 only)";
+		return "No Sound (Emulate SPU2 only)";
 	}
 
 	void ReadSettings()
@@ -93,12 +93,12 @@ SndOutModule* mods[] =
 		nullptr // signals the end of our list
 };
 
-int FindOutputModuleById(const wchar_t* omodid)
+int FindOutputModuleById(const std::string omodid)
 {
 	int modcnt = 0;
 	while (mods[modcnt] != nullptr)
 	{
-		if (wcscmp(mods[modcnt]->GetIdent(), omodid) == 0)
+		if (mods[modcnt]->GetIdent() == omodid)
 			break;
 		++modcnt;
 	}
