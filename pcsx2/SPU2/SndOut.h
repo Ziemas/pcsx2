@@ -646,9 +646,6 @@ public:
 	virtual void Close() = 0;
 	virtual s32 Test() const = 0;
 
-	// Gui function: Used to open the configuration box for this driver.
-	virtual void Configure(uptr parent) = 0;
-
 	// Loads settings from the INI file for this driver
 	virtual void ReadSettings() = 0;
 

@@ -379,10 +379,6 @@ public:
 		xaudio2CoInitialize.reset();
 	}
 
-	virtual void Configure(uptr parent)
-	{
-	}
-
 	s32 Test() const
 	{
 		return 0;
