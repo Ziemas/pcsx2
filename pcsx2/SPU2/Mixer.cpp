@@ -50,7 +50,7 @@ static __forceinline s32 MulShr32(s32 srcval, s32 mulval)
 __forceinline s32 clamp_mix(s32 x, u8 bitshift)
 {
 	assert(bitshift <= 15);
-	return GetClamped(x, -(0x8000 << bitshift), 0x7fff << bitshift);
+	return std::clamp(x, -(0x8000 << bitshift), 0x7fff << bitshift);
 }
 
 #if _MSC_VER
@@ -69,8 +69,8 @@ __forceinline
 	// modules or sound drivers could (will :p) overshoot with that. So giving it a small safety.
 
 	return StereoOut32(
-		GetClamped(sample.Left, -(0x7f00 << bitshift), 0x7f00 << bitshift),
-		GetClamped(sample.Right, -(0x7f00 << bitshift), 0x7f00 << bitshift));
+		std::clamp(sample.Left, -(0x7f00 << bitshift), 0x7f00 << bitshift),
+		std::clamp(sample.Right, -(0x7f00 << bitshift), 0x7f00 << bitshift));
 }
 
 static void __forceinline XA_decode_block(s16* buffer, const s16* block, s32& prev1, s32& prev2)
@@ -91,13 +91,13 @@ static void __forceinline XA_decode_block(s16* buffer, const s16* block, s32& pr
 		s32 data = ((*blockbytes) << 28) & 0xF0000000;
 		s32 pcm = (data >> shift) + (((pred1 * prev1) + (pred2 * prev2) + 32) >> 6);
 
-		Clampify(pcm, -0x8000, 0x7fff);
+		pcm = std::clamp(pcm, -0x8000, 0x7fff);
 		*(buffer++) = pcm;
 
 		data = ((*blockbytes) << 24) & 0xF0000000;
 		s32 pcm2 = (data >> shift) + (((pred1 * pcm) + (pred2 * prev1) + 32) >> 6);
 
-		Clampify(pcm2, -0x8000, 0x7fff);
+		pcm2 = std::clamp(pcm2, -0x8000, 0x7fff);
 		*(buffer++) = pcm2;
 
 		prev2 = pcm;
@@ -326,7 +326,7 @@ static void __forceinline UpdatePitch(uint coreidx, uint voiceidx)
 	if ((vc.Modulated == 0) || (voiceidx == 0))
 		pitch = vc.Pitch;
 	else
-		pitch = GetClamped((vc.Pitch * (32768 + Cores[coreidx].Voices[voiceidx - 1].OutX)) >> 15, 0, 0x3fff);
+		pitch = std::clamp((vc.Pitch * (32768 + Cores[coreidx].Voices[voiceidx - 1].OutX)) >> 15, 0, 0x3fff);
 
 	vc.SP += pitch;
 }

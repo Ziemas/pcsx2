@@ -195,8 +195,8 @@ void SndBuffer::UpdateTempoChangeSoundTouch2()
 	//Algorithm params: (threshold params (hysteresis), etc)
 	const float hys_ok_factor = 1.04f;
 	const float hys_bad_factor = 1.2f;
-	int hys_min_ok_count = GetClamped((int)(50.0 * (float)targetIPS / 750.0), 2, 100); //consecutive iterations within hys_ok before going to 1:1 mode
-	int compensationDivider = GetClamped((int)(100.0 * (float)targetIPS / 750), 15, 150);
+	int hys_min_ok_count = std::clamp((int)(50.0 * (float)targetIPS / 750.0), 2, 100); //consecutive iterations within hys_ok before going to 1:1 mode
+	int compensationDivider = std::clamp((int)(100.0 * (float)targetIPS / 750), 15, 150);
 
 	float tempoAdjust = bufferFullness / dynamicTargetFullness;
 	float avgerage = addToAvg(tempoAdjust);
@@ -208,7 +208,7 @@ void SndBuffer::UpdateTempoChangeSoundTouch2()
 	// The dampening (sqrt was chosen for no very good reason) manages to mostly prevent that.
 	tempoAdjust = sqrt(tempoAdjust);
 
-	tempoAdjust = GetClamped(tempoAdjust, 0.05f, 10.0f);
+	tempoAdjust = std::clamp(tempoAdjust, 0.05f, 10.0f);
 
 	if (tempoAdjust < 1)
 		baseTargetFullness /= sqrt(tempoAdjust); // slightly increase latency when running slow.

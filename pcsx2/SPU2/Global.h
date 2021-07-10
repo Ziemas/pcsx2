@@ -39,18 +39,6 @@ namespace soundtouch
 #undef min
 #undef max
 
-template <typename T>
-static __forceinline void Clampify(T& src, T min, T max)
-{
-	src = std::min(std::max(src, min), max);
-}
-
-template <typename T>
-static __forceinline T GetClamped(T src, T min, T max)
-{
-	return std::min(std::max(src, min), max);
-}
-
 extern void SysMessage(const char* fmt, ...);
 extern void SysMessage(const wchar_t* fmt, ...);
 
