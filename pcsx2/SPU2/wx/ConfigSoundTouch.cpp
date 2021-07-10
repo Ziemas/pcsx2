@@ -37,9 +37,9 @@ namespace SoundtouchCfg
 
 	static void ClampValues()
 	{
-		Clampify(SequenceLenMS, SequenceLen_Min, SequenceLen_Max);
-		Clampify(SeekWindowMS, SeekWindow_Min, SeekWindow_Max);
-		Clampify(OverlapMS, Overlap_Min, Overlap_Max);
+		SequenceLenMS = std::clamp(SequenceLenMS, SequenceLen_Min, SequenceLen_Max);
+		SeekWindowMS = std::clamp(SeekWindowMS, SeekWindow_Min, SeekWindow_Max);
+		OverlapMS = std::clamp(OverlapMS, Overlap_Min, Overlap_Max);
 	}
 
 	void ApplySettings(soundtouch::SoundTouch& sndtouch)
