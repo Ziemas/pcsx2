@@ -17,6 +17,7 @@
 //#include "Mixer.h"
 #include "Global.h"
 #include "SndOut.h"
+#include <SPU2/wx/Dialogs.h>
 
 #define _WIN32_DCOM
 #ifdef _WIN32
@@ -26,10 +27,7 @@
 #include "portaudio.h"
 #endif
 
-
-
-#include "wchar.h"
-
+#include <cwchar>
 #include <vector>
 
 #ifdef _WIN32
