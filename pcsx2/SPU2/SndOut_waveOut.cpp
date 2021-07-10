@@ -276,17 +276,6 @@ private:
 	}
 
 public:
-	virtual void Configure(uptr parent)
-	{
-		INT_PTR ret;
-		ret = DialogBoxParam(nullptr, MAKEINTRESOURCE(IDD_WAVEOUT), (HWND)parent, (DLGPROC)ConfigProc, 1);
-		if (ret == -1)
-		{
-			MessageBox((HWND)parent, L"Error Opening the config dialog.", L"OMG ERROR!", MB_OK | MB_SETFOREGROUND);
-			return;
-		}
-	}
-
 	s32 Test() const
 	{
 		if (waveOutGetNumDevs() == 0)

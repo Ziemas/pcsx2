@@ -134,8 +134,6 @@ struct SDLAudioMod : public SndOutModule
 	s32 Test() const { return 0; }
 	int GetEmptySampleCount() { return 0; }
 
-	void Configure(uptr parent) {}
-
 	void ReadSettings()
 	{
 		wxString api(L"EMPTYEMPTYEMPTY");

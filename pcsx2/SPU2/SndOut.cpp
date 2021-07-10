@@ -52,7 +52,6 @@ public:
 	s32 Init() { return 0; }
 	void Close() {}
 	s32 Test() const { return 0; }
-	void Configure(uptr parent) {}
 	int GetEmptySampleCount() { return 0; }
 
 	const wchar_t* GetIdent() const

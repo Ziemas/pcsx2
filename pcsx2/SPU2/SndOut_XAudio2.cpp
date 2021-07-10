@@ -395,10 +395,6 @@ public:
 		}
 	}
 
-	virtual void Configure(uptr parent)
-	{
-	}
-
 	s32 Test() const
 	{
 		return 0;
