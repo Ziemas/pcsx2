@@ -16,7 +16,6 @@
 #include "PrecompiledHeader.h"
 #include "../Config.h"
 #include "../wx/Config.h"
-#include "../Global.h"
 #include "wxConfig.h"
 
 MixerTab::MixerTab(wxWindow* parent)
@@ -348,69 +347,36 @@ void DebugTab::CallUpdate(wxCommandEvent& /*event*/)
 	Update();
 }
 
+void Dialog::handleModuleConfig(wxCommandEvent& event)
+{
+	auto mod = m_module_select->GetSelection();
+	printf("configuring module %d \n", mod);
+
+	if (mods[mod] != nullptr)
+		mods[mod]->Configure(NULL);
+}
+
 Dialog::Dialog()
 	: wxDialog(nullptr, wxID_ANY, "Audio Settings", wxDefaultPosition, wxDefaultSize, wxCAPTION | wxCLOSE_BOX)
 {
 	m_top_box = new wxBoxSizer(wxVERTICAL);
-	auto* module_box = new wxBoxSizer(wxVERTICAL);
+	auto* module_box = new wxBoxSizer(wxHORIZONTAL);
 
 	// Module
-	module_box->Add(new wxStaticText(this, wxID_ANY, "Module"), wxSizerFlags().Centre());
+	m_top_box->Add(new wxStaticText(this, wxID_ANY, "Module"), wxSizerFlags().Centre());
 
 	wxArrayString module_entries;
-	module_entries.Add("No Sound (Emulate SPU2 only)");
-#ifdef _WIN32
-	module_entries.Add("XAudio");
-#endif
-#ifdef SPU2X_PORTAUDIO
-	module_entries.Add("PortAudio (Cross-platform)");
-#endif
-#ifndef _WIN32
-	module_entries.Add("SDL Audio (Recommended for PulseAudio)");
-#endif
+
+    for (auto i = 0; mods[i] != nullptr; i++)
+    {
+		module_entries.Add(mods[i]->GetLongName());
+    }
+
 	m_module_select = new wxChoice(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, module_entries);
+	m_backend_config = new wxButton(this, wxID_PREFERENCES);
+	m_backend_config->Bind(wxEVT_BUTTON, &Dialog::handleModuleConfig, this);
 	module_box->Add(m_module_select, wxSizerFlags().Centre());
-
-#ifdef SPU2X_PORTAUDIO
-	// Portaudio
-	m_portaudio_box = new wxBoxSizer(wxVERTICAL);
-	m_portaudio_text = new wxStaticText(this, wxID_ANY, "Portaudio API");
-	m_portaudio_box->Add(m_portaudio_text, wxSizerFlags().Centre());
-
-	wxArrayString portaudio_entries;
-#ifdef __linux__
-	portaudio_entries.Add("ALSA (recommended)");
-	portaudio_entries.Add("OSS (legacy)");
-	portaudio_entries.Add("JACK");
-#elif defined(__APPLE__)
-	portaudio_entries.Add("CoreAudio");
-#elif defined(_WIN32)
-	portaudio_entries.Add("?"); // TODO
-#else
-	portaudio_entries.Add("OSS");
-#endif
-	m_portaudio_select = new wxChoice(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, portaudio_entries);
-	m_portaudio_box->Add(m_portaudio_select, wxSizerFlags().Centre());
-#endif
-
-#ifndef _WIN32
-	// SDL
-	m_sdl_box = new wxBoxSizer(wxVERTICAL);
-	m_sdl_text = new wxStaticText(this, wxID_ANY, "SDL API");
-	m_sdl_box->Add(m_sdl_text, wxSizerFlags().Centre());
-
-	wxArrayString sdl_entries;
-	for (int i = 0; i < SDL_GetNumAudioDrivers(); ++i)
-		sdl_entries.Add(SDL_GetAudioDriver(i));
-
-	m_sdl_select = new wxChoice(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, sdl_entries);
-	m_sdl_box->Add(m_sdl_select, wxSizerFlags().Centre());
-	module_box->Add(m_sdl_box, wxSizerFlags().Expand());
-#endif
-
-#ifdef SPU2X_PORTAUDIO
-	module_box->Add(m_portaudio_box, wxSizerFlags().Expand());
-#endif
+	module_box->Add(m_backend_config);
 
 	m_top_box->Add(module_box, wxSizerFlags().Centre().Border(wxALL, 5));
 
@@ -438,37 +404,6 @@ Dialog::~Dialog()
 
 void Dialog::Reconfigure()
 {
-	const int mod = m_module_select->GetCurrentSelection();
-	bool show_portaudio = false, show_sdl = false;
-
-	switch (mod)
-	{
-		case 0:
-			show_portaudio = false;
-			show_sdl = false;
-			break;
-
-		case 1:
-			show_portaudio = true;
-			show_sdl = false;
-			break;
-
-		case 2:
-			show_portaudio = false;
-			show_sdl = true;
-			break;
-
-		default:
-			show_portaudio = false;
-			show_sdl = false;
-			break;
-	}
-#ifdef SPU2X_PORTAUDIO
-	m_top_box->Show(m_portaudio_box, show_portaudio, true);
-#endif
-	m_top_box->Show(m_sdl_box, show_sdl, true);
-
-	// Recalculating both of these accounts for if neither was showing initially.
 	m_top_box->Layout();
 	SetSizerAndFit(m_top_box);
 }
@@ -481,13 +416,6 @@ void Dialog::CallReconfigure(wxCommandEvent& event)
 void Dialog::Load()
 {
 	m_module_select->SetSelection(OutputModule);
-#ifdef SPU2X_PORTAUDIO
-	m_portaudio_select->SetSelection(OutputAPI);
-#endif
-#ifndef _WIN32
-	m_sdl_select->SetSelection(SdlOutputAPI);
-#endif
-
 	m_mixer_panel->Load();
 	m_sync_panel->Load();
 	m_debug_panel->Load();
@@ -498,20 +426,6 @@ void Dialog::Load()
 void Dialog::Save()
 {
 	OutputModule = m_module_select->GetSelection();
-
-#ifdef SPU2X_PORTAUDIO
-	OutputAPI = m_portaudio_select->GetSelection();
-	wxString p_api(m_portaudio_select->GetStringSelection());
-	if (p_api.Find("ALSA") != wxNOT_FOUND)
-		p_api = "ALSA";
-	if (p_api.Find("OSS") != wxNOT_FOUND)
-		p_api = "OSS";
-	PortaudioOut->SetApiSettings(p_api);
-#endif
-#ifndef _WIN32
-	SdlOutputAPI = m_sdl_select->GetSelection();
-	SDLOut->SetApiSettings(m_sdl_select->GetStringSelection());
-#endif
 
 	m_mixer_panel->Save();
 	m_sync_panel->Save();
