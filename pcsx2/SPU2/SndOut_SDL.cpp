@@ -120,8 +120,8 @@ struct SDLAudioMod : public SndOutModule
 		return 0;
 	}
 
-	const wchar_t* GetIdent() const { return L"SDLAudio"; }
-	const wchar_t* GetLongName() const { return L"SDL Audio"; }
+	const std::string GetIdent() const { return "SDLAudio"; }
+	const std::string GetLongName() const { return "SDL Audio"; }
 
 	void Close()
 	{

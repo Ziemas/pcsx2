@@ -388,14 +388,14 @@ public:
 		return playedSinceLastTime;
 	}
 
-	const wchar_t* GetIdent() const
+	const std::string GetIdent() const
 	{
-		return L"portaudio";
+		return "portaudio";
 	}
 
-	const wchar_t* GetLongName() const
+	const std::string GetLongName() const
 	{
-		return L"PortAudio (Cross-platform)";
+		return "PortAudio (Cross-platform)";
 	}
 
 	void ReadSettings()

@@ -73,15 +73,15 @@ int numSpeakers = 0;
 int dplLevel = 0;
 bool temp_debug_state;
 
-static constexpr wchar_t* DefaultBackend() {
+static constexpr char* DefaultBackend() {
 #ifdef WIN32
-    return L"xaudio2";
+    return "xaudio2";
 #endif
 #ifdef __linux__
-    return L"SDLAudio";
+    return "SDLAudio";
 #endif
 #ifdef __APPLE__
-	return L"SDLAudio";
+	return "SDLAudio";
 #endif
 };
 
@@ -120,8 +120,8 @@ void ReadSettings()
 	VolumeAdjustLFE = powf(10, VolumeAdjustLFEdb / 10);
 
 	wxString temp;
-    CfgReadStr(L"OUTPUT", L"Output_Module", temp, DefaultBackend());
-	OutputModule = FindOutputModuleById(temp.c_str()); // Find the driver index of this module...
+    CfgReadStr(L"OUTPUT", L"Output_Module", temp, wxString(DefaultBackend()));
+	OutputModule = FindOutputModuleById(temp.ToStdString()); // Find the driver index of this module...
 
 	SndOutLatencyMS = CfgReadInt(L"OUTPUT", L"Latency", 100);
 	SynchMode = CfgReadInt(L"OUTPUT", L"Synch_Mode", 0);

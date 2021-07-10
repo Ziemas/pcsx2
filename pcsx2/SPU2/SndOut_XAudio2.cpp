@@ -407,14 +407,14 @@ public:
 		return m_voiceContext->GetEmptySampleCount();
 	}
 
-	const wchar_t* GetIdent() const
+	const std::string GetIdent() const
 	{
-		return L"xaudio2";
+		return "xaudio2";
 	}
 
-	const wchar_t* GetLongName() const
+	const std::string GetLongName() const
 	{
-		return L"XAudio 2 (Recommended)";
+		return "XAudio 2 (Recommended)";
 	}
 
 	void ReadSettings()

@@ -32,7 +32,7 @@ static const int SndOutVolumeShift32 = 16 - SndOutVolumeShift; // shift up, not 
 // is too problematic. :)
 extern int SampleRate;
 
-extern int FindOutputModuleById(const wchar_t* omodid);
+extern int FindOutputModuleById(const std::string omodid);
 
 // Implemented in Config.cpp
 extern float VolumeAdjustFL;
