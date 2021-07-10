@@ -81,6 +81,7 @@ class Dialog : public wxDialog
 	wxBoxSizer *m_top_box, *m_portaudio_box, *m_sdl_box;
 	wxChoice *m_module_select, *m_portaudio_select, *m_sdl_select;
 	wxStaticText *m_portaudio_text, *m_sdl_text;
+	wxButton *m_backend_config;
 
 	MixerTab* m_mixer_panel;
 	SyncTab* m_sync_panel;
@@ -94,4 +95,5 @@ public:
 	void Save();
 	void Reconfigure();
 	void CallReconfigure(wxCommandEvent& event);
+    void handleModuleConfig(wxCommandEvent& event);
 };
