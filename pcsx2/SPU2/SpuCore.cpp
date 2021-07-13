@@ -374,14 +374,14 @@ namespace SPU
 				break;
 			case 0x2E0:
 				m_Reverb.m_pos = 0;
-				m_Reverb.m_ESA.hi = value & 0x3f;
+				m_Reverb.m_ESA.hi = value & 0xF;
 				break;
 			case 0x2E2:
 				m_Reverb.m_pos = 0;
 				m_Reverb.m_ESA.lo = value;
 				break;
 			case 0x33C:
-				m_Reverb.m_EEA.hi = value;
+				m_Reverb.m_EEA.hi = value & 0xF;
 				m_Reverb.m_EEA.lo = 0xFFFF;
 				break;
 			case 0x340:

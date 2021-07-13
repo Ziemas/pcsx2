@@ -273,13 +273,13 @@ namespace SPU
 		switch (addr)
 		{
 			case 0:
-				m_SSA.hi = value;
+				m_SSA.hi = value & 0xF;
 				return;
 			case 2:
 				m_SSA.lo = value;
 				return;
 			case 4:
-				m_LSA.hi = value;
+				m_LSA.hi = value & 0xF;
 				m_CustomLoop = true;
 				return;
 			case 6:
