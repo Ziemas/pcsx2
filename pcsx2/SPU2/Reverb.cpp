@@ -14,6 +14,7 @@
  */
 
 #include "Reverb.h"
+#include "SpuCore.h"
 
 namespace SPU
 {
@@ -105,15 +106,92 @@ namespace SPU
 		return out;
 	}
 
+	static s32 IIASM(const s16 vIIR, const s16 sample)
+	{
+		if (vIIR == INT16_MIN)
+		{
+			if (sample == INT16_MIN)
+				return 0;
+			else
+				return sample * -0x10000;
+		}
+
+		return sample * (INT16_MAX - vIIR);
+	}
+
+	static s16 ReverbSat(s32 sample)
+	{
+		return static_cast<s16>(std::clamp<s32>(sample, INT16_MIN, INT16_MAX));
+	}
+
+	static s16 ReverbNeg(s16 sample)
+	{
+		if (sample == INT16_MIN)
+			return 0x7FFF;
+
+		return static_cast<s16>(-sample);
+	}
+
+	u32 Reverb::Offset(s32 offset) const
+	{
+		uint32_t address = m_pos + offset;
+		uint32_t size = m_EEA.full - m_ESA.full;
+
+		if (size == 0)
+			return 0;
+
+		address = m_ESA.full + (address % size);
+
+		return address;
+	}
+
+	s16 Reverb::RD_RVB(s32 address, s32 offset)
+	{
+		return static_cast<s16>(m_SPU.Ram(Offset(address + offset)));
+	}
+
+	void Reverb::WR_RVB(s32 address, s16 sample)
+	{
+		if (m_Enable)
+			m_SPU.WriteMem(Offset(address), static_cast<u16>(sample));
+	}
+
 	AudioSample Reverb::Run(AudioSample input)
 	{
 		// down-sample input
 		auto in = DownSample(input);
-        // up-sample output
-        auto output = UpSample(in);
+
+		const s16 SAME_SIDE_IN = ReverbSat((((RD_RVB(static_cast<s32>(dSAME[m_Phase ^ 0].full)) * vWALL) >> 14) + ((in * vIN[m_Phase]) >> 14)) >> 1);
+		const s16 DIFF_SIDE_IN = ReverbSat((((RD_RVB(static_cast<s32>(dDIFF[m_Phase ^ 1].full)) * vWALL) >> 14) + ((in * vIN[m_Phase]) >> 14)) >> 1);
+		const s16 SAME_SIDE = ReverbSat((((SAME_SIDE_IN * vIIR) >> 14) + (IIASM(vIIR, RD_RVB(static_cast<s32>(mSAME[m_Phase].full), -1)) >> 14)) >> 1);
+		const s16 DIFF_SIDE = ReverbSat((((DIFF_SIDE_IN * vIIR) >> 14) + (IIASM(vIIR, RD_RVB(static_cast<s32>(mDIFF[m_Phase].full), -1)) >> 14)) >> 1);
+
+		WR_RVB(static_cast<s32>(mSAME[m_Phase].full), SAME_SIDE);
+		WR_RVB(static_cast<s32>(mDIFF[m_Phase].full), DIFF_SIDE);
+
+		const s32 COMB = ((RD_RVB(static_cast<s32>(mCOMB1[m_Phase].full)) * vCOMB1) >> 14) +
+						 ((RD_RVB(static_cast<s32>(mCOMB2[m_Phase].full)) * vCOMB2) >> 14) +
+						 ((RD_RVB(static_cast<s32>(mCOMB3[m_Phase].full)) * vCOMB3) >> 14) +
+						 ((RD_RVB(static_cast<s32>(mCOMB4[m_Phase].full)) * vCOMB4) >> 14);
+
+		const s16 APF1 = RD_RVB(static_cast<s32>(mAPF1[m_Phase].full - dAPF[0].full));
+		const s16 APF2 = RD_RVB(static_cast<s32>(mAPF2[m_Phase].full - dAPF[1].full));
+		const s16 MDA = ReverbSat((COMB + ((APF1 * ReverbNeg(vAPF1)) >> 14)) >> 1);
+		const s16 MDB = ReverbSat(APF1 + ((((MDA * vAPF1) >> 14) + ((APF2 * ReverbNeg(vAPF2)) >> 14)) >> 1));
+		const s16 IVB = ReverbSat(APF2 + ((MDB * vAPF2) >> 15));
+
+		WR_RVB(static_cast<s32>(mAPF1[m_Phase].full), MDA);
+		WR_RVB(static_cast<s32>(mAPF2[m_Phase].full), MDB);
+
+		// up-sample output
+		auto output = UpSample(IVB);
 
 		m_Phase ^= 1;
-		m_SamplePos++;
+		if (m_Phase)
+			m_pos++;
+		if (m_pos >= m_EEA.full - m_ESA.full + 1)
+			m_pos = 0;
+
 		return output;
 	}
 } // namespace SPU

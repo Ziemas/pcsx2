@@ -21,17 +21,48 @@
 
 namespace SPU
 {
+	class SPUCore;
+
 	class Reverb
 	{
 	public:
+		explicit Reverb(SPUCore& core)
+			: m_SPU(core){};
+
 		AudioSample Run(AudioSample input);
+
+		bool m_Enable{false};
 
 		Reg32 m_ESA{0};
 		Reg32 m_EEA{0};
 		u32 m_pos{0};
 
+		Reg32 dAPF[2]{0};
+		Reg32 mSAME[2]{0};
+		Reg32 mCOMB1[2]{0};
+		Reg32 mCOMB2[2]{0};
+		Reg32 dSAME[2]{0};
+		Reg32 mDIFF[2]{0};
+		Reg32 mCOMB3[2]{0};
+		Reg32 mCOMB4[2]{0};
+		Reg32 dDIFF[2]{0};
+		Reg32 mAPF1[2]{0};
+		Reg32 mAPF2[2]{0};
+
+		s16 vIIR{0};
+		s16 vCOMB1{0};
+		s16 vCOMB2{0};
+		s16 vCOMB3{0};
+		s16 vCOMB4{0};
+		s16 vWALL{0};
+		s16 vAPF1{0};
+		s16 vAPF2{0};
+		s16 vIN[2]{0};
+
 	private:
 		static constexpr u32 NUM_TAPS = 39;
+
+		SPUCore& m_SPU;
 
 		template <size_t len>
 		struct SampleBuffer
@@ -56,7 +87,10 @@ namespace SPU
 		s16 DownSample(AudioSample in);
 		AudioSample UpSample(s16 in);
 
-		u32 m_SamplePos{0};
+		s16 RD_RVB(s32 address, s32 offset = 0);
+		void WR_RVB(s32 address, s16 sample);
+		[[nodiscard]] u32 Offset(s32 offset) const;
+
 		u32 m_Phase{0};
 	};
 } // namespace SPU
