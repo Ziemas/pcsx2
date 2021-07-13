@@ -130,12 +130,6 @@ namespace SPU
 
 		VolumePair m_MVOL{};
 
-		struct PlainVolReg
-		{
-			s16 left;
-            s16 right;
-		};
-
 		PlainVolReg m_EVOL{0};
         PlainVolReg m_AVOL{0};
         PlainVolReg m_BVOL{0};

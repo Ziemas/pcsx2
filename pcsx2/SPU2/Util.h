@@ -33,6 +33,12 @@ namespace SPU
 		return (sample * volume) >> 15;
 	}
 
+    struct PlainVolReg
+    {
+        s16 left;
+        s16 right;
+    };
+
 	struct AudioSample
 	{
 		AudioSample() {}
@@ -45,12 +51,18 @@ namespace SPU
 		s16 left{0};
 		s16 right{0};
 
-		void mix(AudioSample src, bool lgate, bool rgate)
+		void Mix(AudioSample src, bool lgate, bool rgate)
 		{
 			if (lgate)
-				left = std::clamp<s32>(left + src.left, INT16_MIN, INT16_MAX);
+				left = static_cast<s16>(std::clamp<s32>(left + src.left, INT16_MIN, INT16_MAX));
 			if (rgate)
-				right = std::clamp<s32>(right + src.right, INT16_MIN, INT16_MAX);
+				right = static_cast<s16>(std::clamp<s32>(right + src.right, INT16_MIN, INT16_MAX));
+		}
+
+		void Volume(PlainVolReg vol)
+        {
+			left = ApplyVolume(left, vol.left);
+            right = ApplyVolume(right, vol.left);
 		}
 	};
 
