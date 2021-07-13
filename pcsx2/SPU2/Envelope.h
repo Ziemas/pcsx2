@@ -62,8 +62,8 @@ namespace SPU
 	protected:
 		u8 m_Shift{0};
 		s8 m_Step{0};
-		bool m_Exp{0};
-		bool m_Decrease{0};
+		bool m_Exp{false};
+		bool m_Decrease{false};
 
 		u32 m_Counter{0};
 		s32 m_Level{0};
@@ -91,7 +91,7 @@ namespace SPU
 
 	private:
 		Phase m_Phase{Phase::Stopped};
-		u32 m_Target{0};
+		s32 m_Target{0};
 	};
 
 	class Volume : Envelope
