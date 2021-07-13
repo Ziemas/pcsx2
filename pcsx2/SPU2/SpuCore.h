@@ -42,7 +42,7 @@ namespace SPU
 		void Write(u32 addr, u16 value);
 		u16 Read(u32 addr);
 
-		void WriteMem(u32& addr, u16 value);
+		void WriteMem(u32 addr, u16 value);
 
 		void DmaWrite(u16* madr, u32 size);
 		void DmaRead(u16* madr, u32 size);
@@ -121,7 +121,7 @@ namespace SPU
 
 		ADMA m_Adma{0};
 
-		Reverb m_Reverb{};
+		Reverb m_Reverb{*this};
 
 		Reg32 m_TSA{0};
 		u32 m_InternalTSA{0};
