@@ -31,8 +31,30 @@ namespace SPU
 		u32 m_pos{0};
 
 	private:
-		AudioSample ReverbIn[64]{};
-		AudioSample ReverbOut[64]{};
+		static constexpr u32 NUM_TAPS = 39;
+
+		template <size_t len>
+		struct SampleBuffer
+		{
+			u32 m_Pos{0};
+			std::array<AudioSample, len> m_Buffer{};
+
+			void Push(AudioSample sample)
+			{
+				m_Pos = (m_Pos + 1) % len;
+				m_Buffer[m_Pos] = sample;
+			}
+
+			[[nodiscard]] const AudioSample& Get(u32 index) const
+			{
+				return m_Buffer[(m_Pos + index + 1) % len];
+			}
+		};
+		SampleBuffer<NUM_TAPS> m_ReverbIn{};
+		SampleBuffer<NUM_TAPS> m_ReverbOut{};
+
+		s16 DownSample(AudioSample in);
+		AudioSample UpSample(s16 in);
 
 		u32 m_SamplePos{0};
 		u32 m_Phase{0};
