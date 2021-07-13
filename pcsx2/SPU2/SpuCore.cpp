@@ -52,15 +52,13 @@ namespace SPU
 
 		// TODO memout
 		// TODO memin
-		// TODO effect
 
 		return std::make_pair(Out.left, Out.right);
 	}
 
-	void SPUCore::WriteMem(u32& addr, u16 value)
+	void SPUCore::WriteMem(u32 addr, u16 value)
 	{
 		m_RAM[addr] = value;
-		++addr &= 0xFFFFF;
 	}
 
 	void SPUCore::DmaWrite(u16* madr, u32 size)
@@ -116,18 +114,6 @@ namespace SPU
 			addr %= 0xC;
 			return m_voices[id].ReadAddr(addr);
 		}
-		if (addr >= 0x2E4 && addr <= 0x33A)
-		{
-			// ignore reverb stuff for now
-			// TODO
-			return 0;
-		}
-        if (addr >= 0x774 && addr <= 0x786)
-        {
-            // ignore reverb stuff for now
-            // TODO
-            return 0;
-        }
 		switch (addr)
 		{
 			case 0x188:
@@ -226,20 +212,40 @@ namespace SPU
 				return m_Stat.bits;
 			case 0x760:
 				return m_MVOL.left.Get();
-            case 0x762:
-                return m_MVOL.right.Get();
-            case 0x764:
-                return m_EVOL.left;
-            case 0x766:
-                return m_EVOL.right;
-            case 0x768:
-                return m_AVOL.left;
-            case 0x76A:
-                return m_AVOL.right;
-            case 0x76C:
-                return m_BVOL.left;
-            case 0x76E:
-                return m_BVOL.right;
+			case 0x762:
+				return m_MVOL.right.Get();
+			case 0x764:
+				return m_EVOL.left;
+			case 0x766:
+				return m_EVOL.right;
+			case 0x768:
+				return m_AVOL.left;
+			case 0x76A:
+				return m_AVOL.right;
+			case 0x76C:
+				return m_BVOL.left;
+			case 0x76E:
+				return m_BVOL.right;
+			case 0x774:
+				return m_Reverb.vIIR;
+			case 0x776:
+				return m_Reverb.vCOMB1;
+			case 0x778:
+				return m_Reverb.vCOMB2;
+			case 0x77A:
+				return m_Reverb.vCOMB3;
+			case 0x77C:
+				return m_Reverb.vCOMB4;
+			case 0x77E:
+				return m_Reverb.vWALL;
+			case 0x780:
+				return m_Reverb.vAPF1;
+			case 0x782:
+				return m_Reverb.vAPF2;
+			case 0x784:
+				return m_Reverb.vIN[0];
+			case 0x786:
+				return m_Reverb.vIN[1];
 			default:
 				Console.WriteLn("UNHANDLED SPU[%d] READ ---- <- %04x", m_Id, addr);
 				pxAssertMsg(false, "Unhandled SPU Read");
@@ -264,18 +270,6 @@ namespace SPU
 			m_voices[id].WriteAddr(addr, value);
 			return;
 		}
-		if (addr >= 0x2E4 && addr <= 0x33A)
-		{
-			// ignore reverb stuff for now
-			// TODO
-			return;
-		}
-        if (addr >= 0x774 && addr <= 0x786)
-        {
-            // ignore reverb stuff for now
-            // TODO
-            return;
-        }
 		switch (addr)
 		{
 			case 0x180:
@@ -332,6 +326,7 @@ namespace SPU
 				break;
 			case 0x19A:
 				m_Attr.bits = value;
+				m_Reverb.m_Enable = m_Attr.EffectEnable;
 				break;
 			case 0x1B0:
 				m_Adma.bits = value;
@@ -371,6 +366,7 @@ namespace SPU
 			case 0x1AC:
 				// TODO: FIFO
 				WriteMem(m_InternalTSA, value);
+				++m_InternalTSA &= 0xFFFFF;
 				break;
 			case 0x2E0:
 				m_Reverb.m_pos = 0;
@@ -379,6 +375,138 @@ namespace SPU
 			case 0x2E2:
 				m_Reverb.m_pos = 0;
 				m_Reverb.m_ESA.lo = value;
+				break;
+			case 0x2E4:
+				m_Reverb.dAPF[0].hi = value;
+				break;
+			case 0x2E6:
+				m_Reverb.dAPF[0].lo = value;
+				break;
+			case 0x2E8:
+				m_Reverb.dAPF[1].hi = value;
+				break;
+			case 0x2EA:
+				m_Reverb.dAPF[1].lo = value;
+				break;
+			case 0x2EC:
+				m_Reverb.mSAME[0].hi = value;
+				break;
+			case 0x2EE:
+				m_Reverb.mSAME[0].lo = value;
+				break;
+			case 0x2F0:
+				m_Reverb.mSAME[1].hi = value;
+				break;
+			case 0x2F2:
+				m_Reverb.mSAME[1].lo = value;
+				break;
+			case 0x2F4:
+				m_Reverb.mCOMB1[0].hi = value;
+				break;
+			case 0x2F6:
+				m_Reverb.mCOMB1[0].lo = value;
+				break;
+			case 0x2F8:
+				m_Reverb.mCOMB1[1].hi = value;
+				break;
+			case 0x2FA:
+				m_Reverb.mCOMB1[1].lo = value;
+				break;
+			case 0x2FC:
+				m_Reverb.mCOMB2[0].hi = value;
+				break;
+			case 0x2FE:
+				m_Reverb.mCOMB2[0].lo = value;
+				break;
+			case 0x300:
+				m_Reverb.mCOMB2[1].hi = value;
+				break;
+			case 0x302:
+				m_Reverb.mCOMB2[1].lo = value;
+				break;
+			case 0x304:
+				m_Reverb.dSAME[0].hi = value;
+				break;
+			case 0x306:
+				m_Reverb.dSAME[0].lo = value;
+				break;
+			case 0x308:
+				m_Reverb.dSAME[1].hi = value;
+				break;
+			case 0x30A:
+				m_Reverb.dSAME[1].lo = value;
+				break;
+			case 0x30C:
+				m_Reverb.mDIFF[0].hi = value;
+				break;
+			case 0x30E:
+				m_Reverb.mDIFF[0].lo = value;
+				break;
+			case 0x310:
+				m_Reverb.mDIFF[1].hi = value;
+				break;
+			case 0x312:
+				m_Reverb.mDIFF[1].lo = value;
+				break;
+			case 0x314:
+				m_Reverb.mCOMB3[0].hi = value;
+				break;
+			case 0x316:
+				m_Reverb.mCOMB3[0].lo = value;
+				break;
+			case 0x318:
+				m_Reverb.mCOMB3[1].hi = value;
+				break;
+			case 0x31A:
+				m_Reverb.mCOMB3[1].lo = value;
+				break;
+			case 0x31C:
+				m_Reverb.mCOMB4[0].hi = value;
+				break;
+			case 0x31E:
+				m_Reverb.mCOMB4[0].lo = value;
+				break;
+			case 0x320:
+				m_Reverb.mCOMB4[1].hi = value;
+				break;
+			case 0x322:
+				m_Reverb.mCOMB4[1].lo = value;
+				break;
+			case 0x324:
+				m_Reverb.dDIFF[0].hi = value;
+				break;
+			case 0x326:
+				m_Reverb.dDIFF[0].lo = value;
+				break;
+			case 0x328:
+				m_Reverb.dDIFF[1].hi = value;
+				break;
+			case 0x32A:
+				m_Reverb.dDIFF[1].lo = value;
+				break;
+			case 0x32C:
+				m_Reverb.mAPF1[0].hi = value;
+				break;
+			case 0x32E:
+				m_Reverb.mAPF1[0].lo = value;
+				break;
+			case 0x330:
+				m_Reverb.mAPF1[1].hi = value;
+				break;
+			case 0x332:
+				m_Reverb.mAPF1[1].lo = value;
+				break;
+			case 0x334:
+				m_Reverb.mAPF2[0].hi = value;
+				break;
+			case 0x336:
+				m_Reverb.mAPF2[0].lo = value;
+				break;
+			case 0x338:
+				m_Reverb.mAPF2[1].hi = value;
+				break;
+			case 0x33A:
+				m_Reverb.mAPF2[1].lo = value;
 				break;
 			case 0x33C:
 				m_Reverb.m_EEA.hi = value & 0xF;
@@ -399,30 +527,60 @@ namespace SPU
 			//case 0x344:
 			//	// SPU Status R/O
 			//	break;
-            case 0x760:
-                m_MVOL.left.Set(value);
+			case 0x760:
+				m_MVOL.left.Set(value);
 				break;
-            case 0x762:
-                m_MVOL.right.Set(value);
+			case 0x762:
+				m_MVOL.right.Set(value);
 				break;
-            case 0x764:
-                m_EVOL.left = static_cast<s16>(value);
-                break;
-            case 0x766:
-                m_EVOL.right = static_cast<s16>(value);
-                break;
-            case 0x768:
-                m_AVOL.left = static_cast<s16>(value);
-                break;
-            case 0x76A:
-                m_AVOL.right = static_cast<s16>(value);
-                break;
-            case 0x76C:
-                m_BVOL.left = static_cast<s16>(value);
-                break;
-            case 0x76E:
-                m_BVOL.right = static_cast<s16>(value);
-                break;
+			case 0x764:
+				m_EVOL.left = static_cast<s16>(value);
+				break;
+			case 0x766:
+				m_EVOL.right = static_cast<s16>(value);
+				break;
+			case 0x768:
+				m_AVOL.left = static_cast<s16>(value);
+				break;
+			case 0x76A:
+				m_AVOL.right = static_cast<s16>(value);
+				break;
+			case 0x76C:
+				m_BVOL.left = static_cast<s16>(value);
+				break;
+			case 0x76E:
+				m_BVOL.right = static_cast<s16>(value);
+				break;
+			case 0x774:
+				m_Reverb.vIIR = static_cast<int16_t>(value);
+				break;
+			case 0x776:
+				m_Reverb.vCOMB1 = static_cast<int16_t>(value);
+				break;
+			case 0x778:
+				m_Reverb.vCOMB2 = static_cast<int16_t>(value);
+				break;
+			case 0x77A:
+				m_Reverb.vCOMB3 = static_cast<int16_t>(value);
+				break;
+			case 0x77C:
+				m_Reverb.vCOMB4 = static_cast<int16_t>(value);
+				break;
+			case 0x77E:
+				m_Reverb.vWALL = static_cast<int16_t>(value);
+				break;
+			case 0x780:
+				m_Reverb.vAPF1 = static_cast<int16_t>(value);
+				break;
+			case 0x782:
+				m_Reverb.vAPF2 = static_cast<int16_t>(value);
+				break;
+			case 0x784:
+				m_Reverb.vIN[0] = static_cast<int16_t>(value);
+				break;
+			case 0x786:
+				m_Reverb.vIN[1] = static_cast<int16_t>(value);
+				break;
 			default:
 				Console.WriteLn("UNHANDLED SPU[%d] WRITE %04x -> %04x", m_Id, value, addr);
 				pxAssertMsg(false, "Unhandled SPU Write");
