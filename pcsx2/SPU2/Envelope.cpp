@@ -30,7 +30,7 @@ namespace SPU
 		if (shift > 0)
 			cStep >>= shift;
 
-		s16 step = m_Step << std::max<s16>(0, 11 - m_Shift);
+		s16 step = static_cast<s16>(m_Step << std::max(0, 11 - m_Shift));
 
 		if (m_Exp)
 		{
@@ -38,7 +38,7 @@ namespace SPU
 				cStep >>= 2;
 
 			if (m_Decrease)
-				step = (step * m_Level) >> 15;
+				step = static_cast<s16>((step * m_Level) >> 15);
 		}
 
 		m_Counter += cStep;
@@ -90,7 +90,7 @@ namespace SPU
 				m_Exp = m_Reg.AttackExp;
 				m_Decrease = false;
 				m_Shift = m_Reg.AttackShift;
-				m_Step = 7 - m_Reg.AttackStep.GetValue();
+				m_Step = static_cast<s8>(7 - m_Reg.AttackStep.GetValue());
 				m_Target = 0x7FFF;
 				break;
 			case Phase::Decay:
@@ -104,7 +104,8 @@ namespace SPU
 				m_Exp = m_Reg.SustainExp;
 				m_Decrease = m_Reg.SustainDecr;
 				m_Shift = m_Reg.SustainShift;
-				m_Step = m_Decrease ? (-8 + m_Reg.SustainStep.GetValue()) : (7 - m_Reg.SustainStep.GetValue());
+				m_Step = m_Decrease ? static_cast<s8>(-8 + m_Reg.SustainStep.GetValue()) :
+                                      static_cast<s8>(7 - m_Reg.SustainStep.GetValue());
 				m_Target = 0; // unused for sustain
 				break;
 			case Phase::Release:
