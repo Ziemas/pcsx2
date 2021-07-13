@@ -34,8 +34,8 @@ namespace SPU
 		for (auto& v : m_voices)
 		{
 			auto sample = v.GenSample();
-			Dry.mix(sample, vDryL & 1, vDryR & 1);
-			Wet.mix(sample, vWetL & 1, vWetR & 1);
+			Dry.Mix(sample, vDryL & 1, vDryR & 1);
+			Wet.Mix(sample, vWetL & 1, vWetR & 1);
 
 			vDryL >>= 1;
 			vDryR >>= 1;
@@ -44,10 +44,11 @@ namespace SPU
 		}
 
 		auto EOut = m_Reverb.Run(Wet);
+		EOut.Volume(m_EVOL);
 
 		AudioSample Out;
-		Out.mix(Dry, m_MMIX.VoiceL, m_MMIX.VoiceR);
-		Out.mix(EOut, m_MMIX.VoiceWetL, m_MMIX.VoiceWetR);
+		Out.Mix(Dry, m_MMIX.VoiceL, m_MMIX.VoiceR);
+		Out.Mix(EOut, m_MMIX.VoiceWetL, m_MMIX.VoiceWetR);
 
 		// TODO memout
 		// TODO memin
