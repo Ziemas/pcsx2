@@ -28,9 +28,9 @@ namespace SPU
 		// TODO this is bit ugly isn't it
 		// tempting to do the union thing spu2x does
 		u32 vDryL = m_VMIXL.full;
-		u32 vDryR = m_VMIXL.full;
-		u32 vWetL = m_VMIXL.full;
-		u32 vWetR = m_VMIXL.full;
+		u32 vDryR = m_VMIXR.full;
+		u32 vWetL = m_VMIXEL.full;
+		u32 vWetR = m_VMIXER.full;
 		for (auto& v : m_voices)
 		{
 			auto sample = v.GenSample();
