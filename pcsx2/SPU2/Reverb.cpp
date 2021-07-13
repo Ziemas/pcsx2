@@ -60,8 +60,60 @@ namespace SPU
 		-1,
 	};
 
+	s16 Reverb::DownSample(AudioSample in)
+	{
+		m_ReverbIn.Push(in);
+
+		s32 down{0};
+		for (u32 i = 0; i < NUM_TAPS; i++)
+		{
+			auto s = m_ReverbIn.Get(i);
+			if (m_Phase)
+				down += s.right * FilterCoefficients[i];
+			else
+				down += s.left * FilterCoefficients[i];
+		}
+
+		down >>= 15;
+		return static_cast<s16>(std::clamp<s32>(down, INT16_MIN, INT16_MAX));
+	}
+
+	AudioSample Reverb::UpSample(s16 in)
+	{
+		AudioSample up(0, 0);
+
+		if (m_Phase)
+			up.right = in;
+		else
+			up.left = in;
+
+		m_ReverbOut.Push(up);
+
+		s32 left{0}, right{0};
+		for (u32 i = 0; i < NUM_TAPS; i++)
+		{
+			left += m_ReverbOut.Get(i).left * FilterCoefficients[i];
+			right += m_ReverbOut.Get(i).right * FilterCoefficients[i];
+		}
+
+		left >>= 14;
+		right >>= 14;
+
+		AudioSample out(static_cast<s16>(std::clamp<s32>(left, INT16_MIN, INT16_MAX)),
+			static_cast<s16>(std::clamp<s32>(right, INT16_MIN, INT16_MAX)));
+
+		return out;
+	}
+
 	AudioSample Reverb::Run(AudioSample input)
 	{
-		return AudioSample();
+		// down-sample input
+		auto in = DownSample(input);
+        // up-sample output
+        auto output = UpSample(in);
+
+		m_Phase ^= 1;
+		m_SamplePos++;
+		return output;
 	}
 } // namespace SPU
