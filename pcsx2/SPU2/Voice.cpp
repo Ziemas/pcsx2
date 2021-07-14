@@ -115,12 +115,16 @@ namespace SPU
 				}
 			}
 
-			m_CurHeader.bits = m_SPU.Ram(m_NAX.full & ~0x7);
-			if (m_CurHeader.LoopStart && !m_CustomLoop)
-				m_LSA.full = m_NAX.full & ~0x7;
+			UpdateBlockHeader();
 
 			m_NAX.full++;
 		}
+	}
+	void Voice::UpdateBlockHeader()
+	{
+		m_CurHeader.bits = m_SPU.Ram(m_NAX.full & ~0x7);
+		if (m_CurHeader.LoopStart && !m_CustomLoop)
+			m_LSA.full = m_NAX.full & ~0x7;
 	}
 
 	AudioSample Voice::GenSample()
@@ -136,11 +140,8 @@ namespace SPU
 			m_KeyOn = false;
 			m_NAX.full = m_SSA.full;
 
-			// Need to handle this for the first block otherwise we miss it in Decode
-			// TODO figure out how to make this nicer
-			m_CurHeader.bits = m_SPU.Ram(m_NAX.full & ~0x7);
-			if (m_CurHeader.LoopStart && !m_CustomLoop)
-				m_LSA.full = m_NAX.full & ~0x7;
+			// We need the header before running DecodeSamples() in order to have NAX behave the way we want
+			UpdateBlockHeader();
 
 			m_NAX.full++;
 			m_ENDX = false;

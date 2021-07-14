@@ -61,6 +61,7 @@ namespace SPU
 		};
 
 		void DecodeSamples();
+		void UpdateBlockHeader();
 
 		SPUCore& m_SPU;
 		u32 m_Id{0};
