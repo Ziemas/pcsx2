@@ -163,7 +163,12 @@ namespace SPU
 		// TODO Sweep
 	}
 
-	s16 Volume::Get() const
+	u16 Volume::Get() const
+	{
+		return m_Sweep.bits;
+	}
+
+	s16 Volume::GetCurrent() const
 	{
 		return m_Vol;
 	}
