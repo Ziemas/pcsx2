@@ -20,10 +20,13 @@
 
 namespace SPU
 {
-	std::pair<s16, s16> SPUCore::GenSample()
+	AudioSample SPUCore::GenSample(AudioSample input)
 	{
 		AudioSample Dry(0, 0);
 		AudioSample Wet(0, 0);
+
+		MemOut(OutBuf::SINL, input.left);
+		MemOut(OutBuf::SINR, input.right);
 
 		// TODO this is bit ugly isn't it
 		// tempting to do the union thing spu2x does
@@ -43,17 +46,30 @@ namespace SPU
 			vWetR >>= 1;
 		}
 
+		Dry.Mix(input, m_MMIX.SinL, m_MMIX.SinR);
+		Wet.Mix(input, m_MMIX.SinWetL, m_MMIX.SinWetR);
+
+		MemOut(OutBuf::MemOutL, Dry.left);
+		MemOut(OutBuf::MemOutR, Dry.right);
+
 		auto EOut = m_Reverb.Run(Wet);
 		EOut.Volume(m_EVOL);
+
+		MemOut(OutBuf::MemOutEL, EOut.left);
+		MemOut(OutBuf::MemOutER, EOut.right);
 
 		AudioSample Out;
 		Out.Mix(Dry, m_MMIX.VoiceL, m_MMIX.VoiceR);
 		Out.Mix(EOut, m_MMIX.VoiceWetL, m_MMIX.VoiceWetR);
 
-		// TODO memout
-		// TODO memin
+		m_BufPos++;
+		if (m_BufPos == 0x100)
+		{
+			m_BufPos &= 0xFF;
+			m_CurrentBuffer = 1 - m_CurrentBuffer;
+		}
 
-		return std::make_pair(Out.left, Out.right);
+		return Out;
 	}
 
 	void SPUCore::WriteMem(u32 addr, u16 value)
@@ -97,6 +113,13 @@ namespace SPU
 			HW_DMA7_MADR += size * 2;
 			spu2DMA7Irq();
 		}
+	}
+
+	void SPUCore::MemOut(SPUCore::OutBuf buffer, s16 value)
+	{
+		auto displacement = (m_CurrentBuffer * BufSize) + m_BufPos;
+		auto address = static_cast<u32>(buffer) + (m_Id * OutBufCoreOffset);
+		WriteMem(address + displacement, value);
 	}
 
 	u16 SPUCore::Read(u32 addr)

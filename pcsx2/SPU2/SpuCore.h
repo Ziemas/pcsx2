@@ -29,6 +29,18 @@ namespace SPU
 	class SPUCore
 	{
 	public:
+		enum class OutBuf
+		{
+			SINL = 0x0,
+			SINR = 0x200,
+			Voice1 = 0x400,
+			Voice3 = 0x600,
+			MemOutL = 0x1000,
+			MemOutR = 0x1200,
+			MemOutEL = 0x1400,
+			MemOutER = 0x1600,
+		};
+
 		SPUCore(u16* ram, u32 id)
 			: m_Id(id)
 			, m_RAM(ram)
@@ -37,7 +49,7 @@ namespace SPU
 
 		u32 m_Id{0};
 
-		std::pair<s16, s16> GenSample();
+		AudioSample GenSample(AudioSample input);
 
 		void Write(u32 addr, u16 value);
 		u16 Read(u32 addr);
@@ -48,6 +60,8 @@ namespace SPU
 		void DmaRead(u16* madr, u32 size);
 		u16 Ram(u32 address) { return m_RAM[address & 0xFFFFF]; }
 		Voice& GetVoice(int n) { return m_voices[n]; }
+		void MemOut(OutBuf buffer, s16 value);
+
 
 	private:
 		enum class TransferMode : u8
@@ -57,6 +71,17 @@ namespace SPU
 			DMAWrite = 2,
 			DMARead = 3,
 		};
+
+		static constexpr u32 BufSize = 0x100;
+		static constexpr u32 OutBufCoreOffset = 0x800;
+		static constexpr u32 InBufOffset = 0x400;
+
+		enum class InBuf
+		{
+			MeminL = 0x2000,
+			MeminR = 0x2200,
+		};
+
 
 		union Attr
 		{
@@ -122,6 +147,9 @@ namespace SPU
 		Status m_Stat{0};
 
 		ADMA m_Adma{0};
+
+		u32 m_BufPos{0};
+		u32 m_CurrentBuffer{0};
 
 		Reverb m_Reverb{*this};
 
