@@ -67,9 +67,26 @@ namespace SPU
 		{
 			m_BufPos &= 0xFF;
 			m_CurrentBuffer = 1 - m_CurrentBuffer;
+			m_IRQ.IrqStat.BufferHalf = m_CurrentBuffer;
 		}
 
 		return Out;
+	}
+
+	void SPUCore::TestIrq(u32 address)
+	{
+		for (int i = 0; i < 2; i++)
+		{
+			if (m_IRQ.IRQA[i].full == address && m_IRQ.Attr[i].IRQEnable)
+			{
+				if (i == 0)
+					m_IRQ.IrqStat.CauseC0 = true;
+				if (i == 1)
+					m_IRQ.IrqStat.CauseC1 = true;
+
+				spu2Irq();
+			}
+		}
 	}
 
 	void SPUCore::WriteMem(u32 addr, u16 value)
@@ -119,6 +136,7 @@ namespace SPU
 	{
 		auto displacement = (m_CurrentBuffer * BufSize) + m_BufPos;
 		auto address = static_cast<u32>(buffer) + (m_Id * OutBufCoreOffset);
+		TestIrq(address + displacement);
 		WriteMem(address + displacement, value);
 	}
 
@@ -158,7 +176,11 @@ namespace SPU
 			case 0x198:
 				return m_MMIX.bits;
 			case 0x19A:
-				return m_Attr.bits;
+				return m_IRQ.Attr[m_Id].bits;
+			case 0x19C:
+				return m_IRQ.IRQA[m_Id].hi.GetValue();
+			case 0x19E:
+				return m_IRQ.IRQA[m_Id].lo.GetValue();
 			case 0x1A0:
 			{
 				u32 ret = 0;
@@ -348,8 +370,21 @@ namespace SPU
 				m_MMIX.bits = value;
 				break;
 			case 0x19A:
-				m_Attr.bits = value;
-				m_Reverb.m_Enable = m_Attr.EffectEnable;
+				m_IRQ.Attr[m_Id].bits = value;
+				if (!m_IRQ.Attr[m_Id].IRQEnable)
+				{
+					if (m_Id == 0)
+						m_IRQ.IrqStat.CauseC0 = false;
+					if (m_Id == 1)
+						m_IRQ.IrqStat.CauseC1 = false;
+				}
+				m_Reverb.m_Enable = m_IRQ.Attr[m_Id].EffectEnable;
+				break;
+			case 0x19C:
+				m_IRQ.IRQA[m_Id].hi = value;
+				break;
+			case 0x19E:
+				m_IRQ.IRQA[m_Id].lo = value;
 				break;
 			case 0x1B0:
 				m_Adma.bits = value;

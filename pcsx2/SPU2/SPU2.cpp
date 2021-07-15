@@ -22,9 +22,11 @@ namespace SPU
 {
 	u16 SPU_RAM[1024 * 1024 * 2] = {};
 	//std::array<u16, 1024*1024*2> SPU_RAM = {};
+	SpuSharedState irq{};
+
 	SPUCore cores[2] = {
-		{SPU_RAM, 0},
-		{SPU_RAM, 1},
+		{SPU_RAM, 0, irq},
+		{SPU_RAM, 1, irq},
 	};
 
 	u32 spuCycles = 0;
@@ -96,6 +98,9 @@ namespace SPU
 
 		if (addr >= 0x7C0) // shared?
 		{
+			if (addr == 0x7C2)
+				return irq.IrqStat.bits;
+
 			return 0;
 		}
 
