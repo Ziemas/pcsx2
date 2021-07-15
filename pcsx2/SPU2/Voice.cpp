@@ -170,19 +170,17 @@ namespace SPU
 		sample = static_cast<s16>(sample + ((m_DecodeBuf.Peek(2) * gaussianTable[index][2]) >> 15));
 		sample = static_cast<s16>(sample + ((m_DecodeBuf.Peek(3) * gaussianTable[index][3]) >> 15));
 
-		// Step = VxPitch                  ;range +0000h..+FFFFh (0...705.6 kHz)
-		//  IF PMON.Bit(x)=1 AND (x>0)      ;pitch modulation enable
-		//    Factor = VxOUTX(x-1)          ;range -8000h..+7FFFh (prev voice amplitude)
-		//    Factor = Factor+8000h         ;range +0000h..+FFFFh (factor = 0.00 .. 1.99)
-		//    Step=SignExpand16to32(Step)   ;hardware glitch on VxPitch>7FFFh, make sign
-		//    Step = (Step * Factor) SAR 15 ;range 0..1FFFFh (glitchy if VxPitch>7FFFh)
-		//    Step=Step AND 0000FFFFh       ;hardware glitch on VxPitch>7FFFh, kill sign
-		//  IF Step>3FFFh then Step=4000h   ;range +0000h..+3FFFh (0.. 176.4kHz)
-		//  Counter = Counter + Step
+		s32 step = m_Pitch;
+		if (m_PitchMod && m_Id > 0)
+		{
+			s32 factor = m_SPU.GetVoice(m_Id - 1).Out();
+			factor += 0x8000;
+			step = (step << 16) >> 16;
+			step = (step * factor) >> 15;
+			step &= 0xFFFF;
+		}
 
-		u32 step = m_Pitch;
-		// TODO pitch mod
-		step = std::min(step, 0x3FFFu);
+		step = std::min(step, 0x3FFF);
 		m_Counter += step;
 
 		while (m_Counter >= 0x1000u)
@@ -194,6 +192,7 @@ namespace SPU
 		m_ADSR.Run();
 
 		sample = ApplyVolume(sample, m_ADSR.Level());
+		m_Out = sample;
 		s16 left = ApplyVolume(sample, m_Volume.left.Get());
 		s16 right = ApplyVolume(sample, m_Volume.right.Get());
 
