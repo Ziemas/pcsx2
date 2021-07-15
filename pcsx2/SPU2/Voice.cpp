@@ -192,7 +192,14 @@ namespace SPU
 		m_ADSR.Run();
 
 		sample = ApplyVolume(sample, m_ADSR.Level());
+
 		m_Out = sample;
+
+		if (m_Id == 1)
+			m_SPU.MemOut(SPUCore::OutBuf::Voice1, sample);
+		if (m_Id == 3)
+			m_SPU.MemOut(SPUCore::OutBuf::Voice3, sample);
+
 		s16 left = ApplyVolume(sample, m_Volume.left.Get());
 		s16 right = ApplyVolume(sample, m_Volume.right.Get());
 

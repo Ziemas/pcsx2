@@ -38,14 +38,14 @@ namespace SPU
 		spuCycles += cycles;
 		while (spuCycles >= 768)
 		{
-			auto core0 = cores[0].GenSample();
-			auto core1 = cores[1].GenSample();
+			auto core0 = cores[0].GenSample(AudioSample());
+			auto core1 = cores[1].GenSample(core0);
 			spuCycles -= 768;
 
 			S16Out out{};
-			out.left = static_cast<s16>(std::clamp<s32>(core0.first + core1.first, INT16_MIN, INT16_MAX));
+			out.left = core1.left;
+			out.right = core1.right;
 			fwrite(&out.left, sizeof(s16), 1, output);
-			out.right = static_cast<s16>(std::clamp<s32>(core0.second + core1.second, INT16_MIN, INT16_MAX));
 			fwrite(&out.right, sizeof(s16), 1, output);
 
 			snd.Push(out);
