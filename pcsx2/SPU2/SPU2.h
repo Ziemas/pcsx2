@@ -20,21 +20,6 @@
 #include "common/Pcsx2Types.h"
 #include "SaveState.h"
 
-/* ZSPU TODO (beyond what's already done in dobie/spu2x)
- * Figure out transfer FIFO
- *   - Does it toggle the DMA busy bit?
- *
- * Voice decode buffers
- *   - try to figure out decoding rate/buffer size.
- *     a 16 sample buffer with 4 samples per spu cycle
- *     seems about right.
- *
- * Try to work out an ADSR method without cycle counting
- *    - lookup table with modifiers for exp would be nice
- *
- * Port ps1-tests spu tests? (what little there is)
- * */
-
 namespace SPU
 {
 	enum class PS2Modes
