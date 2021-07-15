@@ -69,6 +69,8 @@ namespace SPU
 
 	void Voice::DecodeSamples()
 	{
+		m_SPU.TestIrq(m_NAX.full);
+
 		// This doesn't exactly match the real behaviour,
 		// it seems to initially decode a bigger chunk
 		// and then decode more data after a bit has drained
