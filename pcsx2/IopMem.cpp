@@ -17,7 +17,7 @@
 #include "PrecompiledHeader.h"
 #include "IopCommon.h"
 #include "ps2/pgif.h" // for PSX kernel TTY in iopMemWrite32
-#include "SPU2/spu2.h"
+#include "SPU2/SPU2.h"
 #include "DEV9/DEV9.h"
 
 uptr *psxMemWLUT = NULL;
@@ -211,7 +211,7 @@ u16 __fastcall iopMemRead16(u32 mem)
 		else
 		{
 			if (t == 0x1F90)
-				return SPU2read(mem);
+				return SPU::Read(mem);
 			if (t == 0x1000)
 				return DEV9read16(mem);
 			PSXMEM_LOG("err lh %8.8lx", mem);
@@ -394,7 +394,7 @@ void __fastcall iopMemWrite16(u32 mem, u16 value)
 				psxSu16(mem) = value; return;
 			}
 			if (t == 0x1F90) {
-				SPU2write(mem, value); return;
+				SPU::Write(mem, value); return;
 			}
 			if (t == 0x1000) {
 				DEV9write16(mem, value); return;

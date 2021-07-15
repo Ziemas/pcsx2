@@ -21,7 +21,7 @@
 #include "IPU/IPUdma.h"
 #include "Gif_Unit.h"
 #include "IopCommon.h"
-#include "SPU2/spu2.h"
+#include "SPU2/SPU2.h"
 
 using namespace R5900;
 
@@ -67,10 +67,10 @@ void hwReset()
 
 	if ((psxHu32(HW_ICFG) & (1 << 3)))
 	{
-		SPU2ps1reset();
+		SPU::PS1Reset();
 	}
 
-	SPU2reset();
+	SPU::Reset();
 
 	sifReset();
 

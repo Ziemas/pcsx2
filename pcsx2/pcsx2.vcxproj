@@ -92,6 +92,7 @@
       <ExceptionHandling>Async</ExceptionHandling>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>PrecompiledHeader.h</PrecompiledHeaderFile>
+      <ForcedIncludeFiles>PrecompiledHeader.h;%(ForcedIncludeFiles)</ForcedIncludeFiles>
       <EnableEnhancedInstructionSet>NoExtensions</EnableEnhancedInstructionSet>
       <PreprocessorDefinitions>WIN32_LEAN_AND_MEAN;LZMA_API_STATIC;BUILD_DX=1;SPU2X_PORTAUDIO;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PreprocessorDefinitions Condition="$(Configuration.Contains(Debug))">PCSX2_DEBUG;PCSX2_DEVBUILD;_SECURE_SCL_=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
@@ -369,41 +370,12 @@
     <ClCompile Include="PAD\Windows\WndProcEater.cpp" />
     <ClCompile Include="PAD\Windows\XInputEnum.cpp" />
     <ClCompile Include="Recording\Utilities\InputRecordingLogger.cpp" />
-    <ClCompile Include="SPU2\DplIIdecoder.cpp" />
-    <ClCompile Include="SPU2\debug.cpp" />
-    <ClCompile Include="SPU2\RegLog.cpp" />
-    <ClCompile Include="SPU2\SndOut_Portaudio.cpp" />
-    <ClCompile Include="SPU2\wavedump_wav.cpp" />
-    <ClCompile Include="SPU2\Lowpass.cpp" />
-    <ClCompile Include="SPU2\SndOut.cpp" />
-    <ClCompile Include="SPU2\Timestretcher.cpp" />
-    <ClCompile Include="SPU2\Windows\SndOut_waveOut.cpp" />
-    <ClCompile Include="SPU2\Windows\SndOut_XAudio2.cpp" />
-    <ClCompile Include="SPU2\Linux\Alsa.cpp">
-      <ExcludedFromBuild>true</ExcludedFromBuild>
-    </ClCompile>
-    <ClCompile Include="SPU2\dma.cpp" />
-    <ClCompile Include="SPU2\RegTable.cpp" />
-    <ClCompile Include="SPU2\spu2freeze.cpp" />
-    <ClCompile Include="SPU2\spu2sys.cpp" />
-    <ClCompile Include="SPU2\ADSR.cpp" />
-    <ClCompile Include="SPU2\Mixer.cpp" />
-    <ClCompile Include="SPU2\ReadInput.cpp" />
+    <ClCompile Include="SPU2\SPU2.cpp" />
+    <ClCompile Include="SPU2\Output.cpp" />
+    <ClCompile Include="SPU2\SpuCore.cpp" />
+    <ClCompile Include="SPU2\Envelope.cpp" />
     <ClCompile Include="SPU2\Reverb.cpp" />
-    <ClCompile Include="SPU2\Windows\dsp.cpp" />
-    <ClCompile Include="SPU2\Linux\Config.cpp">
-      <ExcludedFromBuild>true</ExcludedFromBuild>
-    </ClCompile>
-    <ClCompile Include="SPU2\Linux\Dialogs.cpp">
-      <ExcludedFromBuild>true</ExcludedFromBuild>
-    </ClCompile>
-    <ClCompile Include="SPU2\Windows\CfgHelpers.cpp" />
-    <ClCompile Include="SPU2\Windows\Config.cpp" />
-    <ClCompile Include="SPU2\Windows\ConfigDebug.cpp" />
-    <ClCompile Include="SPU2\Windows\ConfigSoundtouch.cpp" />
-    <ClCompile Include="SPU2\Windows\RealtimeDebugger.cpp" />
-    <ClCompile Include="SPU2\Windows\UIHelpers.cpp" />
-    <ClCompile Include="SPU2\spu2.cpp" />
+    <ClCompile Include="SPU2\Voice.cpp" />
     <ClCompile Include="IPU\IPUdma.cpp" />
     <ClCompile Include="IPU\IPUdither.cpp" />
     <ClCompile Include="Linux\LnxConsolePipe.cpp">
@@ -808,24 +780,13 @@
     <ClInclude Include="PAD\Windows\WindowsMouse.h" />
     <ClInclude Include="PAD\Windows\WndProcEater.h" />
     <ClInclude Include="PAD\Windows\XInputEnum.h" />
-    <ClInclude Include="SPU2\Config.h" />
-    <ClInclude Include="SPU2\Global.h" />
-    <ClInclude Include="SPU2\interpolate_table.h" />
-    <ClInclude Include="SPU2\Lowpass.h" />
-    <ClInclude Include="SPU2\SndOut.h" />
-    <ClInclude Include="SPU2\Linux\Alsa.h" />
-    <ClInclude Include="SPU2\spdif.h" />
-    <ClInclude Include="SPU2\defs.h" />
-    <ClInclude Include="SPU2\Dma.h" />
-    <ClInclude Include="SPU2\regs.h" />
-    <ClInclude Include="SPU2\Mixer.h" />
-    <ClInclude Include="SPU2\Windows\dsp.h" />
-    <ClInclude Include="SPU2\Linux\Config.h" />
-    <ClInclude Include="SPU2\Linux\Dialogs.h" />
-    <ClInclude Include="SPU2\Windows\Dialogs.h" />
-    <ClInclude Include="SPU2\Windows\WinConfig.h" />
-    <ClInclude Include="SPU2\spu2.h" />
-    <ClInclude Include="SPU2\Windows\resource.h" />
+    <ClInclude Include="SPU2\SPU2.h" />
+    <ClInclude Include="SPU2\Output.h" />
+    <ClInclude Include="SPU2\SpuCore.h" />
+    <ClInclude Include="SPU2\Envelope.h" />
+    <ClInclude Include="SPU2\Reverb.h" />
+    <ClInclude Include="SPU2\Util.h" />
+    <ClInclude Include="SPU2\Voice.h" />
     <ClInclude Include="GS\config.h" />
     <ClInclude Include="GS\Renderers\OpenGL\GLLoader.h" />
     <ClInclude Include="GS\Renderers\OpenGL\GLState.h" />
@@ -1100,7 +1061,6 @@
     </ResourceCompile>
     <ResourceCompile Include="GS\GS.rc" />
     <ResourceCompile Include="PAD\Windows\PAD.rc" />
-    <ResourceCompile Include="SPU2\Windows\SPU2.rc" />
     <ResourceCompile Include="DEV9\Win32\DEV9ghzdrk.rc" />
     <ResourceCompile Include="USB\usb-pad\dx\versionproxy.rc" />
     <ResourceCompile Include="USB\usb-pad\raw\raw-config.rc" />
@@ -1110,6 +1070,9 @@
   <ItemGroup>
     <ProjectReference Include="$(SolutionDir)3rdparty\baseclasses\baseclasses.vcxproj">
       <Project>{27f17499-a372-4408-8afa-4f9f4584fbd3}</Project>
+    </ProjectReference>
+    <ProjectReference Include="$(SolutionDir)3rdparty\cubeb\msvc\cubeb.vcxproj">
+      <Project>{90cff783-ec78-404b-87cb-d55c7d17f770}</Project>
     </ProjectReference>
     <ProjectReference Include="$(SolutionDir)3rdparty\fmt\fmt.vcxproj">
       <Project>{449ad25e-424a-4714-babc-68706cdcc33b}</Project>

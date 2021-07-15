@@ -371,13 +371,13 @@ namespace usb_pad
 				unsigned int version;
 				if (ioctl(device.cfg.fd, JSIOCGVERSION, &version) < 0)
 				{
-					SysMessage("%s: Get version failed: %s\n", APINAME, strerror(errno));
+					//SysMessage("%s: Get version failed: %s\n", APINAME, strerror(errno));
 					continue;
 				}
 
 				if (version < 0x010000)
 				{
-					SysMessage("%s: Driver version 0x%X is too old\n", APINAME, version);
+					//SysMessage("%s: Driver version 0x%X is too old\n", APINAME, version);
 					continue;
 				}
 
@@ -386,7 +386,7 @@ namespace usb_pad
 				// Axis Mapping
 				if (ioctl(device.cfg.fd, JSIOCGAXMAP, device.axis_map) < 0)
 				{
-					SysMessage("%s: Axis mapping failed: %s\n", APINAME, strerror(errno));
+					//SysMessage("%s: Axis mapping failed: %s\n", APINAME, strerror(errno));
 					continue;
 				}
 				else
@@ -413,7 +413,7 @@ namespace usb_pad
 				// Button Mapping
 				if (ioctl(device.cfg.fd, JSIOCGBTNMAP, device.btn_map) < 0)
 				{
-					SysMessage("%s: Button mapping failed: %s\n", APINAME, strerror(errno));
+					//SysMessage("%s: Button mapping failed: %s\n", APINAME, strerror(errno));
 					continue;
 				}
 				else

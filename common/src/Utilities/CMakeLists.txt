@@ -48,6 +48,7 @@ set(UtilitiesSources
 # variable with all headers of this library
 set(UtilitiesHeaders
 	../../include/Utilities/Assertions.h
+	../../include/Utilities/Bitfield.h
 	../../include/Utilities/boost_spsc_queue.hpp
 	../../include/Utilities/CheckedStaticBox.h
 	../../include/Utilities/Console.h
@@ -55,6 +56,7 @@ set(UtilitiesHeaders
 	../../include/Utilities/EventSource.h
 	../../include/Utilities/Exceptions.h
 	../../include/Utilities/FixedPointTypes.h
+	../../include/Utilities/fifo.h
 	../../include/Utilities/General.h
 	../../include/Utilities/MakeUnique.h
 	../../include/Utilities/MemcpyFast.h

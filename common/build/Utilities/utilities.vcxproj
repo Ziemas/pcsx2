@@ -115,6 +115,7 @@
     <None Include="..\..\include\Utilities\EventSource.inl" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\..\include\Utilities\Bitfield.h" />
     <ClInclude Include="..\..\include\Utilities\EmbeddedImage.h" />
     <ClInclude Include="..\..\include\Utilities\boost_spsc_queue.hpp" />
     <ClInclude Include="..\..\include\Utilities\ScopedAlloc.h" />
@@ -126,6 +127,7 @@
     <ClInclude Include="..\..\include\Utilities\EventSource.h" />
     <ClInclude Include="..\..\include\Utilities\Exceptions.h" />
     <ClInclude Include="..\..\include\Utilities\FixedPointTypes.h" />
+    <ClInclude Include="..\..\include\Utilities\fifo.h" />
     <ClInclude Include="..\..\include\Utilities\General.h" />
     <ClInclude Include="..\..\include\Utilities\MathUtils.h" />
     <ClInclude Include="..\..\include\Utilities\MakeUnique.h" />

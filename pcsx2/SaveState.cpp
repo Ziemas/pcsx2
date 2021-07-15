@@ -29,7 +29,6 @@
 #include "Counters.h"
 
 #include "Utilities/SafeArray.inl"
-#include "SPU2/spu2.h"
 #include "gui/ConsoleLogger.h"
 
 using namespace R5900;
