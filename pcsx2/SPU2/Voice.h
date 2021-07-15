@@ -36,12 +36,14 @@ namespace SPU
 
 		AudioSample GenSample();
 
-		u16 Read(u32 addr) const;
+		[[nodiscard]] u16 Read(u32 addr) const;
 		void Write(u32 addr, u16 value);
 
 		// The new (for SPU2) full addr regs are a separate range
-		u16 ReadAddr(u32 addr) const;
+		[[nodiscard]] u16 ReadAddr(u32 addr) const;
 		void WriteAddr(u32 addr, u16 value);
+
+		[[nodiscard]] s16 Out() const { return m_Out; }
 
 		bool m_Noise{false};
 		bool m_PitchMod{false};
@@ -64,14 +66,15 @@ namespace SPU
 		void UpdateBlockHeader();
 
 		SPUCore& m_SPU;
-		u32 m_Id{0};
+		s32 m_Id{0};
 
 		FIFO<s16, 0x20> m_DecodeBuf{};
 		s16 m_DecodeHist1{0};
 		s16 m_DecodeHist2{0};
 		u32 m_Counter{0};
 
-		u32 m_Pitch{0};
+		u16 m_Pitch{0};
+		s16 m_Out{0};
 
 		Reg32 m_SSA{0};
 		Reg32 m_NAX{0};

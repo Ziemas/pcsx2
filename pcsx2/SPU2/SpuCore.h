@@ -47,6 +47,7 @@ namespace SPU
 		void DmaWrite(u16* madr, u32 size);
 		void DmaRead(u16* madr, u32 size);
 		u16 Ram(u32 address) { return m_RAM[address & 0xFFFFF]; }
+		Voice& GetVoice(int n) { return m_voices[n]; }
 
 	private:
 		enum class TransferMode : u8
