@@ -41,9 +41,10 @@ namespace SPU
 			MemOutER = 0x1600,
 		};
 
-		SPUCore(u16* ram, u32 id)
+		SPUCore(u16* ram, u32 id, SpuSharedState& irq)
 			: m_Id(id)
 			, m_RAM(ram)
+			, m_IRQ(irq)
 		{
 		}
 
@@ -61,45 +62,17 @@ namespace SPU
 		u16 Ram(u32 address) { return m_RAM[address & 0xFFFFF]; }
 		Voice& GetVoice(int n) { return m_voices[n]; }
 		void MemOut(OutBuf buffer, s16 value);
+		void TestIrq(u32 address);
 
 
 	private:
-		enum class TransferMode : u8
-		{
-			Stopped = 0,
-			ManualWrite = 1,
-			DMAWrite = 2,
-			DMARead = 3,
-		};
-
 		static constexpr u32 BufSize = 0x100;
 		static constexpr u32 OutBufCoreOffset = 0x800;
 		static constexpr u32 InBufOffset = 0x400;
-
 		enum class InBuf
 		{
 			MeminL = 0x2000,
 			MeminR = 0x2200,
-		};
-
-
-		union Attr
-		{
-			u16 bits;
-
-			// iirc enable works like a reset switch here
-			// driver flips enable on and expects DMA stuff to be reset
-			BitField<u16, bool, 15, 1> Enable;
-			BitField<u16, bool, 14, 1> OutputEnable;
-			BitField<u16, u8, 8, 6> NoiseClock;
-			BitField<u16, bool, 7, 1> EffectEnable;
-			BitField<u16, bool, 6, 1> IRQEnable;
-			BitField<u16, TransferMode, 4, 2> CurrentTransMode;
-			// unknown if these do anything in ps2 mode
-			BitField<u16, bool, 3, 1> ExtReverb;
-			BitField<u16, bool, 2, 1> CDAReverb;
-			BitField<u16, bool, 1, 1> EXTEnable;
-			BitField<u16, bool, 0, 1> CDAEnable;
 		};
 
 		union Status
@@ -139,11 +112,11 @@ namespace SPU
 			BitField<u16, bool, 0, 1> SinWetL;
 		};
 
-		bool AdmaActive() { return m_Id ? m_Adma.Core2.GetValue() : m_Adma.Core1.GetValue(); };
+		[[nodiscard]] bool AdmaActive() const { return m_Id ? m_Adma.Core2.GetValue() : m_Adma.Core1.GetValue(); };
 
 		u16* m_RAM;
+		SpuSharedState& m_IRQ;
 
-		Attr m_Attr{0};
 		Status m_Stat{0};
 
 		ADMA m_Adma{0};
