@@ -73,4 +73,47 @@ namespace SPU
 		BitField<u32, u16, 16, 16> hi;
 		BitField<u32, u16, 0, 16> lo;
 	};
+
+	enum class TransferMode : u8
+	{
+		Stopped = 0,
+		ManualWrite = 1,
+		DMAWrite = 2,
+		DMARead = 3,
+	};
+
+	union AttrReg
+	{
+		u16 bits;
+
+		// iirc enable works like a reset switch here
+		// driver flips enable on and expects DMA stuff to be reset
+		BitField<u16, bool, 15, 1> Enable;
+		BitField<u16, bool, 14, 1> OutputEnable;
+		BitField<u16, u8, 8, 6> NoiseClock;
+		BitField<u16, bool, 7, 1> EffectEnable;
+		BitField<u16, bool, 6, 1> IRQEnable;
+		BitField<u16, TransferMode, 4, 2> CurrentTransMode;
+		// unknown if these do anything in ps2 mode
+		BitField<u16, bool, 3, 1> ExtReverb;
+		BitField<u16, bool, 2, 1> CDAReverb;
+		BitField<u16, bool, 1, 1> EXTEnable;
+		BitField<u16, bool, 0, 1> CDAEnable;
+	};
+
+	struct SpuSharedState
+	{
+		std::array<Reg32, 2> IRQA{0x800, 0x800};
+		std::array<AttrReg, 2> Attr{};
+		union IrqStat
+		{
+			u32 bits;
+
+			BitField<u32, bool, 4, 1> BufferHalf;
+			BitField<u32, bool, 3, 1> CauseC1;
+			BitField<u32, bool, 2, 1> CauseC0;
+		} IrqStat{0};
+	};
+
+
 } // namespace SPU
