@@ -99,7 +99,8 @@ namespace SPU
 	public:
 		void Run();
 		void Set(u16 volume);
-		[[nodiscard]] s16 Get() const;
+		[[nodiscard]] u16 Get() const;
+		[[nodiscard]] s16 GetCurrent() const;
 
 	private:
 		VolReg m_Sweep{0};

@@ -200,8 +200,8 @@ namespace SPU
 		if (m_Id == 3)
 			m_SPU.MemOut(SPUCore::OutBuf::Voice3, sample);
 
-		s16 left = ApplyVolume(sample, m_Volume.left.Get());
-		s16 right = ApplyVolume(sample, m_Volume.right.Get());
+		s16 left = ApplyVolume(sample, m_Volume.left.GetCurrent());
+		s16 right = ApplyVolume(sample, m_Volume.right.GetCurrent());
 
 		return AudioSample(left, right);
 	}
@@ -222,6 +222,10 @@ namespace SPU
 				return m_ADSR.m_Reg.hi.GetValue();
 			case 10:
 				return m_ADSR.Level();
+			case 12:
+				return m_Volume.left.GetCurrent();
+			case 14:
+				return m_Volume.right.GetCurrent();
 			default:
 				Console.WriteLn("UNHANDLED SPU[%d]:VOICE[%d] READ ---- <- %04x", m_SPU.m_Id, m_Id, addr);
 				pxAssertMsg(false, "Unhandled SPU Write");
