@@ -114,6 +114,7 @@ namespace SPU
 			BitField<u16, bool, 0, 1> SinWetL;
 		};
 
+		bool AdmaActive() { return m_Id ? m_Adma.Core2.GetValue() : m_Adma.Core1.GetValue(); };
 
 		u16* m_RAM;
 
