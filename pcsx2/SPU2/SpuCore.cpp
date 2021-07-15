@@ -64,9 +64,7 @@ namespace SPU
 	void SPUCore::DmaWrite(u16* madr, u32 size)
 	{
 		Console.WriteLn(ConsoleColors::Color_Cyan, "SPU[%d] Dma %d shorts to %06x", m_Id, size, m_InternalTSA);
-		if (m_Id == 0 && m_Adma.Core1)
-			return;
-		if (m_Id == 1 && m_Adma.Core2)
+		if (AdmaActive())
 			return;
 		memcpy(&m_RAM[m_InternalTSA], madr, size * 2);
 		m_InternalTSA + size;
@@ -86,6 +84,8 @@ namespace SPU
 
 	void SPUCore::DmaRead(u16* madr, u32 size)
 	{
+        if (AdmaActive())
+            return;
 		memcpy(madr, &m_RAM[m_TSA.full], size * 2);
 		if (m_Id == 0)
 		{
