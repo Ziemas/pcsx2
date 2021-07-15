@@ -147,13 +147,17 @@ namespace SPU
 
 	s16 Reverb::RD_RVB(s32 address, s32 offset)
 	{
+		m_SPU.TestIrq(Offset(address + offset));
 		return static_cast<s16>(m_SPU.Ram(Offset(address + offset)));
 	}
 
 	void Reverb::WR_RVB(s32 address, s16 sample)
 	{
 		if (m_Enable)
+		{
+			m_SPU.TestIrq(Offset(address));
 			m_SPU.WriteMem(Offset(address), static_cast<u16>(sample));
+		}
 	}
 
 	AudioSample Reverb::Run(AudioSample input)
