@@ -45,6 +45,28 @@ namespace SPU
 
 		[[nodiscard]] s16 Out() const { return m_Out; }
 
+		void Reset()
+		{
+			m_Noise = false;
+			m_PitchMod = false;
+			m_KeyOn = false;
+			m_KeyOff = false;
+			m_ENDX = false;
+
+			m_DecodeBuf.Reset();
+			m_DecodeHist1 = 0;
+			m_DecodeHist2 = 0;
+			m_Counter = 0;
+			m_Pitch = 0;
+			m_SSA.full = 0;
+			m_NAX.full = 0;
+			m_LSA.full = 0;
+			m_CustomLoop = false;
+			m_CurHeader.bits = 0;
+			m_ADSR.Reset();
+			m_Volume.Reset();
+		}
+
 		bool m_Noise{false};
 		bool m_PitchMod{false};
 		bool m_KeyOn{false};

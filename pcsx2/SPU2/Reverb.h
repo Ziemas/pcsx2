@@ -59,6 +59,44 @@ namespace SPU
 		s16 vAPF2{0};
 		s16 vIN[2]{0};
 
+		void Reset()
+		{
+			for (auto& r : dAPF)
+				r.full = 0;
+			for (auto& r : mSAME)
+				r.full = 0;
+			for (auto& r : mCOMB1)
+				r.full = 0;
+			for (auto& r : mCOMB2)
+				r.full = 0;
+			for (auto& r : dSAME)
+				r.full = 0;
+			for (auto& r : mDIFF)
+				r.full = 0;
+			for (auto& r : mCOMB3)
+				r.full = 0;
+			for (auto& r : mCOMB4)
+				r.full = 0;
+			for (auto& r : dDIFF)
+				r.full = 0;
+			for (auto& r : mAPF1)
+				r.full = 0;
+			for (auto& r : mAPF2)
+				r.full = 0;
+			for (auto& r : vIN)
+				r = 0;
+			vIIR = 0;
+			vCOMB1 = 0;
+			vCOMB2 = 0;
+			vCOMB3 = 0;
+			vCOMB4 = 0;
+			vWALL = 0;
+			vAPF1 = 0;
+			vAPF2 = 0;
+			m_Phase = 0;
+			m_pos = 0;
+		}
+
 	private:
 		static constexpr u32 NUM_TAPS = 39;
 
