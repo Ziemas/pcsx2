@@ -46,6 +46,7 @@ namespace SPU
 			vWetR >>= 1;
 		}
 
+		input.Volume(m_AVOL);
 		Dry.Mix(input, m_MMIX.SinL, m_MMIX.SinR);
 		Wet.Mix(input, m_MMIX.SinWetL, m_MMIX.SinWetR);
 
