@@ -216,6 +216,46 @@ namespace SPU
 		}
 		switch (addr)
 		{
+			case 0x180:
+			{
+				u32 ret = 0;
+				for (int i = 0; i < 24; i++)
+				{
+					if (m_voices[i].m_PitchMod)
+						SET_BIT(ret, i);
+				}
+				return GET_LOW(ret);
+			}
+			case 0x182:
+			{
+				u32 ret = 0;
+				for (int i = 0; i < 24; i++)
+				{
+					if (m_voices[i].m_PitchMod)
+						SET_BIT(ret, i);
+				}
+				return GET_HIGH(ret);
+			}
+			case 0x184:
+			{
+				u32 ret = 0;
+				for (int i = 0; i < 24; i++)
+				{
+					if (m_voices[i].m_Noise)
+						SET_BIT(ret, i);
+				}
+				return GET_LOW(ret);
+			}
+			case 0x186:
+			{
+				u32 ret = 0;
+				for (int i = 0; i < 24; i++)
+				{
+					if (m_voices[i].m_Noise)
+						SET_BIT(ret, i);
+				}
+				return GET_HIGH(ret);
+			}
 			case 0x188:
 				return m_VMIXL.lo.GetValue();
 			case 0x18A:
