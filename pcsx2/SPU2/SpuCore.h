@@ -112,6 +112,8 @@ namespace SPU
 			BitField<u16, bool, 0, 1> SinWetL;
 		};
 
+
+		void RunADMA();
 		[[nodiscard]] bool AdmaActive() const { return m_Id ? m_Adma.Core2.GetValue() : m_Adma.Core1.GetValue(); };
 
 		u16* m_RAM;
@@ -120,6 +122,8 @@ namespace SPU
 		Status m_Stat{0};
 
 		ADMA m_Adma{0};
+		u16* m_MADR{0};
+		u32 m_DmaSize{0};
 
 		u32 m_BufPos{0};
 		u32 m_CurrentBuffer{0};
