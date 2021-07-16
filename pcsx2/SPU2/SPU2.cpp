@@ -16,6 +16,7 @@
 #include "SPU2.h"
 #include "SpuCore.h"
 #include "common/Console.h"
+#include "common/MemcpyFast.h"
 #include "Output.h"
 
 namespace SPU
@@ -146,6 +147,12 @@ namespace SPU
 
 	void Reset(PS2Modes isRunningPSXMode)
 	{
+		for (auto& c : cores)
+			c.Reset();
+
+		memzero(SPU_RAM);
+		irq.IrqStat.bits = 0;
+
 		Console.WriteLn("SPU RESET");
 		if (output != nullptr)
 			fclose(output);

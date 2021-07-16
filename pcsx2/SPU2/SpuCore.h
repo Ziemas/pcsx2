@@ -64,6 +64,7 @@ namespace SPU
 		void MemOut(OutBuf buffer, s16 value);
 		void TestIrq(u32 address);
 
+		void Reset();
 
 	private:
 		static constexpr u32 BufSize = 0x100;
@@ -122,7 +123,7 @@ namespace SPU
 		Status m_Stat{0};
 
 		ADMA m_Adma{0};
-		u16* m_MADR{0};
+		u16* m_MADR{nullptr};
 		u32 m_DmaSize{0};
 
 		u32 m_BufPos{0};

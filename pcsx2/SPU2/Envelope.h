@@ -89,6 +89,18 @@ namespace SPU
 		void UpdateSettings();
 		ADSRReg m_Reg{0};
 
+		void Reset()
+		{
+			m_Phase = Phase::Stopped;
+			m_Target = 0;
+			m_Counter = 0;
+			m_Level = 0;
+			m_Exp = false;
+			m_Decrease = false;
+			m_Step = 0;
+			m_Shift = 0;
+		}
+
 	private:
 		Phase m_Phase{Phase::Stopped};
 		s32 m_Target{0};
@@ -101,6 +113,12 @@ namespace SPU
 		void Set(u16 volume);
 		[[nodiscard]] u16 Get() const;
 		[[nodiscard]] s16 GetCurrent() const;
+
+		void Reset()
+		{
+			m_Vol = 0;
+			m_Sweep.bits = 0;
+		}
 
 	private:
 		VolReg m_Sweep{0};
@@ -116,6 +134,12 @@ namespace SPU
 		{
 			left.Run();
 			right.Run();
+		}
+
+		void Reset()
+		{
+			left.Reset();
+			right.Reset();
 		}
 	};
 

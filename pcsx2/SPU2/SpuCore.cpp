@@ -743,4 +743,28 @@ namespace SPU
 				pxAssertMsg(false, "Unhandled SPU Write");
 		}
 	}
+
+	void SPUCore::Reset()
+	{
+		m_Stat.bits = 0;
+		m_Adma.bits = 0;
+		m_MADR = nullptr;
+		m_DmaSize = 0;
+		m_BufPos = 0;
+		m_CurrentBuffer = 0;
+		m_TSA.full = 0;
+		m_AVOL = {0};
+		m_BVOL = {0};
+		m_EVOL = {0};
+		m_MMIX.bits = 0;
+		m_VMIXL.full = 0;
+		m_VMIXR.full = 0;
+		m_VMIXEL.full = 0;
+		m_VMIXER.full = 0;
+		m_IRQ.IRQA[m_Id].full = 0x800;
+		m_IRQ.Attr[m_Id].bits = 0;
+		m_Reverb.Reset();
+		for (auto& v : m_voices)
+			v.Reset();
+	}
 } // namespace SPU
