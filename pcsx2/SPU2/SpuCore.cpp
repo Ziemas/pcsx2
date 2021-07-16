@@ -52,13 +52,28 @@ namespace SPU
 		MemOut(OutBuf::MemOutL, Dry.left);
 		MemOut(OutBuf::MemOutR, Dry.right);
 
+		AudioSample MemIn(0, 0);
+
+		if (AdmaActive())
+		{
+			auto displacement = (m_CurrentBuffer * BufSize) + m_BufPos + (m_Id * InBufOffset);
+			auto laddress = static_cast<u32>(InBuf::MeminL) + displacement;
+			auto raddress = static_cast<u32>(InBuf::MeminR) + displacement;
+			MemIn.left = static_cast<s16>(m_RAM[laddress]);
+			MemIn.right = static_cast<s16>(m_RAM[raddress]);
+			MemIn.Volume(m_BVOL);
+		}
+
+		Dry.Mix(MemIn, m_MMIX.MeminL, m_MMIX.MeminR);
+		Wet.Mix(MemIn, m_MMIX.MeminWetL, m_MMIX.MeminWetR);
+
 		auto EOut = m_Reverb.Run(Wet);
 		EOut.Volume(m_EVOL);
 
 		MemOut(OutBuf::MemOutEL, EOut.left);
 		MemOut(OutBuf::MemOutER, EOut.right);
 
-		AudioSample Out;
+		AudioSample Out(0, 0);
 		Out.Mix(Dry, m_MMIX.VoiceL, m_MMIX.VoiceR);
 		Out.Mix(EOut, m_MMIX.VoiceWetL, m_MMIX.VoiceWetR);
 
