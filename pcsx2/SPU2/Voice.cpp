@@ -243,6 +243,10 @@ namespace SPU
 				return m_SSA.hi.GetValue();
 			case 2:
 				return m_SSA.lo.GetValue();
+			case 4:
+				return m_LSA.hi.GetValue();
+			case 6:
+				return m_LSA.lo.GetValue();
 			case 8:
 				return m_NAX.hi.GetValue();
 			case 10:
