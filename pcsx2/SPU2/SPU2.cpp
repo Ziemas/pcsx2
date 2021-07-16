@@ -76,6 +76,9 @@ namespace SPU
 
 	u16 Read(u32 addr)
 	{
+		if (addr >= 0x1F900800)
+			return 0;
+
 		addr &= 0x7FF;
 
 		if (addr < 0x760)
@@ -109,6 +112,9 @@ namespace SPU
 
 	void Write(u32 addr, u16 value)
 	{
+		if (addr >= 0x1F900800)
+			return;
+
 		addr &= 0x7FF;
 
 		if (addr < 0x760)
