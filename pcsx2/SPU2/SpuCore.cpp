@@ -89,6 +89,7 @@ namespace SPU
 				RunADMA();
 		}
 
+		m_Noise.Run();
 		return Out;
 	}
 
@@ -478,6 +479,7 @@ namespace SPU
 						m_IRQ.IrqStat.CauseC1 = false;
 				}
 				m_Reverb.m_Enable = m_IRQ.Attr[m_Id].EffectEnable;
+				m_Noise.SetClock(m_IRQ.Attr[m_Id].NoiseClock.GetValue());
 				break;
 			case 0x19C:
 				m_IRQ.IRQA[m_Id].hi = value;
@@ -766,5 +768,6 @@ namespace SPU
 		m_Reverb.Reset();
 		for (auto& v : m_voices)
 			v.Reset();
+		m_Noise.Reset();
 	}
 } // namespace SPU

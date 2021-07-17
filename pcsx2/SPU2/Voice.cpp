@@ -165,13 +165,19 @@ namespace SPU
 		//   or do we decode 4 samples and interpolate using the first 4?
 		//   mednafen does the latter, and i could see why that might make sense
 
-		// TODO noise
 		s16 sample = 0;
-		u32 index = (m_Counter & 0x0FF0) >> 4;
-		sample = static_cast<s16>(sample + ((m_DecodeBuf.Peek(0) * gaussianTable[index][0]) >> 15));
-		sample = static_cast<s16>(sample + ((m_DecodeBuf.Peek(1) * gaussianTable[index][1]) >> 15));
-		sample = static_cast<s16>(sample + ((m_DecodeBuf.Peek(2) * gaussianTable[index][2]) >> 15));
-		sample = static_cast<s16>(sample + ((m_DecodeBuf.Peek(3) * gaussianTable[index][3]) >> 15));
+		if (m_Noise)
+		{
+			sample = m_SPU.NoiseLevel();
+		}
+		else
+		{
+			u32 index = (m_Counter & 0x0FF0) >> 4;
+			sample = static_cast<s16>(sample + ((m_DecodeBuf.Peek(0) * gaussianTable[index][0]) >> 15));
+			sample = static_cast<s16>(sample + ((m_DecodeBuf.Peek(1) * gaussianTable[index][1]) >> 15));
+			sample = static_cast<s16>(sample + ((m_DecodeBuf.Peek(2) * gaussianTable[index][2]) >> 15));
+			sample = static_cast<s16>(sample + ((m_DecodeBuf.Peek(3) * gaussianTable[index][3]) >> 15));
+		}
 
 		s32 step = m_Pitch;
 		if (m_PitchMod && m_Id > 0)

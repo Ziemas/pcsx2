@@ -306,6 +306,7 @@ set(pcsx2SPU2Sources
 	SPU2/Output.cpp
 	SPU2/SpuCore.cpp
 	SPU2/Envelope.cpp
+	SPU2/Noise.cpp
 	SPU2/Reverb.cpp
 	SPU2/Voice.cpp
 	)
@@ -316,6 +317,7 @@ set(pcsx2SPU2Headers
 	SPU2/Output.h
 	SPU2/SpuCore.h
 	SPU2/Envelope.h
+	SPU2/Noise.h
 	SPU2/Reverb.h
 	SPU2/Util.h
 	SPU2/Voice.h

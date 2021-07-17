@@ -331,6 +331,7 @@
     <ClCompile Include="SPU2\Output.cpp" />
     <ClCompile Include="SPU2\SpuCore.cpp" />
     <ClCompile Include="SPU2\Envelope.cpp" />
+    <ClCompile Include="SPU2\Noise.cpp" />
     <ClCompile Include="SPU2\Reverb.cpp" />
     <ClCompile Include="SPU2\Voice.cpp" />
     <ClCompile Include="IPU\IPUdma.cpp" />
@@ -733,6 +734,7 @@
     <ClInclude Include="SPU2\Output.h" />
     <ClInclude Include="SPU2\SpuCore.h" />
     <ClInclude Include="SPU2\Envelope.h" />
+    <ClInclude Include="SPU2\Noise.h" />
     <ClInclude Include="SPU2\Reverb.h" />
     <ClInclude Include="SPU2\Util.h" />
     <ClInclude Include="SPU2\Voice.h" />
