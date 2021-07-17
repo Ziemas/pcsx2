@@ -14,6 +14,7 @@
  */
 
 #include "Envelope.h"
+#include "common/Console.h"
 #include <algorithm>
 #include <array>
 
@@ -46,7 +47,7 @@ namespace SPU
 		if (m_Counter >= 0x800000)
 		{
 			m_Counter = 0;
-			m_Level = std::clamp<s32>(m_Level + step, 0, 0x7FFF);
+			m_Level = std::clamp<s32>(m_Level + step, 0, INT16_MAX);
 		}
 	}
 
@@ -146,21 +147,43 @@ namespace SPU
 		return static_cast<s16>(m_Level);
 	}
 
-	void Volume::Run() {}
+	void Volume::Run()
+	{
+		if (!m_Sweep.EnableSweep)
+			return;
+
+		Step();
+	}
 
 	void Volume::Set(u16 volume)
 	{
-		VolReg reg{0};
-		reg.bits = volume;
+		m_Sweep.bits = volume;
 
-		if (!reg.EnableSweep)
+		if (!m_Sweep.EnableSweep)
 		{
-			m_Vol = static_cast<s16>(volume << 1);
+			m_Level = static_cast<s16>(m_Sweep.bits << 1);
 			return;
 		}
 
-		m_Sweep.bits = reg.bits;
-		// TODO Sweep
+		m_Exp = m_Sweep.SweepExp;
+		m_Decrease = m_Sweep.SweepDecrease;
+		m_Shift = m_Sweep.SweepShift;
+		m_Step = m_Decrease ? static_cast<s8>(-8 + m_Sweep.SweepStep.GetValue()) :
+                              static_cast<s8>(7 - m_Sweep.SweepStep.GetValue());
+
+		if (m_Exp && m_Decrease)
+		{
+			if (m_Sweep.NegativePhase)
+				Console.WriteLn("Disqualified from inv");
+			m_Inv = false;
+		}
+		else
+		{
+			m_Inv = m_Sweep.NegativePhase;
+		}
+
+		Console.WriteLn(Color_Red, "start sweep, e:%d d:%d sh:%d st:%d inv:%d", m_Exp, m_Decrease, m_Shift, m_Step, m_Inv);
+		Console.WriteLn(Color_Red, "Current level %08x", m_Level);
 	}
 
 	u16 Volume::Get() const
@@ -170,6 +193,6 @@ namespace SPU
 
 	s16 Volume::GetCurrent() const
 	{
-		return m_Vol;
+		return static_cast<s16>(m_Level);
 	}
 } // namespace SPU
