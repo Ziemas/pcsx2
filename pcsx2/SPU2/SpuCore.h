@@ -18,6 +18,7 @@
 #include "common/Pcsx2Types.h"
 #include "common/Bitfield.h"
 #include "common/fifo.h"
+#include "Noise.h"
 #include "Reverb.h"
 #include "Voice.h"
 #include "Util.h"
@@ -63,6 +64,7 @@ namespace SPU
 		Voice& GetVoice(int n) { return m_voices[n]; }
 		void MemOut(OutBuf buffer, s16 value);
 		void TestIrq(u32 address);
+		[[nodiscard]] s16 NoiseLevel() const { return m_Noise.Get(); }
 
 		void Reset();
 
@@ -130,6 +132,7 @@ namespace SPU
 		u32 m_CurrentBuffer{0};
 
 		Reverb m_Reverb{*this};
+		Noise m_Noise{};
 
 		Reg32 m_TSA{0};
 		u32 m_InternalTSA{0};
