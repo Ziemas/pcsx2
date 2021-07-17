@@ -60,9 +60,9 @@ namespace SPU
 		}
 
 		void Volume(PlainVolReg vol)
-        {
+		{
 			left = ApplyVolume(left, vol.left);
-            right = ApplyVolume(right, vol.left);
+			right = ApplyVolume(right, vol.right);
 		}
 	};
 
