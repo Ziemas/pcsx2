@@ -41,7 +41,7 @@ namespace SPU
 
 	struct AudioSample
 	{
-		AudioSample() {}
+		AudioSample() = default;
 		AudioSample(s16 left, s16 right)
 			: left(left)
 			, right(right)
