@@ -113,7 +113,10 @@ namespace SPU
 
 				if (!m_CurHeader.LoopRepeat)
 				{
-					m_ADSR.Stop();
+					// Need to inhibit stopping here in noise is on
+					// seems to result in the right thing but would like to verify
+					if (!m_Noise)
+						m_ADSR.Stop();
 				}
 			}
 
