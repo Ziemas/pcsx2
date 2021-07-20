@@ -86,7 +86,7 @@ namespace SPU
 		size_t size = m_SampleBuf.write - m_SampleBuf.read;
 		if (size == 0x2000)
 		{
-			Console.Warning("Buffer overrun, stopping write");
+			//Console.Warning("Buffer overrun, stopping write");
 			return;
 		}
 		size_t prev = m_SampleBuf.write.fetch_add(1, std::memory_order_relaxed);
