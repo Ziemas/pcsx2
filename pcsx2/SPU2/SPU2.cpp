@@ -50,8 +50,7 @@ namespace SPU
 			S16Out out{};
 			out.left = core1.left;
 			out.right = core1.right;
-			fwrite(&out.left, sizeof(s16), 1, output);
-			fwrite(&out.right, sizeof(s16), 1, output);
+			//fwrite(&out, sizeof(S16Out), 1, output);
 
 			snd.Push(out);
 		}
