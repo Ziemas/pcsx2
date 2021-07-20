@@ -23,7 +23,7 @@ struct psxCounter {
 	s32 CycleT;
 };
 
-#define NUM_COUNTERS 8
+#define NUM_COUNTERS 9
 
 extern psxCounter psxCounters[NUM_COUNTERS];
 
