@@ -18,6 +18,7 @@
 #include "common/Console.h"
 #include "common/MemcpyFast.h"
 #include "Output.h"
+#include "IopHw.h"
 
 namespace SPU
 {
@@ -31,6 +32,7 @@ namespace SPU
 	};
 
 	u32 spuCycles = 0;
+	u32 dmaCycles = 0;
 
 	SndOutput snd{};
 
@@ -52,6 +54,19 @@ namespace SPU
 			fwrite(&out.right, sizeof(s16), 1, output);
 
 			snd.Push(out);
+		}
+	}
+
+	void RunDma(u32 cycles)
+	{
+		dmaCycles += cycles;
+		while (dmaCycles >= 1024)
+		{
+			dmaCycles -= 1024;
+			if (HW_DMA4_CHCR & (1 << 24))
+				cores[0].RunDma();
+			if (HW_DMA7_CHCR & (1 << 24))
+				cores[1].RunDma();
 		}
 	}
 

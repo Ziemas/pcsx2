@@ -168,7 +168,11 @@ void psxRcntInit()
 	psxCounters[7].CycleT = psxCounters[7].rate;
 	psxCounters[7].mode = 0x8;
 
-	for (i = 0; i < 8; i++)
+	psxCounters[8].rate = 1024;
+	psxCounters[8].CycleT = psxCounters[8].rate;
+	psxCounters[8].mode = 0x8;
+
+	for (i = 0; i < NUM_COUNTERS; i++)
 		psxCounters[i].sCycleT = psxRegs.cycle;
 
 	// Tell the IOP to branch ASAP, so that timers can get
@@ -524,6 +528,21 @@ void psxRcntUpdate()
 
 	if (cusb < psxNextCounter)
 		psxNextCounter = cusb;
+
+
+	const s32 diffspudma = psxRegs.cycle - psxCounters[8].sCycleT;
+	s32 cspudma = psxCounters[8].CycleT;
+
+	if (diffspudma >= psxCounters[8].CycleT)
+	{
+		psxCounters[8].sCycleT = psxRegs.cycle;
+		psxCounters[8].CycleT = psxCounters[8].rate;
+		SPU::RunDma(diffspudma);
+	}
+	else
+		cspudma -= diffspudma;
+	if (cspudma < psxNextCounter)
+		psxNextCounter = cspudma;
 
 	for (i = 0; i < 6; i++)
 		_rcntSet(i);

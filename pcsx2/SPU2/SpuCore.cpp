@@ -111,6 +111,38 @@ namespace SPU
 		}
 	}
 
+	void SPUCore::RunDma()
+	{
+		if (AdmaActive())
+			return;
+
+		if (m_IRQ.Attr[m_Id].CurrentTransMode == TransferMode::DMAWrite)
+			memcpy(&m_RAM[m_InternalTSA], m_MADR, DmaFifoSize * 2);
+		if (m_IRQ.Attr[m_Id].CurrentTransMode == TransferMode::DMARead)
+			memcpy(m_MADR, &m_RAM[m_InternalTSA], DmaFifoSize * 2);
+
+		m_InternalTSA += DmaFifoSize;
+		m_MADR += DmaFifoSize;
+		m_DmaSize -= DmaFifoSize;
+
+		if (m_Id == 0)
+			HW_DMA4_MADR += DmaFifoSize * 2;
+		if (m_Id == 1)
+			HW_DMA7_MADR += DmaFifoSize * 2;
+
+		if (m_DmaSize <= 0)
+		{
+			// This would not happen instantly on hw as the fifo needs time to drain
+			m_Stat.DMABusy = false;
+			m_Stat.DMARequest = true;
+
+			if (m_Id == 0)
+				spu2DMA4Irq();
+			if (m_Id == 1)
+				spu2DMA7Irq();
+		}
+	}
+
 	void SPUCore::WriteMem(u32 addr, u16 value)
 	{
 		m_RAM[addr] = value;
@@ -140,7 +172,7 @@ namespace SPU
 		if (m_DmaSize <= 0)
 		{
 			m_Stat.DMABusy = false;
-			m_Stat.DMAReady = true;
+			m_Stat.DMARequest = true;
 
 			if (m_Id == 0)
 				spu2DMA4Irq();
@@ -151,47 +183,31 @@ namespace SPU
 
 	void SPUCore::DmaWrite(u16* madr, u32 size)
 	{
-		Console.WriteLn(ConsoleColors::Color_Cyan, "SPU[%d] Dma %d shorts to %06x", m_Id, size, m_InternalTSA);
+		//Console.WriteLn(ConsoleColors::Color_Cyan, "SPU[%d] Dma WRITE %d shorts to %06x", m_Id, size, m_InternalTSA);
 		if (AdmaActive())
 		{
 			m_Stat.DMABusy = true;
-			m_Stat.DMAReady = false;
+			m_Stat.DMARequest = false;
 
 			m_DmaSize = size;
 			m_MADR = madr;
 			return;
 		}
-		memcpy(&m_RAM[m_InternalTSA], madr, size * 2);
-		m_InternalTSA + size;
-		m_Stat.DMABusy = false;
-		m_Stat.DMAReady = true;
-		if (m_Id == 0)
-		{
-			HW_DMA4_MADR += size * 2;
-			spu2DMA4Irq();
-		}
-		else
-		{
-			HW_DMA7_MADR += size * 2;
-			spu2DMA7Irq();
-		}
+
+		m_DmaSize = size;
+		m_MADR = madr;
+		RunDma();
 	}
 
 	void SPUCore::DmaRead(u16* madr, u32 size)
 	{
-        if (AdmaActive())
-            return;
-		memcpy(madr, &m_RAM[m_TSA.full], size * 2);
-		if (m_Id == 0)
-		{
-			HW_DMA4_MADR += size * 2;
-			spu2DMA4Irq();
-		}
-		else
-		{
-			HW_DMA7_MADR += size * 2;
-			spu2DMA7Irq();
-		}
+		//Console.WriteLn(ConsoleColors::Color_Cyan, "SPU[%d] Dma READ %d shorts from %06x", m_Id, size, m_InternalTSA);
+		if (AdmaActive())
+			return;
+
+		m_DmaSize = size;
+		m_MADR = madr;
+		RunDma();
 	}
 
 	void SPUCore::MemOut(SPUCore::OutBuf buffer, s16 value)

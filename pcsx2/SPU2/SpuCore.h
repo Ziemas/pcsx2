@@ -58,6 +58,7 @@ namespace SPU
 
 		void WriteMem(u32 addr, u16 value);
 
+		void RunDma();
 		void DmaWrite(u16* madr, u32 size);
 		void DmaRead(u16* madr, u32 size);
 		u16 Ram(u32 address) { return m_RAM[address & 0xFFFFF]; }
@@ -69,6 +70,7 @@ namespace SPU
 		void Reset();
 
 	private:
+		static constexpr u32 DmaFifoSize = 0x20;
 		static constexpr u32 BufSize = 0x100;
 		static constexpr u32 OutBufCoreOffset = 0x800;
 		static constexpr u32 InBufOffset = 0x400;
@@ -82,8 +84,16 @@ namespace SPU
 		{
 			u16 bits;
 
+			// These two bits match PS1, maybe check others
+			// although these are the only two libsd cares about
+
+			// True while transfer in progress?
+			// not observable in our implementation?
 			BitField<u16, bool, 10, 1> DMABusy;
-			BitField<u16, bool, 7, 1> DMAReady;
+			// if dma mode this will be false while the fifo is filled
+			// and true when drained
+			// libsd's dma irq handler waits for the buffer to finish draining
+			BitField<u16, bool, 7, 1> DMARequest;
 		};
 
 		union ADMA
