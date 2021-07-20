@@ -90,6 +90,8 @@ namespace SPU
 		}
 
 		m_Noise.Run();
+		m_MVOL.Run();
+		Out.Volume(m_MVOL);
 		return Out;
 	}
 

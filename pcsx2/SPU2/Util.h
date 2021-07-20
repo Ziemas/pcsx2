@@ -17,6 +17,7 @@
 
 #include "common/Bitfield.h"
 #include "common/Pcsx2Types.h"
+#include "Envelope.h"
 #include <algorithm>
 
 namespace SPU
@@ -63,6 +64,12 @@ namespace SPU
 		{
 			left = ApplyVolume(left, vol.left);
 			right = ApplyVolume(right, vol.right);
+		}
+
+		void Volume(VolumePair vol)
+		{
+			left = ApplyVolume(left, vol.left.GetCurrent());
+			right = ApplyVolume(right, vol.right.GetCurrent());
 		}
 	};
 
