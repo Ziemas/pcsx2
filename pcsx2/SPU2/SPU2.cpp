@@ -71,12 +71,12 @@ namespace SPU
 
 	void InterruptDMA4()
 	{
-		Console.WriteLn("SPU irq dma4");
+		//Console.WriteLn("SPU irq dma4");
 	}
 
 	void InterruptDMA7()
 	{
-		Console.WriteLn("SPU irq dma7");
+		//Console.WriteLn("SPU irq dma7");
 	}
 
 	void WriteDMA(u32 core, u16* madr, u32 size)
