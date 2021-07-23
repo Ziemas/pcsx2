@@ -37,17 +37,17 @@ namespace SPU
 		Reg32 m_EEA{0};
 		u32 m_pos{0};
 
-		Reg32 dAPF[2]{0};
-		Reg32 mSAME[2]{0};
-		Reg32 mCOMB1[2]{0};
-		Reg32 mCOMB2[2]{0};
-		Reg32 dSAME[2]{0};
-		Reg32 mDIFF[2]{0};
-		Reg32 mCOMB3[2]{0};
-		Reg32 mCOMB4[2]{0};
-		Reg32 dDIFF[2]{0};
-		Reg32 mAPF1[2]{0};
-		Reg32 mAPF2[2]{0};
+		Reg32 dAPF[2]{{0}, {0}};
+		Reg32 mSAME[2]{{0}, {0}};
+		Reg32 mCOMB1[2]{{0}, {0}};
+		Reg32 mCOMB2[2]{{0}, {0}};
+		Reg32 dSAME[2]{{0}, {0}};
+		Reg32 mDIFF[2]{{0}, {0}};
+		Reg32 mCOMB3[2]{{0}, {0}};
+		Reg32 mCOMB4[2]{{0}, {0}};
+		Reg32 dDIFF[2]{{0}, {0}};
+		Reg32 mAPF1[2]{{0}, {0}};
+		Reg32 mAPF2[2]{{0}, {0}};
 
 		s16 vIIR{0};
 		s16 vCOMB1{0};
