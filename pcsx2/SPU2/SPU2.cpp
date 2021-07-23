@@ -162,6 +162,10 @@ namespace SPU
 
 		memzero(SPU_RAM);
 
+		// Workaround fast boot breaking megaman x7
+		// BIOS will leave a loop end point here
+		SPU_RAM[0xe868] = 0x100;
+
 		Console.WriteLn("SPU RESET");
 		if (output != nullptr)
 			fclose(output);
