@@ -160,12 +160,6 @@ namespace SPU
 
 		DecodeSamples();
 
-		// Interpolation:
-		//   nocash describes interpolation as happening to the 4 most recent samples
-		//   do we start with the first sample and 0 for the 3 previous?
-		//   or do we decode 4 samples and interpolate using the first 4?
-		//   mednafen does the latter, and i could see why that might make sense
-
 		s16 sample = 0;
 		if (m_Noise)
 		{
