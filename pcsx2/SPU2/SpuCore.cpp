@@ -116,6 +116,25 @@ namespace SPU
 		}
 	}
 
+	void SPUCore::TestIrq(u32 start, u32 end)
+	{
+		for (int i = 0; i < 2; i++)
+		{
+			if (m_ATTR[i].IRQEnable)
+			{
+				if (m_IRQA[i].full >= start && m_IRQA[i].full <= end)
+				{
+					if (i == 0)
+						m_IRQ.CauseC0 = true;
+					if (i == 1)
+						m_IRQ.CauseC1 = true;
+
+					spu2Irq();
+				}
+			}
+		}
+	}
+
 	void SPUCore::RunDma()
 	{
 		if (AdmaActive())
@@ -125,6 +144,9 @@ namespace SPU
 			memcpy(&m_RAM[m_InternalTSA], m_MADR, DmaFifoSize * 2);
 		if (m_ATTR[m_Id].CurrentTransMode == TransferMode::DMARead)
 			memcpy(m_MADR, &m_RAM[m_InternalTSA], DmaFifoSize * 2);
+
+		// Exclude initial, include final
+		TestIrq(m_InternalTSA + 1, m_InternalTSA + DmaFifoSize + 1);
 
 		m_InternalTSA += DmaFifoSize;
 		m_MADR += DmaFifoSize;

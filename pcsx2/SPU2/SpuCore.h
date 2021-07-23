@@ -64,6 +64,7 @@ namespace SPU
 		Voice& GetVoice(int n) { return m_voices[n]; }
 		void MemOut(OutBuf buffer, s16 value);
 		static void TestIrq(u32 address);
+		static void TestIrq(u32 start, u32 end);
 		[[nodiscard]] s16 NoiseLevel() const { return m_Noise.Get(); }
 
 		void Reset();
