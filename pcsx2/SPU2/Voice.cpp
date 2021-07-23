@@ -80,8 +80,6 @@ namespace SPU
 			return;
 		}
 
-		// TODO irq testing
-
 		u32 data = m_SPU.Ram(m_NAX.full);
 		for (int i = 0; i < 4; i++)
 		{
