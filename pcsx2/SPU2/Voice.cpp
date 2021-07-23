@@ -69,7 +69,7 @@ namespace SPU
 
 	void Voice::DecodeSamples()
 	{
-		m_SPU.TestIrq(m_NAX.full);
+		SPUCore::TestIrq(m_NAX.full);
 
 		// This doesn't exactly match the real behaviour,
 		// it seems to initially decode a bigger chunk
@@ -127,7 +127,7 @@ namespace SPU
 	}
 	void Voice::UpdateBlockHeader()
 	{
-		m_SPU.TestIrq(m_NAX.full);
+		SPUCore::TestIrq(m_NAX.full);
 		m_CurHeader.bits = m_SPU.Ram(m_NAX.full & ~0x7);
 		if (m_CurHeader.LoopStart && !m_CustomLoop)
 			m_LSA.full = m_NAX.full & ~0x7;
