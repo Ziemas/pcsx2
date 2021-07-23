@@ -20,6 +20,11 @@
 
 namespace SPU
 {
+
+	std::array<Reg32, 2> SPUCore::m_IRQA = {{{0}, {0}}};
+	std::array<SPUCore::AttrReg, 2> SPUCore::m_ATTR = {{{0}, {0}}};
+	SPUCore::IrqStat SPUCore::m_IRQ = {0};
+
 	AudioSample SPUCore::GenSample(AudioSample input)
 	{
 		AudioSample Dry(0, 0);
@@ -83,7 +88,7 @@ namespace SPU
 		{
 			m_BufPos &= 0xFF;
 			m_CurrentBuffer = 1 - m_CurrentBuffer;
-			m_IRQ.IrqStat.BufferHalf = m_CurrentBuffer;
+			m_IRQ.BufferHalf = m_CurrentBuffer;
 
 			if (AdmaActive())
 				RunADMA();
@@ -99,12 +104,12 @@ namespace SPU
 	{
 		for (int i = 0; i < 2; i++)
 		{
-			if (m_IRQ.IRQA[i].full == address && m_IRQ.Attr[i].IRQEnable)
+			if (m_IRQA[i].full == address && m_ATTR[i].IRQEnable)
 			{
 				if (i == 0)
-					m_IRQ.IrqStat.CauseC0 = true;
+					m_IRQ.CauseC0 = true;
 				if (i == 1)
-					m_IRQ.IrqStat.CauseC1 = true;
+					m_IRQ.CauseC1 = true;
 
 				spu2Irq();
 			}
@@ -116,9 +121,9 @@ namespace SPU
 		if (AdmaActive())
 			return;
 
-		if (m_IRQ.Attr[m_Id].CurrentTransMode == TransferMode::DMAWrite)
+		if (m_ATTR[m_Id].CurrentTransMode == TransferMode::DMAWrite)
 			memcpy(&m_RAM[m_InternalTSA], m_MADR, DmaFifoSize * 2);
-		if (m_IRQ.Attr[m_Id].CurrentTransMode == TransferMode::DMARead)
+		if (m_ATTR[m_Id].CurrentTransMode == TransferMode::DMARead)
 			memcpy(m_MADR, &m_RAM[m_InternalTSA], DmaFifoSize * 2);
 
 		m_InternalTSA += DmaFifoSize;
@@ -294,11 +299,11 @@ namespace SPU
 			case 0x198:
 				return m_MMIX.bits;
 			case 0x19A:
-				return m_IRQ.Attr[m_Id].bits;
+				return m_ATTR[m_Id].bits;
 			case 0x19C:
-				return m_IRQ.IRQA[m_Id].hi.GetValue();
+				return m_IRQA[m_Id].hi.GetValue();
 			case 0x19E:
-				return m_IRQ.IRQA[m_Id].lo.GetValue();
+				return m_IRQA[m_Id].lo.GetValue();
 			case 0x1A0:
 			{
 				u32 ret = 0;
@@ -409,6 +414,8 @@ namespace SPU
 				return m_Reverb.vIN[0];
 			case 0x786:
 				return m_Reverb.vIN[1];
+			case 0x7C2:
+				return m_IRQ.bits;
 			default:
 				Console.WriteLn("UNHANDLED SPU[%d] READ ---- <- %04x", m_Id, addr);
 				pxAssertMsg(false, "Unhandled SPU Read");
@@ -488,22 +495,22 @@ namespace SPU
 				m_MMIX.bits = value;
 				break;
 			case 0x19A:
-				m_IRQ.Attr[m_Id].bits = value;
-				if (!m_IRQ.Attr[m_Id].IRQEnable)
+				m_ATTR[m_Id].bits = value;
+				if (!m_ATTR[m_Id].IRQEnable)
 				{
 					if (m_Id == 0)
-						m_IRQ.IrqStat.CauseC0 = false;
+						m_IRQ.CauseC0 = false;
 					if (m_Id == 1)
-						m_IRQ.IrqStat.CauseC1 = false;
+						m_IRQ.CauseC1 = false;
 				}
-				m_Reverb.m_Enable = m_IRQ.Attr[m_Id].EffectEnable;
-				m_Noise.SetClock(m_IRQ.Attr[m_Id].NoiseClock.GetValue());
+				m_Reverb.m_Enable = m_ATTR[m_Id].EffectEnable;
+				m_Noise.SetClock(m_ATTR[m_Id].NoiseClock.GetValue());
 				break;
 			case 0x19C:
-				m_IRQ.IRQA[m_Id].hi = value;
+				m_IRQA[m_Id].hi = value;
 				break;
 			case 0x19E:
-				m_IRQ.IRQA[m_Id].lo = value;
+				m_IRQA[m_Id].lo = value;
 				break;
 			case 0x1B0:
 				m_Adma.bits = value;
@@ -781,8 +788,9 @@ namespace SPU
 		m_VMIXR.full = 0;
 		m_VMIXEL.full = 0;
 		m_VMIXER.full = 0;
-		m_IRQ.IRQA[m_Id].full = 0x800;
-		m_IRQ.Attr[m_Id].bits = 0;
+		m_IRQA[m_Id].full = 0x800;
+		m_ATTR[m_Id].bits = 0;
+		m_IRQ.bits = 0;
 		m_Reverb.Reset();
 		for (auto& v : m_voices)
 			v.Reset();

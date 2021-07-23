@@ -24,11 +24,10 @@ namespace SPU
 {
 	u16 SPU_RAM[1024 * 1024 * 2] = {};
 	//std::array<u16, 1024*1024*2> SPU_RAM = {};
-	SpuSharedState irq{};
 
 	SPUCore cores[2] = {
-		{SPU_RAM, 0, irq},
-		{SPU_RAM, 1, irq},
+		{SPU_RAM, 0},
+		{SPU_RAM, 1},
 	};
 
 	u32 spuCycles = 0;
@@ -116,10 +115,7 @@ namespace SPU
 
 		if (addr >= 0x7C0) // shared?
 		{
-			if (addr == 0x7C2)
-				return irq.IrqStat.bits;
-
-			return 0;
+			return cores[0].Read(addr);
 		}
 
 		return 0;
@@ -165,7 +161,6 @@ namespace SPU
 			c.Reset();
 
 		memzero(SPU_RAM);
-		irq.IrqStat.bits = 0;
 
 		Console.WriteLn("SPU RESET");
 		if (output != nullptr)
