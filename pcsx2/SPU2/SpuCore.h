@@ -42,10 +42,9 @@ namespace SPU
 			MemOutER = 0x1600,
 		};
 
-		SPUCore(u16* ram, u32 id, SpuSharedState& irq)
+		SPUCore(u16* ram, u32 id)
 			: m_Id(id)
 			, m_RAM(ram)
-			, m_IRQ(irq)
 		{
 		}
 
@@ -64,7 +63,7 @@ namespace SPU
 		u16 Ram(u32 address) { return m_RAM[address & 0xFFFFF]; }
 		Voice& GetVoice(int n) { return m_voices[n]; }
 		void MemOut(OutBuf buffer, s16 value);
-		void TestIrq(u32 address);
+		static void TestIrq(u32 address);
 		[[nodiscard]] s16 NoiseLevel() const { return m_Noise.Get(); }
 
 		void Reset();
@@ -78,6 +77,42 @@ namespace SPU
 		{
 			MeminL = 0x2000,
 			MeminR = 0x2200,
+		};
+
+		enum class TransferMode : u8
+		{
+			Stopped = 0,
+			ManualWrite = 1,
+			DMAWrite = 2,
+			DMARead = 3,
+		};
+
+		union AttrReg
+		{
+			u16 bits;
+
+			// iirc enable works like a reset switch here
+			// driver flips enable on and expects DMA stuff to be reset
+			BitField<u16, bool, 15, 1> Enable;
+			BitField<u16, bool, 14, 1> OutputEnable;
+			BitField<u16, u8, 8, 6> NoiseClock;
+			BitField<u16, bool, 7, 1> EffectEnable;
+			BitField<u16, bool, 6, 1> IRQEnable;
+			BitField<u16, TransferMode, 4, 2> CurrentTransMode;
+			// unknown if these do anything in ps2 mode
+			BitField<u16, bool, 3, 1> ExtReverb;
+			BitField<u16, bool, 2, 1> CDAReverb;
+			BitField<u16, bool, 1, 1> EXTEnable;
+			BitField<u16, bool, 0, 1> CDAEnable;
+		};
+
+		union IrqStat
+		{
+			u32 bits;
+
+			BitField<u32, bool, 4, 1> BufferHalf;
+			BitField<u32, bool, 3, 1> CauseC1;
+			BitField<u32, bool, 2, 1> CauseC0;
 		};
 
 		union Status
@@ -130,7 +165,10 @@ namespace SPU
 		[[nodiscard]] bool AdmaActive() const { return m_Id ? m_Adma.Core2.GetValue() : m_Adma.Core1.GetValue(); };
 
 		u16* m_RAM;
-		SpuSharedState& m_IRQ;
+
+		static std::array<Reg32, 2> m_IRQA;
+		static std::array<AttrReg, 2> m_ATTR;
+		static IrqStat m_IRQ;
 
 		Status m_Stat{0};
 
