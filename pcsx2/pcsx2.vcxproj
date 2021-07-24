@@ -353,7 +353,6 @@
     <ClCompile Include="SPU2\Mixer.cpp" />
     <ClCompile Include="SPU2\ReadInput.cpp" />
     <ClCompile Include="SPU2\Reverb.cpp" />
-    <ClCompile Include="SPU2\Windows\dsp.cpp" />
     <ClCompile Include="SPU2\Linux\Config.cpp">
       <ExcludedFromBuild>true</ExcludedFromBuild>
     </ClCompile>
@@ -781,7 +780,6 @@
     <ClInclude Include="SPU2\Dma.h" />
     <ClInclude Include="SPU2\regs.h" />
     <ClInclude Include="SPU2\Mixer.h" />
-    <ClInclude Include="SPU2\Windows\dsp.h" />
     <ClInclude Include="SPU2\Linux\Config.h" />
     <ClInclude Include="SPU2\Linux\Dialogs.h" />
     <ClInclude Include="SPU2\Windows\Dialogs.h" />
