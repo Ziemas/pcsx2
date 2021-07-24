@@ -345,7 +345,7 @@
     <ClCompile Include="SPU2\wavedump_wav.cpp" />
     <ClCompile Include="SPU2\SndOut.cpp" />
     <ClCompile Include="SPU2\Timestretcher.cpp" />
-    <ClCompile Include="SPU2\Windows\SndOut_XAudio2.cpp" />
+    <ClCompile Include="SPU2\SndOut_XAudio2.cpp" />
     <ClCompile Include="SPU2\dma.cpp" />
     <ClCompile Include="SPU2\RegTable.cpp" />
     <ClCompile Include="SPU2\spu2freeze.cpp" />
