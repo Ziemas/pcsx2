@@ -354,12 +354,6 @@
     <ClCompile Include="SPU2\Mixer.cpp" />
     <ClCompile Include="SPU2\ReadInput.cpp" />
     <ClCompile Include="SPU2\Reverb.cpp" />
-    <ClCompile Include="SPU2\Linux\Config.cpp">
-      <ExcludedFromBuild>true</ExcludedFromBuild>
-    </ClCompile>
-    <ClCompile Include="SPU2\Linux\Dialogs.cpp">
-      <ExcludedFromBuild>true</ExcludedFromBuild>
-    </ClCompile>
     <ClCompile Include="SPU2\wx\CfgHelpers.cpp" />
     <ClCompile Include="SPU2\wx\Config.cpp" />
     <ClCompile Include="SPU2\wx\ConfigDebug.cpp" />
@@ -390,6 +384,8 @@
     <ClCompile Include="Recording\NewRecordingFrame.cpp" />
     <ClCompile Include="Recording\InputRecordingFile.cpp" />
     <ClCompile Include="Recording\PadData.cpp" />
+    <ClCompile Include="SPU2\wx\Dialogs.cpp" />
+    <ClCompile Include="SPU2\wx\wxConfig.cpp" />
     <ClCompile Include="USB\configuration.cpp" />
     <ClCompile Include="USB\deviceproxy.cpp" />
     <ClCompile Include="USB\device_init.cpp" />
@@ -885,6 +881,7 @@
     <ClInclude Include="Recording\VirtualPad\VirtualPadData.h" />
     <ClInclude Include="Recording\VirtualPad\VirtualPadResources.h" />
     <ClInclude Include="Recording\Utilities\InputRecordingLogger.h" />
+    <ClInclude Include="SPU2\wx\wxConfig.h" />
     <ClInclude Include="USB\configuration.h" />
     <ClInclude Include="USB\deviceproxy.h" />
     <ClInclude Include="USB\helpers.h" />
