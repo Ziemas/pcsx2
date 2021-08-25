@@ -29,7 +29,8 @@ namespace SPU
 	};
 
 	void Run(u32 cycles);
-	void RunDma(u32 cycles);
+	void RunDMA4();
+	void RunDMA7();
 	void InterruptDMA4();
 	void InterruptDMA7();
 	void WriteDMA(u32 channel, u16* madr, u32 size);

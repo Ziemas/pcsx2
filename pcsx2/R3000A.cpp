@@ -18,6 +18,7 @@
 #include "R3000A.h"
 #include "Common.h"
 
+#include "SPU2/SPU2.h"
 #include "Sio.h"
 #include "Sif.h"
 #include "DebugTools/Breakpoints.h"
@@ -187,6 +188,8 @@ static __fi void _psxTestInterrupts()
 	IopTestEvent(IopEvt_SIF1,		sif1Interrupt);	// SIF1
 	IopTestEvent(IopEvt_SIF2,		sif2Interrupt);	// SIF2
 	Sio0TestEvent(IopEvt_SIO);
+	IopTestEvent(IopEvt_SPU0DMA,	SPU::RunDMA4);	// SPU0
+	IopTestEvent(IopEvt_SPU1DMA,	SPU::RunDMA7);	// SPU1
 	IopTestEvent(IopEvt_CdvdRead,	cdvdReadInterrupt);
 	IopTestEvent(IopEvt_CdvdSectorReady, cdvdSectorReady);
 

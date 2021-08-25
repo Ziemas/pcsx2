@@ -55,17 +55,14 @@ namespace SPU
 		}
 	}
 
-	void RunDma(u32 cycles)
+	void RunDMA4()
 	{
-		dmaCycles += cycles;
-		while (dmaCycles >= 1024)
-		{
-			dmaCycles -= 1024;
-			if (HW_DMA4_CHCR & (1 << 24))
-				cores[0].RunDma();
-			if (HW_DMA7_CHCR & (1 << 24))
-				cores[1].RunDma();
-		}
+		cores[0].RunDma();
+	}
+
+	void RunDMA7()
+	{
+		cores[1].RunDma();
 	}
 
 	void InterruptDMA4()

@@ -168,6 +168,10 @@ namespace SPU
 			if (m_Id == 1)
 				spu2DMA7Irq();
 		}
+		else
+		{
+			PSX_INT((IopEventId)(IopEvt_SPU0DMA + m_Id), 1024);
+		}
 	}
 
 	void SPUCore::WriteMem(u32 addr, u16 value)
