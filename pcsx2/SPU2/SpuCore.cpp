@@ -140,6 +140,14 @@ namespace SPU
 		if (AdmaActive())
 			return;
 
+		if (m_DmaSize <= 0)
+		{
+			m_Stat.DMABusy = false;
+			m_Stat.DMARequest = true;
+
+			return;
+		}
+
 		if (m_ATTR[m_Id].CurrentTransMode == TransferMode::DMAWrite)
 			memcpy(&m_RAM[m_InternalTSA], m_MADR, DmaFifoSize * 2);
 		if (m_ATTR[m_Id].CurrentTransMode == TransferMode::DMARead)
@@ -159,19 +167,13 @@ namespace SPU
 
 		if (m_DmaSize <= 0)
 		{
-			// This would not happen instantly on hw as the fifo needs time to drain
-			m_Stat.DMABusy = false;
-			m_Stat.DMARequest = true;
-
 			if (m_Id == 0)
 				spu2DMA4Irq();
 			if (m_Id == 1)
 				spu2DMA7Irq();
 		}
-		else
-		{
-			PSX_INT((IopEventId)(IopEvt_SPU0DMA + m_Id), 1024);
-		}
+
+		PSX_INT((IopEventId)(IopEvt_SPU0DMA + m_Id), 1024);
 	}
 
 	void SPUCore::WriteMem(u32 addr, u16 value)
