@@ -72,6 +72,7 @@ namespace SPU
 
 	class ADSR : Envelope
 	{
+	public:
 		enum class Phase
 		{
 			Attack,
@@ -81,7 +82,6 @@ namespace SPU
 			Stopped,
 		};
 
-	public:
 		void Run();
 		void Attack();
 		void Release();
@@ -89,6 +89,7 @@ namespace SPU
 		[[nodiscard]] s16 Level() const;
 		void UpdateSettings();
 		ADSRReg m_Reg{0};
+		[[nodiscard]] Phase GetPhase() const { return m_Phase; }
 
 		void Reset()
 		{

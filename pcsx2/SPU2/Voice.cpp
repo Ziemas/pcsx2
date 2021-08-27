@@ -80,24 +80,33 @@ namespace SPU
 			return;
 		}
 
-		u32 data = m_SPU.Ram(m_NAX.full);
-		for (int i = 0; i < 4; i++)
+		// Skip decoding for stopped voices.
+		if (m_ADSR.GetPhase() == ADSR::Phase::Stopped)
 		{
-			s32 sample = (s16)((data & 0xF) << 12);
-			sample >>= m_CurHeader.Shift.GetValue();
+			for (int i = 0; i < 4; i++)
+				m_DecodeBuf.Push(0);
+		}
+		else
+		{
+			u32 data = m_SPU.Ram(m_NAX.full);
+			for (int i = 0; i < 4; i++)
+			{
+				s32 sample = (s16)((data & 0xF) << 12);
+				sample >>= m_CurHeader.Shift.GetValue();
 
-			// TODO do the right thing for invalid shift/filter values
-			sample += (adpcm_coefs_i[m_CurHeader.Filter.GetValue()][0] * m_DecodeHist1) >> 6;
-			sample += (adpcm_coefs_i[m_CurHeader.Filter.GetValue()][1] * m_DecodeHist2) >> 6;
+				// TODO do the right thing for invalid shift/filter values
+				sample += (adpcm_coefs_i[m_CurHeader.Filter.GetValue()][0] * m_DecodeHist1) >> 6;
+				sample += (adpcm_coefs_i[m_CurHeader.Filter.GetValue()][1] * m_DecodeHist2) >> 6;
 
-			// We do get overflow here otherwise, should we?
-			sample = std::clamp<s32>(sample, INT16_MIN, INT16_MAX);
+				// We do get overflow here otherwise, should we?
+				sample = std::clamp<s32>(sample, INT16_MIN, INT16_MAX);
 
-			m_DecodeHist2 = m_DecodeHist1;
-			m_DecodeHist1 = static_cast<s16>(sample);
+				m_DecodeHist2 = m_DecodeHist1;
+				m_DecodeHist1 = static_cast<s16>(sample);
 
-			m_DecodeBuf.Push(static_cast<s16>(sample));
-			data >>= 4;
+				m_DecodeBuf.Push(static_cast<s16>(sample));
+				data >>= 4;
+			}
 		}
 
 		m_NAX.full++;
