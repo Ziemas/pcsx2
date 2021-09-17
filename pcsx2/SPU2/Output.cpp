@@ -20,8 +20,7 @@ namespace SPU
 {
 	void SndOutput::Init()
 	{
-		if (m_Init)
-			return;
+		m_SampleBuf = std::make_unique<Buffer>();
 
 		Console.WriteLn("Starting sound output");
 
@@ -54,7 +53,7 @@ namespace SPU
 		}
 
 		err = cubeb_stream_init(m_Ctx, &m_Stream, "SPU Output", nullptr, nullptr, nullptr,
-			&outparam, latency, &SoundCB, &StateCB, &m_SampleBuf);
+			&outparam, latency, &SoundCB, &StateCB, m_SampleBuf.get());
 		if (err != CUBEB_OK)
 		{
 			Console.Error("Audio backend: Could not open stream");
@@ -83,14 +82,14 @@ namespace SPU
 
 	void SndOutput::Push(S16Out sample)
 	{
-		size_t size = m_SampleBuf.write - m_SampleBuf.read;
+		size_t size = m_SampleBuf->write - m_SampleBuf->read;
 		if (size == 0x2000)
 		{
 			//Console.Warning("Buffer overrun, stopping write");
 			return;
 		}
-		size_t prev = m_SampleBuf.write.fetch_add(1, std::memory_order_relaxed);
-		m_SampleBuf.buffer[prev & 0x1FFF] = sample;
+		size_t prev = m_SampleBuf->write.fetch_add(1, std::memory_order_relaxed);
+		m_SampleBuf->buffer[prev & 0x1FFF] = sample;
 	}
 
 	void SndOutput::LogCB(char const* fmt, ...)
