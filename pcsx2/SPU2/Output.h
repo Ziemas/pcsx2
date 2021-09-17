@@ -34,11 +34,23 @@ namespace SPU
 	class SndOutput
 	{
 	public:
-		void Init();
-		void Shutdown();
+		SndOutput()
+		{
+			Init();
+		}
+		~SndOutput()
+		{
+			Shutdown();
+		}
+
+		SndOutput(const SndOutput&) = delete;
+		SndOutput operator=(const SndOutput&) = delete;
+
+		SndOutput(SndOutput&& other) noexcept = default;
+		SndOutput& operator=(SndOutput&& other) noexcept = default;
+
 		void Clear();
 		void Push(S16Out sample);
-
 
 	private:
 		static long SoundCB(cubeb_stream* stream, void* user, const void* input_buffer,
@@ -46,6 +58,9 @@ namespace SPU
 
 		static void StateCB(cubeb_stream* stream, void* user, cubeb_state state);
 		static void LogCB(char const* fmt, ...);
+
+		void Init();
+		void Shutdown();
 
 		struct Buffer
 		{
@@ -55,7 +70,7 @@ namespace SPU
 			std::atomic<size_t> write{0};
 		};
 
-		Buffer m_SampleBuf{};
+		std::unique_ptr<Buffer> m_SampleBuf{};
 
 		bool m_Init{false};
 

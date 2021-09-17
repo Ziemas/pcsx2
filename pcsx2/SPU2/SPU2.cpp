@@ -33,7 +33,7 @@ namespace SPU
 	u32 spuCycles = 0;
 	u32 dmaCycles = 0;
 
-	SndOutput snd{};
+	std::unique_ptr<SndOutput> snd;
 
 	FILE* output{nullptr};
 
@@ -51,7 +51,7 @@ namespace SPU
 			out.right = core1.right;
 			//fwrite(&out, sizeof(S16Out), 1, output);
 
-			snd.Push(out);
+			snd->Push(out);
 		}
 	}
 
@@ -192,7 +192,7 @@ namespace SPU
 
 	void Shutdown()
 	{
-		snd.Shutdown();
+		snd.reset();
 	}
 
 	s32 Open()
@@ -203,7 +203,7 @@ namespace SPU
 
 	s32 Init()
 	{
-		snd.Init();
+		snd = std::make_unique<SndOutput>();
 		return 0;
 	}
 
