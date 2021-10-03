@@ -202,8 +202,6 @@ namespace SPU
 			m_DecodeBuf.Pop();
 		}
 
-		m_ADSR.Run();
-
 		sample = ApplyVolume(sample, m_ADSR.Level());
 
 		m_Out = sample;
@@ -216,6 +214,7 @@ namespace SPU
 		s16 left = ApplyVolume(sample, m_Volume.left.GetCurrent());
 		s16 right = ApplyVolume(sample, m_Volume.right.GetCurrent());
 
+		m_ADSR.Run();
 		m_Volume.Run();
 
 		return AudioSample(left, right);
