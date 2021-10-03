@@ -20,6 +20,14 @@
 #include "common/Pcsx2Types.h"
 #include "SaveState.h"
 
+/*
+** bad games
+** burnout 2 - missing menu music
+** primal - adma nonsense
+** legacy of kain - hangs in cutscene, beginning of game
+** other burnout - missing engine sound
+*/
+
 namespace SPU
 {
 	enum class PS2Modes
