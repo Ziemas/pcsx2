@@ -138,9 +138,29 @@ namespace SPU
 	void SPUCore::RunDma()
 	{
 		if (AdmaActive())
-			return;
+		{
+			// Switch to right channel
+			if (m_BufDmaCount == 8)
+			{
+				auto displacement = ((1 - m_CurrentBuffer) * BufSize) + (InBufOffset * m_Id);
+				m_InternalTSA = static_cast<u32>(InBuf::MeminR) + displacement;
+			}
 
-		if (m_DmaSize <= 0)
+			// One L/R adma buffer pair splits up into 16 fifo-sized transfers
+			// here is the logic for managing that
+			if (m_BufDmaCount > 0)
+			{
+				m_BufDmaCount--;
+			}
+			else
+			{
+				PSX_INT((IopEventId)(IopEvt_SPU0DMA + m_Id), 1024);
+				return;
+			}
+
+		}
+
+		if (m_DmaSize <= 0 && !AdmaActive())
 		{
 			m_Stat.DMABusy = false;
 			m_Stat.DMARequest = true;
@@ -148,7 +168,8 @@ namespace SPU
 			return;
 		}
 
-		if (m_ATTR[m_Id].CurrentTransMode == TransferMode::DMAWrite)
+		// TODO: This ADMA stuff is way crappy
+		if (m_ATTR[m_Id].CurrentTransMode == TransferMode::DMAWrite || AdmaActive())
 			memcpy(&m_RAM[m_InternalTSA], m_MADR, DmaFifoSize * 2);
 		if (m_ATTR[m_Id].CurrentTransMode == TransferMode::DMARead)
 			memcpy(m_MADR, &m_RAM[m_InternalTSA], DmaFifoSize * 2);
@@ -183,35 +204,9 @@ namespace SPU
 
 	void SPUCore::RunADMA()
 	{
-		if (m_Id == 0 && !(HW_DMA4_CHCR & (1 << 24)))
-			return;
-		if (m_Id == 1 && !(HW_DMA7_CHCR & (1 << 24)))
-			return;
-
+		m_BufDmaCount = 16;
 		auto displacement = ((1 - m_CurrentBuffer) * BufSize) + (InBufOffset * m_Id);
-		memcpy(&m_RAM[static_cast<u32>(InBuf::MeminL) + displacement], m_MADR, BufSize * 2);
-		m_MADR += BufSize;
-
-		memcpy(&m_RAM[static_cast<u32>(InBuf::MeminR) + displacement], m_MADR, BufSize * 2);
-		m_MADR += BufSize;
-
-		if (m_Id == 0)
-			HW_DMA4_MADR += BufSize * 4;
-		if (m_Id == 1)
-			HW_DMA7_MADR += BufSize * 4;
-
-		m_DmaSize -= BufSize * 2; // two buffers transfered
-
-		if (m_DmaSize <= 0)
-		{
-			m_Stat.DMABusy = false;
-			m_Stat.DMARequest = true;
-
-			if (m_Id == 0)
-				spu2DMA4Irq();
-			if (m_Id == 1)
-				spu2DMA7Irq();
-		}
+		m_InternalTSA = static_cast<u32>(InBuf::MeminL) + displacement;
 	}
 
 	void SPUCore::DmaWrite(u16* madr, u32 size)
@@ -224,7 +219,7 @@ namespace SPU
 
 			m_DmaSize = size;
 			m_MADR = madr;
-			return;
+			//return;
 		}
 
 		m_DmaSize = size;
