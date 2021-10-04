@@ -88,6 +88,31 @@ namespace SPU
 			DMARead = 3,
 		};
 
+		union SpdifMedia
+		{
+			u32 bits;
+
+			BitField<u32, u16, 16, 16> hi;
+			BitField<u32, u16, 0, 16> lo;
+
+			// Output is copy protected
+			BitField<u32, bool, 15, 1> Protect;
+
+			// Output is a bitstream
+			BitField<u32, bool, 1, 1> Bitstream;
+		};
+
+		union SpdifConfig
+		{
+			u16 bits;
+
+			// ADMA output through spdif
+			BitField<u16, bool, 8, 1> Bypass;
+
+			// Route normal SPU output through spdif
+			BitField<u16, bool, 5, 1> PCM;
+		};
+
 		union AttrReg
 		{
 			u16 bits;
@@ -126,7 +151,7 @@ namespace SPU
 			// True while transfer in progress?
 			// not observable in our implementation?
 			BitField<u16, bool, 10, 1> DMABusy;
-			// if dma mode this will be false while the fifo is filled
+			// if in dma mode this will be false while the fifo is filled
 			// and true when drained
 			// libsd's dma irq handler waits for the buffer to finish draining
 			BitField<u16, bool, 7, 1> DMARequest;
@@ -171,6 +196,8 @@ namespace SPU
 		static std::array<AttrReg, 2> m_ATTR;
 		static IrqStat m_IRQ;
 
+		SpdifConfig m_SPDIFConf{0};
+		SpdifMedia m_SPDIFMedia{0};
 		Status m_Stat{0};
 
 		ADMA m_Adma{0};
@@ -180,6 +207,7 @@ namespace SPU
 		u32 m_BufPos{0};
 		u32 m_BufDmaCount{0};
 		u32 m_CurrentBuffer{0};
+		u32 m_CurBypassBuf{0};
 
 		Reverb m_Reverb{*this};
 		Noise m_Noise{};
