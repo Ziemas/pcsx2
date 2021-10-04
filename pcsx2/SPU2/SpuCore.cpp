@@ -84,11 +84,19 @@ namespace SPU
 		Out.Mix(EOut, m_MMIX.VoiceWetL, m_MMIX.VoiceWetR);
 
 		m_BufPos++;
+		if (m_BufPos == 0x50)
+		{
+			m_CurBypassBuf = 1 - m_CurBypassBuf;
+			if (AdmaActive() && m_SPDIFConf.Bypass)
+				RunADMA();
+		}
+
 		if (m_BufPos == 0x100)
 		{
 			m_BufPos &= 0xFF;
 			m_CurrentBuffer = 1 - m_CurrentBuffer;
 			m_IRQ.BufferHalf = m_CurrentBuffer;
+			m_CurBypassBuf = 1 - m_CurBypassBuf;
 
 			if (AdmaActive())
 				RunADMA();
@@ -150,7 +158,13 @@ namespace SPU
 			// Switch to right channel
 			if (m_BufDmaCount == 8)
 			{
-				auto displacement = ((1 - m_CurrentBuffer) * BufSize) + (InBufOffset * m_Id);
+				u32 displacement;
+
+				if (m_SPDIFConf.Bypass)
+					displacement = ((1 - m_CurBypassBuf) * BufSize) + (InBufOffset * m_Id);
+				else
+					displacement = ((1 - m_CurrentBuffer) * BufSize) + (InBufOffset * m_Id);
+
 				m_InternalTSA = static_cast<u32>(InBuf::MeminR) + displacement;
 			}
 
@@ -206,8 +220,15 @@ namespace SPU
 
 	void SPUCore::RunADMA()
 	{
+		u32 displacement;
+
+		if (m_SPDIFConf.Bypass)
+			displacement = ((1 - m_CurBypassBuf) * BufSize) + (InBufOffset * m_Id);
+		else
+			displacement = ((1 - m_CurrentBuffer) * BufSize) + (InBufOffset * m_Id);
+
 		m_BufDmaCount = 16;
-		auto displacement = ((1 - m_CurrentBuffer) * BufSize) + (InBufOffset * m_Id);
+
 		m_InternalTSA = static_cast<u32>(InBuf::MeminL) + displacement;
 
 		m_Stat.DMABusy = true;
@@ -449,8 +470,14 @@ namespace SPU
 				return m_Reverb.vIN[0];
 			case 0x786:
 				return m_Reverb.vIN[1];
+			case 0x7C0:
+				return m_SPDIFConf.bits;
 			case 0x7C2:
 				return m_IRQ.bits;
+			case 0x7C6:
+				return m_SPDIFMedia.hi.GetValue();
+			case 0x7C8:
+				return m_SPDIFMedia.lo.GetValue();
 			default:
 				Console.WriteLn("UNHANDLED SPU[%d] READ ---- <- %04x", m_Id, addr);
 				pxAssertMsg(false, "Unhandled SPU Read");
@@ -803,6 +830,18 @@ namespace SPU
 			case 0x786:
 				m_Reverb.vIN[1] = static_cast<int16_t>(value);
 				break;
+			case 0x7C0:
+				m_SPDIFConf.bits = value;
+				break;
+			case 0x7C6:
+				m_SPDIFMedia.hi.SetValue(value);
+				break;
+			case 0x7C8:
+				m_SPDIFMedia.lo.SetValue(value);
+				break;
+			case 0x7CA:
+				// Unk, libsd init writes 8 here
+				break;
 			default:
 				Console.WriteLn("UNHANDLED SPU[%d] WRITE %04x -> %04x", m_Id, value, addr);
 				pxAssertMsg(false, "Unhandled SPU Write");
@@ -812,6 +851,8 @@ namespace SPU
 	void SPUCore::Reset()
 	{
 		Console.WriteLn("SPU[%d] Reset", m_Id);
+		m_SPDIFConf.bits = 0;
+		m_SPDIFMedia.bits = 0;
 		m_Stat.bits = 0;
 		m_Adma.bits = 0;
 		m_MADR = nullptr;

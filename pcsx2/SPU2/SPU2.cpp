@@ -148,6 +148,7 @@ namespace SPU
 
 		if (addr >= 0x7C0) // shared?
 		{
+            cores[0].Write(addr, value);
 			return;
 		}
 	}
