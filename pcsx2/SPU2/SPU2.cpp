@@ -159,6 +159,7 @@ namespace SPU
 
 		memzero(SPU_RAM);
 
+		snd->Clear();
 		// Workaround fast boot breaking megaman x7
 		// BIOS will leave a loop end point here
 		SPU_RAM[0xe868] = 0x100;
