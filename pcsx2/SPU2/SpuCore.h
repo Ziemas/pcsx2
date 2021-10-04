@@ -178,6 +178,7 @@ namespace SPU
 		u32 m_DmaSize{0};
 
 		u32 m_BufPos{0};
+		u32 m_BufDmaCount{0};
 		u32 m_CurrentBuffer{0};
 
 		Reverb m_Reverb{*this};
