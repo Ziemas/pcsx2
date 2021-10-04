@@ -137,6 +137,14 @@ namespace SPU
 
 	void SPUCore::RunDma()
 	{
+		if (m_DmaSize <= 0)
+		{
+			m_Stat.DMABusy = false;
+			m_Stat.DMARequest = true;
+
+			return;
+		}
+
 		if (AdmaActive())
 		{
 			// Switch to right channel
@@ -154,18 +162,9 @@ namespace SPU
 			}
 			else
 			{
-				PSX_INT((IopEventId)(IopEvt_SPU0DMA + m_Id), 1024);
 				return;
 			}
 
-		}
-
-		if (m_DmaSize <= 0 && !AdmaActive())
-		{
-			m_Stat.DMABusy = false;
-			m_Stat.DMARequest = true;
-
-			return;
 		}
 
 		// TODO: This ADMA stuff is way crappy
@@ -207,6 +206,8 @@ namespace SPU
 		m_BufDmaCount = 16;
 		auto displacement = ((1 - m_CurrentBuffer) * BufSize) + (InBufOffset * m_Id);
 		m_InternalTSA = static_cast<u32>(InBuf::MeminL) + displacement;
+
+		RunDma();
 	}
 
 	void SPUCore::DmaWrite(u16* madr, u32 size)
@@ -219,7 +220,7 @@ namespace SPU
 
 			m_DmaSize = size;
 			m_MADR = madr;
-			//return;
+			return;
 		}
 
 		m_DmaSize = size;
