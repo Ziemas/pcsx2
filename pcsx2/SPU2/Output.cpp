@@ -80,6 +80,12 @@ namespace SPU
 		m_Init = false;
 	}
 
+	void SndOutput::Clear()
+	{
+		m_SampleBuf->read = 0;
+		m_SampleBuf->write = 0;
+	}
+
 	void SndOutput::Push(S16Out sample)
 	{
 		size_t size = m_SampleBuf->write - m_SampleBuf->read;
