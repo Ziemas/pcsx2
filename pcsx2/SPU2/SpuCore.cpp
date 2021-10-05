@@ -162,11 +162,12 @@ namespace SPU
 			}
 			else
 			{
+				// Shouldn't be correct but DQVIII hangs otherwise
+				// need to think on this
 				m_Stat.DMABusy = false;
 				m_Stat.DMARequest = true;
 				return;
 			}
-
 		}
 
 		// TODO: This ADMA stuff is way crappy
@@ -225,6 +226,11 @@ namespace SPU
 
 			m_DmaSize = size;
 			m_MADR = madr;
+
+			// Run right away if we still need data for the current buffers.
+			if (m_BufDmaCount > 0)
+				RunDma();
+
 			return;
 		}
 
@@ -542,6 +548,9 @@ namespace SPU
 				m_IRQA[m_Id].lo = value;
 				break;
 			case 0x1B0:
+				// Prevent leaving the ADMA machinery in dumb states
+				if (value == 0)
+					m_BufDmaCount = 0;
 				m_Adma.bits = value;
 				break;
 			case 0x1A0:
@@ -802,12 +811,14 @@ namespace SPU
 
 	void SPUCore::Reset()
 	{
+		Console.WriteLn("SPU[%d] Reset", m_Id);
 		m_Stat.bits = 0;
 		m_Adma.bits = 0;
 		m_MADR = nullptr;
 		m_DmaSize = 0;
 		m_BufPos = 0;
 		m_CurrentBuffer = 0;
+		m_BufDmaCount = 0;
 		m_TSA.full = 0;
 		m_AVOL = {0};
 		m_BVOL = {0};
