@@ -162,6 +162,8 @@ namespace SPU
 			}
 			else
 			{
+				m_Stat.DMABusy = false;
+				m_Stat.DMARequest = true;
 				return;
 			}
 
@@ -206,6 +208,9 @@ namespace SPU
 		m_BufDmaCount = 16;
 		auto displacement = ((1 - m_CurrentBuffer) * BufSize) + (InBufOffset * m_Id);
 		m_InternalTSA = static_cast<u32>(InBuf::MeminL) + displacement;
+
+		m_Stat.DMABusy = true;
+		m_Stat.DMARequest = false;
 
 		RunDma();
 	}
