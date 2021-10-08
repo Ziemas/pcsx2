@@ -76,8 +76,8 @@ namespace R3000A
 	const char* irxImportFuncname(const std::string& libname, u16 index);
 	irxHLE irxImportHLE(const std::string& libnam, u16 index);
 	irxDEBUG irxImportDebug(const std::string& libname, u16 index);
-	void irxImportLog(const std::string& libnameptr, u16 index, const char* funcname);
-	void __fastcall irxImportLog_rec(u32 import_table, u16 index, const char* funcname);
+	void irxImportLog(const std::string& libnameptr, u16 index);
+	void __fastcall irxImportLog_rec(u32 import_table, u16 index);
 	int irxImportExec(u32 import_table, u16 index);
 
 	namespace ioman

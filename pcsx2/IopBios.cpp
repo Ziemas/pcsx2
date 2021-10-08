@@ -981,16 +981,18 @@ namespace R3000A
 #undef EXPORT_D
 #undef EXPORT_H
 
-	void irxImportLog(const std::string& libname, u16 index, const char* funcname)
+	void irxImportLog(const std::string& libname, u16 index)
 	{
+		const char* funcname = irxImportFuncname(libname, index);
+
 		PSXBIOS_LOG("%8.8s.%03d: %s (%x, %x, %x, %x)",
 			libname.data(), index, funcname ? funcname : "unknown",
 			a0, a1, a2, a3);
 	}
 
-	void __fastcall irxImportLog_rec(u32 import_table, u16 index, const char* funcname)
+	void __fastcall irxImportLog_rec(u32 import_table, u16 index)
 	{
-		irxImportLog(iopMemReadString(import_table + 12, 8), index, funcname);
+		irxImportLog(iopMemReadString(import_table + 12, 8), index);
 	}
 
 	int irxImportExec(u32 import_table, u16 index)
@@ -999,11 +1001,10 @@ namespace R3000A
 			return 0;
 
 		std::string libname = iopMemReadString(import_table + 12, 8);
-		const char* funcname = irxImportFuncname(libname, index);
 		irxHLE hle = irxImportHLE(libname, index);
 		irxDEBUG debug = irxImportDebug(libname, index);
 
-		irxImportLog(libname, index, funcname);
+		irxImportLog(libname, index);
 
 		if (debug)
 			debug();
