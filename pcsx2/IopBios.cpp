@@ -20,8 +20,12 @@
 #include "R5900.h" // for g_GameStarted
 #include "IopBios.h"
 #include "IopMem.h"
+#include "iR3000A.h"
+#include "ps2/BiosTools.h"
+#include "DebugTools/SymbolMap.h"
 
 #include <ctype.h>
+#include <fmt/format.h>
 #include <string.h>
 #include <sys/stat.h>
 #include "common/FileSystem.h"
@@ -981,12 +985,84 @@ namespace R3000A
 		}
 	} // namespace sysmem
 
+	namespace excepman
+	{
+		void RegisterExceptionHandler_DEBUG()
+		{
+			DevCon.WriteLn(Color_Gray, "RegisterExceptionHandler: %d", a0);
+		}
+	}
+
 	namespace loadcore
 	{
+
+		// Get's the module list ptr when loading any module
+		u32 GetModList(u32 a0reg)
+		{
+			u32 lcptr = iopMemRead32(0x3f0);
+			u32 lcstring = irxFindLoadcore(lcptr);
+			u32 list = 0;
+
+			if (lcstring == 0)
+			{
+				list = lcptr - 0x20;
+			}
+			else
+			{
+				list = lcstring + 0x18;
+			}
+
+			return list;
+		}
+
+		// Gets the thread list ptr from thbase
+		u32 GetThreadList(u32 a0reg, u32 version)
+		{
+			// Function 3 returns the main thread manager struct
+			u32 function = iopMemRead32(a0reg + 0x20);
+
+			// read the lui
+			u32 thstruct = (iopMemRead32(function) & 0xFFFF) << 16;
+			thstruct |= iopMemRead32(function + 4) & 0xFFFF;
+
+			u32 list = thstruct + 0x42c;
+
+			if (version > 0x101)
+				list = thstruct + 0x430;
+
+			return list;
+		}
+
+		void LoadFuncs(u32 a0reg)
+		{
+
+			const std::string modname = iopMemReadString(a0reg + 12);
+			DevCon.WriteLn(Color_Gray, "RegisterLibraryEntries: %8.8s version %x.%02x", modname.data(), (unsigned)iopMemRead8(a0 + 9), (unsigned)iopMemRead8(a0 + 8));
+
+			u32 func = a0reg + 20;
+			u32 funcptr = iopMemRead32(func);
+			u32 index = 0;
+			while (funcptr != 0) {
+				const char* funcname = irxImportFuncname(modname, index);
+				R3000SymbolMap.AddFunction(fmt::format("{}::{}", modname, funcname).c_str(), funcptr, 0);
+				index++;
+				func += 4;
+				funcptr = iopMemRead32(func);
+			}
+		}
+
 		void RegisterLibraryEntries_DEBUG()
 		{
+			LoadFuncs(a0);
+
 			const std::string modname = iopMemReadString(a0 + 12);
-			DevCon.WriteLn(Color_Gray, "RegisterLibraryEntries: %8.8s version %x.%02x", modname.data(), (unsigned)iopMemRead8(a0 + 9), (unsigned)iopMemRead8(a0 + 8));
+			if (modname == "thbase")
+			{
+				const u32 version = iopMemRead32(a0 + 8);
+				CurrentBiosInformation.iopThreadListAddr = GetThreadList(a0, version);
+			}
+
+			CurrentBiosInformation.iopModListAddr = GetModList(a0);
 		}
 	} // namespace loadcore
 
@@ -1035,6 +1111,24 @@ namespace R3000A
 		}
 	} // namespace sifcmd
 
+	u32 irxFindLoadcore(u32 entrypc)
+	{
+		u32 i;
+
+		i = entrypc;
+		while (entrypc - i < 0x50)
+		{
+			// find loadcore string
+			if (iopMemRead32(i) == 0x49497350 && iopMemRead32(i+4) == 0x64616F6C)
+			{
+				return i;
+			}
+			i -= 4;
+		}
+
+		return 0;
+	}
+
 	u32 irxImportTableAddr(u32 entrypc)
 	{
 		u32 i;
@@ -1064,7 +1158,7 @@ namespace R3000A
 				// case 3: ???
 		}
 
-		return 0;
+		return "";
 	}
 
 // clang-format off
@@ -1130,6 +1224,9 @@ namespace R3000A
 	irxDEBUG irxImportDebug(const std::string& libname, u16 index)
 	{
 		// clang-format off
+		MODULE(excepman)
+			EXPORT_D(  4, RegisterExceptionHandler)
+		END_MODULE
 		MODULE(loadcore)
 			EXPORT_D(  6, RegisterLibraryEntries)
 		END_MODULE
