@@ -249,6 +249,9 @@ static void doBranch(s32 tar) {
 	if (tar == 0x0)
 		DevCon.Warning("[R3000 Interpreter] Warning: Branch to 0x0!");
 
+	if (tar == 0xbfc4a000)
+		Console.WriteLn("iop rebooting!!!");
+
 	branch2 = iopIsDelaySlot = true;
 	branchPC = tar;
 	execI();
