@@ -771,6 +771,19 @@ void psxRecompileCodeConst0(R3000AFNPTR constcode, R3000AFNPTR_INFO constscode, 
 	noconstcode(info);
 }
 
+u32 modulelist = 0;
+
+static void getModuleList(u32 loadcore)
+{
+	u32 function = iopMemRead32(loadcore + 8 + (3*4));
+	u32 list = (iopMemRead32(function) & 0xFFFF) << 16;
+	list |= iopMemRead32(function + 4) & 0xFFFF;
+
+	modulelist = list;
+}
+
+static int foundModules = 0;
+
 static void psxRecompileIrxImport()
 {
 	u32 import_table = irxImportTableAddr(psxpc - 4);
@@ -779,6 +792,17 @@ static void psxRecompileIrxImport()
 		return;
 
 	const std::string libname = iopMemReadString(import_table + 12, 8);
+
+	if (foundModules == 0 && libname == "sysmem")
+	{
+		u32 lc = irxFindLoadcore(import_table);
+		if (lc != 0)
+			Console.WriteLn(Color_StrongGreen, "!!! found loadcore %08x !!!!", lc);
+
+		getModuleList(lc);
+
+		foundModules = 1;
+	}
 
 	irxHLE hle = irxImportHLE(libname, index);
 #ifdef PCSX2_DEVBUILD
@@ -1673,6 +1697,12 @@ static void iopRecRecompile(const u32 startpc)
 {
 	u32 i;
 	u32 willbranch3 = 0;
+
+	if (startpc == 0xBFC4A000)
+	{
+		Console.WriteLn("- - - - - reboot!");
+		foundModules = 0;
+	}
 
 	// Inject IRX hack
 	if (startpc == 0x1630 && EmuConfig.CurrentIRX.length() > 3)

@@ -20,6 +20,7 @@
 #include "R5900.h" // for g_GameStarted
 #include "IopBios.h"
 #include "IopMem.h"
+#include "iR3000A.h"
 
 #include <ctype.h>
 #include <string.h>
@@ -981,12 +982,31 @@ namespace R3000A
 		}
 	} // namespace sysmem
 
+	namespace excepman
+	{
+		void RegisterExceptionHandler_DEBUG()
+		{
+			DevCon.WriteLn(Color_Gray, "RegisterExceptionHandler: %d", a0);
+		}
+	}
+
 	namespace loadcore
 	{
 		void RegisterLibraryEntries_DEBUG()
 		{
 			const std::string modname = iopMemReadString(a0 + 12);
 			DevCon.WriteLn(Color_Gray, "RegisterLibraryEntries: %8.8s version %x.%02x", modname.data(), (unsigned)iopMemRead8(a0 + 9), (unsigned)iopMemRead8(a0 + 8));
+
+			Console.WriteLn(Color_StrongGreen, "%d modules loaded", iopMemRead32(modulelist + 0x14));
+
+			u32 mod = iopMemRead32(modulelist);
+
+			while (mod != 0)
+			{
+				Console.WriteLn(Color_StrongGreen, "%s", iopMemReadString(mod + 12, 8).c_str());
+
+				mod = iopMemRead32(mod);
+			}
 		}
 	} // namespace loadcore
 
@@ -1034,6 +1054,24 @@ namespace R3000A
 			DevCon.WriteLn(Color_Gray, "sifcmd sceSifRegisterRpc: rpc_id %x", a1);
 		}
 	} // namespace sifcmd
+
+	u32 irxFindLoadcore(u32 entrypc)
+	{
+		u32 i;
+
+		i = entrypc - 0x18;
+		while (entrypc - i < 0x2000)
+		{
+			// find loadcore string
+			if (iopMemRead32(i) == 0x64616F6C && iopMemRead32(i+4) == 0x65726F63)
+			{
+				return i;
+			}
+			i -= 4;
+		}
+
+		return 0;
+	}
 
 	u32 irxImportTableAddr(u32 entrypc)
 	{
@@ -1130,6 +1168,9 @@ namespace R3000A
 	irxDEBUG irxImportDebug(const std::string& libname, u16 index)
 	{
 		// clang-format off
+		MODULE(excepman)
+			EXPORT_D(  4, RegisterExceptionHandler)
+		END_MODULE
 		MODULE(loadcore)
 			EXPORT_D(  6, RegisterLibraryEntries)
 		END_MODULE

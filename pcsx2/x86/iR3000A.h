@@ -49,6 +49,7 @@ void _psxMoveGPRtoM(uptr to, int fromgpr);
 extern u32 psxpc; // recompiler pc
 extern int psxbranch; // set for branch
 extern u32 g_iopCyclePenalty;
+extern u32 modulelist;
 
 void psxSaveBranchState();
 void psxLoadBranchState();
