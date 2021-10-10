@@ -992,19 +992,32 @@ namespace R3000A
 
 	namespace loadcore
 	{
+
 		void RegisterLibraryEntries_DEBUG()
 		{
 			const std::string modname = iopMemReadString(a0 + 12);
 			DevCon.WriteLn(Color_Gray, "RegisterLibraryEntries: %8.8s version %x.%02x", modname.data(), (unsigned)iopMemRead8(a0 + 9), (unsigned)iopMemRead8(a0 + 8));
 
-			Console.WriteLn(Color_StrongGreen, "%d modules loaded", iopMemRead32(modulelist + 0x14));
+			u32 lcptr = iopMemRead32(0x3f0);
+			u32 lcstring = irxFindLoadcore(lcptr);
+			u32 list = 0;
 
-			u32 mod = iopMemRead32(modulelist);
+			if (lcstring == 0)
+			{
+				list = lcptr - 0x20;
+			}
+			else
+			{
+				list = lcstring + 0x18;
+			}
+
+			Console.WriteLn(Color_StrongGreen, "%d modules loaded", iopMemRead32(list + 0x14));
+
+			u32 mod = iopMemRead32(list);
 
 			while (mod != 0)
 			{
 				Console.WriteLn(Color_StrongGreen, "%s", iopMemReadString(mod + 12, 8).c_str());
-
 				mod = iopMemRead32(mod);
 			}
 		}
@@ -1059,11 +1072,11 @@ namespace R3000A
 	{
 		u32 i;
 
-		i = entrypc - 0x18;
-		while (entrypc - i < 0x2000)
+		i = entrypc;
+		while (entrypc - i < 0x50)
 		{
 			// find loadcore string
-			if (iopMemRead32(i) == 0x64616F6C && iopMemRead32(i+4) == 0x65726F63)
+			if (iopMemRead32(i) == 0x49497350 && iopMemRead32(i+4) == 0x64616F6C)
 			{
 				return i;
 			}
