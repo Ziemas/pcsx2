@@ -793,16 +793,16 @@ static void psxRecompileIrxImport()
 
 	const std::string libname = iopMemReadString(import_table + 12, 8);
 
-	if (foundModules == 0 && libname == "sysmem")
-	{
-		u32 lc = irxFindLoadcore(import_table);
-		if (lc != 0)
-			Console.WriteLn(Color_StrongGreen, "!!! found loadcore %08x !!!!", lc);
+	//if (foundModules == 0 && libname == "sysmem")
+	//{
+	//	u32 lc = irxFindLoadcore(import_table);
+	//	if (lc != 0)
+	//		Console.WriteLn(Color_StrongGreen, "!!! found loadcore %08x !!!!", lc);
 
-		getModuleList(lc);
+	//	getModuleList(lc);
 
-		foundModules = 1;
-	}
+	//	foundModules = 1;
+	//}
 
 	irxHLE hle = irxImportHLE(libname, index);
 #ifdef PCSX2_DEVBUILD
