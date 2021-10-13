@@ -16,86 +16,31 @@
 #include "PrecompiledHeader.h"
 #include "App.h"
 #include "common/Threading.h"
-
-#include <wx/stackwalk.h>
-
-#if wxUSE_STACKWALKER
-class StackDump : public wxStackWalker
-{
-protected:
-	FastFormatUnicode	m_stackTrace;
-	wxString			m_srcFuncName;
-	bool				m_ignoreDone;
-	int					m_skipped;
-
-public:
-	StackDump( const FnChar_t* src_function_name )
-	{
-		if( src_function_name != NULL )
-			m_srcFuncName = fromUTF8(src_function_name);
-
-		m_ignoreDone	= false;
-		m_skipped		= 0;
-	}
-
-	const wxChar* GetStackTrace() const { return m_stackTrace.c_str(); }
-
-protected:
-	virtual void OnStackFrame(const wxStackFrame& frame)
-	{
-		/*if( m_srcFuncName.IsEmpty() || m_srcFuncName == name )
-		{
-			// FIXME: This logic isn't reliable yet.
-			// It's possible for our debug information to not match the function names returned by
-			// __pxFUNCTION__ (might happen in linux a lot, and could happen in win32 due to
-			// inlining on Dev aserts).  The better approach is a system the queues up all the
-			// stacktrace info in individual wxStrings, and does a two-pass check -- first pass
-			// for the function name and, if not found, a second pass that just skips the first
-			// few stack entries.
-
-			// It's important we only walk the stack once because Linux (argh, always linux!) has
-			// a really god aweful slow stack walker.
-
-			// I'm not doing it right now because I've worked on this mess enough for one week. --air
-
-			m_ignoreDone = true;
-		}
-
-		if( !m_ignoreDone )
-		{
-			m_skipped++;
-			return;
-		}*/
-
-		m_stackTrace.Write(pxsFmt( L"[%02d]", frame.GetLevel()-m_skipped).c_str());
-		
-		if (!frame.GetName().IsEmpty())
-			m_stackTrace.Write(pxsFmt( L" %-44s", WX_STR(frame.GetName()) ).c_str());
-		else
-			m_stackTrace.Write(pxsFmt( L" 0x%-42p", frame.GetAddress() ).c_str());
-
-		if( frame.HasSourceLocation() )
-		{
-			wxFileName wxfn(frame.GetFileName());
-
-			wxfn.SetVolume( wxEmptyString );
-			for (int i = 0; i < 2 && wxfn.GetDirCount() > 0; ++i)
-				wxfn.RemoveDir(0);
-
-			m_stackTrace.Write( L" %s:%d", WX_STR(wxfn.GetFullPath()), frame.GetLine() );
-		}
-		
-		m_stackTrace.Write(L"\n");
-	}
-};
+#include "ghc/filesystem.h"
+#include "backward.hpp"
 
 static wxString pxGetStackTrace( const FnChar_t* calledFrom )
 {
-	StackDump dump( calledFrom );
-	dump.Walk( 3 );
-	return dump.GetStackTrace();
+	std::stringstream text;
+	backward::StackTrace st;
+	st.load_from((void*)calledFrom);
+
+	backward::TraceResolver tr;
+	tr.load_stacktrace(st);
+
+	for (size_t i = 3; i < st.size(); ++i) {
+		backward::ResolvedTrace trace = tr.resolve(st[i]);
+		text << "#" << i
+			<< " " << ghc::filesystem::path(trace.object_filename).filename().string()
+			<< " " << ghc::filesystem::path(trace.source.filename).filename().string()
+			<< ":" << trace.source.line
+			<< " " << trace.object_function
+			<< " [" << trace.addr << "]"
+		<< std::endl;
+	}
+
+	return wxString(text.str());
 }
-#endif
 
 #ifdef __WXDEBUG__
 
@@ -124,11 +69,7 @@ bool AppDoAssert( const DiagnosticOrigin& origin, const wxChar *msg )
 	static bool disableAsserts = false;
 	if( disableAsserts ) return false;
 
-#if wxUSE_STACKWALKER
 	wxString trace( pxGetStackTrace(origin.function) );
-#else
-	wxString trace( "Warning: Platform doesn't support wx stackwalker" );
-#endif
 	wxString dbgmsg( origin.ToString( msg ) );
 
 	wxMessageOutputDebug().Printf( L"%s", WX_STR(dbgmsg) );
