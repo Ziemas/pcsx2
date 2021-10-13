@@ -1473,6 +1473,8 @@ target_link_libraries(PCSX2_FLAGS INTERFACE
 	PNG::PNG
 	Freetype::Freetype
 	LibLZMA::LibLZMA
+	bfd
+	dl
 	${LIBC_LIBRARIES}
 )
 

@@ -17,6 +17,7 @@
 #include "App.h"
 #include "common/Threading.h"
 #include "ghc/filesystem.h"
+#define BACKWARD_HAS_BFD 1
 #include "backward.hpp"
 
 static wxString pxGetStackTrace( const FnChar_t* calledFrom )
