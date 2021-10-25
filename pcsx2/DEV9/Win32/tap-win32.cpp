@@ -196,6 +196,11 @@ std::vector<AdapterEntry> TAPAdapter::GetAdapters()
 	return tap_nic;
 }
 
+AdapterOptions TAPAdapter::GetAdapterOptions()
+{
+	return AdapterOptions::None;
+}
+
 static int TAPGetMACAddress(HANDLE handle, u8* addr)
 {
 	DWORD len = 0;

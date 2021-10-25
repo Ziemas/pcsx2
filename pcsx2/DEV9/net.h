@@ -78,6 +78,24 @@ struct AdapterEntry
 #endif
 };
 
+enum struct AdapterOptions : int
+{
+	None = 0,
+	DHCP_ForcedOn = 1,
+	DHCP_OverrideIP = 2,
+	DHCP_OverideSubnet = 4,
+	DHCP_OverideGateway = 8,
+};
+
+constexpr enum AdapterOptions operator|(const enum AdapterOptions selfValue, const enum AdapterOptions inValue)
+{
+	return (enum AdapterOptions)(int(selfValue) | int(inValue));
+}
+constexpr enum AdapterOptions operator&(const enum AdapterOptions selfValue, const enum AdapterOptions inValue)
+{
+	return (enum AdapterOptions)(int(selfValue) & int(inValue));
+}
+
 class NetAdapter
 {
 public:
@@ -98,6 +116,7 @@ private:
 	std::condition_variable internalRxCV;
 	bool internalRxHasData = false;
 
+	bool dhcpOn = false;
 	InternalServers::DHCP_Server dhcpServer = InternalServers::DHCP_Server([&] { InternalSignalReceived(); });
 	InternalServers::DNS_Logger dnsLogger;
 	InternalServers::DNS_Server dnsServer = InternalServers::DNS_Server([&] { InternalSignalReceived(); });
@@ -120,11 +139,11 @@ protected:
 	void InspectSend(NetPacket* pkt);
 
 #ifdef _WIN32
-	void InitInternalServer(PIP_ADAPTER_ADDRESSES adapter);
-	void ReloadInternalServer(PIP_ADAPTER_ADDRESSES adapter);
+	void InitInternalServer(PIP_ADAPTER_ADDRESSES adapter, bool dhcpForceEnable = false, PacketReader::IP::IP_Address ipOverride = {0}, PacketReader::IP::IP_Address subnetOverride = {0}, PacketReader::IP::IP_Address gatewayOveride = {0});
+	void ReloadInternalServer(PIP_ADAPTER_ADDRESSES adapter, bool dhcpForceEnable = false, PacketReader::IP::IP_Address ipOverride = {0}, PacketReader::IP::IP_Address subnetOverride = {0}, PacketReader::IP::IP_Address gatewayOveride = {0});
 #elif defined(__POSIX__)
-	void InitInternalServer(ifaddrs* adapter);
-	void ReloadInternalServer(ifaddrs* adapter);
+	void InitInternalServer(ifaddrs* adapter, bool dhcpForceEnable = false, PacketReader::IP::IP_Address ipOverride = {0}, PacketReader::IP::IP_Address subnetOverride = {0}, PacketReader::IP::IP_Address gatewayOveride = {0});
+	void ReloadInternalServer(ifaddrs* adapter, bool dhcpForceEnable = false, PacketReader::IP::IP_Address ipOverride = {0}, PacketReader::IP::IP_Address subnetOverride = {0}, PacketReader::IP::IP_Address gatewayOveride = {0});
 #endif
 
 private:

@@ -400,6 +400,10 @@ PCAPAdapter::PCAPAdapter()
 		Console.Error("Can't open Device '%s'\n", config.Eth);
 	}
 }
+AdapterOptions PCAPAdapter::GetAdapterOptions()
+{
+	return AdapterOptions::None;
+}
 bool PCAPAdapter::blocks()
 {
 	return true;
