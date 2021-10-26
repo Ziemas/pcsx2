@@ -21,8 +21,8 @@
 namespace PacketReader::IP::TCP
 {
 	TCPopMSS::TCPopMSS(u16 mss)
+		: maxSegmentSize{mss}
 	{
-		maxSegmentSize = mss;
 	}
 	TCPopMSS::TCPopMSS(u8* data, int offset)
 	{
@@ -38,8 +38,8 @@ namespace PacketReader::IP::TCP
 	}
 
 	TCPopWS::TCPopWS(u8 ws)
+		: windowScale{ws}
 	{
-		windowScale = ws;
 	}
 	TCPopWS::TCPopWS(u8* data, int offset)
 	{
@@ -55,9 +55,9 @@ namespace PacketReader::IP::TCP
 	}
 
 	TCPopTS::TCPopTS(u32 senderTS, u32 echoTS)
+		: senderTimeStamp{senderTS}
+		, echoTimeStamp{echoTS}
 	{
-		senderTimeStamp = senderTS;
-		echoTimeStamp = echoTS;
 	}
 	TCPopTS::TCPopTS(u8* data, int offset)
 	{

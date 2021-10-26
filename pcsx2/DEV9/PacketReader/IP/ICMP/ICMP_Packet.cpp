@@ -123,9 +123,9 @@ namespace PacketReader::IP::ICMP
 	}
 
 	ICMP_HeaderDataIdentifier::ICMP_HeaderDataIdentifier(u16 id, u16 seq)
+		: identifier{id}
+		, sequenceNumber{seq}
 	{
-		identifier = id;
-		sequenceNumber = seq;
 	}
 	ICMP_HeaderDataIdentifier::ICMP_HeaderDataIdentifier(u8* headerData)
 	{

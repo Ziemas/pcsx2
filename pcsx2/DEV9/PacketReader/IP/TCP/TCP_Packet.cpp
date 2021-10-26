@@ -103,7 +103,8 @@ namespace PacketReader::IP::TCP
 	}
 
 	TCP_Packet::TCP_Packet(Payload* data)
-		: payload{data}
+		: headerLength{20}
+		, payload{data}
 	{
 	}
 	TCP_Packet::TCP_Packet(u8* buffer, int bufferSize)
