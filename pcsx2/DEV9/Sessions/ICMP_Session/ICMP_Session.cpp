@@ -52,7 +52,7 @@ using namespace std::chrono_literals;
 
 	Windows provides an api for ICMP
 	ICMP_ECHO_REPLY should always be used, ignore ICMP_ECHO_REPLY32
-	IP_OPTION_INFORMATION32 however does need to be used on 64bit?
+	IP_OPTION_INFORMATION should always be used, ignore IP_OPTION_INFORMATION32
 
 	Linux
 	We have access to raw sockets via CAP_NET_RAW (for pcap)
@@ -517,11 +517,8 @@ namespace Sessions
 	bool ICMP_Session::Ping::Send(IP_Address parAdapterIP, IP_Address parDestIP, int parTimeToLive, PayloadPtr* parPayload)
 	{
 #ifdef _WIN32
-#ifdef _WIN64
-		IP_OPTION_INFORMATION32 ipInfo{0};
-#else
+		//Documentation is incorrect, IP_OPTION_INFORMATION is to be used regardless of platform
 		IP_OPTION_INFORMATION ipInfo{0};
-#endif
 		ipInfo.Ttl = parTimeToLive;
 		DWORD ret;
 		if (parAdapterIP.integer != 0)
