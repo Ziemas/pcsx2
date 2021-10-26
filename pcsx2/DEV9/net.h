@@ -81,10 +81,10 @@ struct AdapterEntry
 enum struct AdapterOptions : int
 {
 	None = 0,
-	DHCP_ForcedOn = 1,
-	DHCP_OverrideIP = 2,
-	DHCP_OverideSubnet = 4,
-	DHCP_OverideGateway = 8,
+	DHCP_ForcedOn = 1 << 0,
+	DHCP_OverrideIP = 1 << 1,
+	DHCP_OverideSubnet = 1 << 2,
+	DHCP_OverideGateway = 1 << 3,
 };
 
 constexpr enum AdapterOptions operator|(const enum AdapterOptions selfValue, const enum AdapterOptions inValue)
