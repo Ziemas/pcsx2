@@ -156,7 +156,7 @@ AdapterOptions SocketAdapter::GetAdapterOptions()
 
 SocketAdapter::SocketAdapter()
 {
-	bool foundAdapter = false;
+	bool foundAdapter;
 
 #ifdef _WIN32
 	IP_ADAPTER_ADDRESSES adapter;
@@ -328,7 +328,7 @@ bool SocketAdapter::GetWin32SelectedAdapter(const char* name, PIP_ADAPTER_ADDRES
 		dwBufLen = sizeof(IP_ADAPTER_ADDRESSES) * neededSize;
 		DevCon.WriteLn("DEV9: New size %i", neededSize);
 
-		DWORD dwStatus = GetAdaptersAddresses(
+		dwStatus = GetAdaptersAddresses(
 			AF_UNSPEC,
 			GAA_FLAG_INCLUDE_PREFIX | GAA_FLAG_INCLUDE_GATEWAYS,
 			NULL,
@@ -483,7 +483,7 @@ bool SocketAdapter::GetIfAutoAdapter(ifaddrs* adapter, ifaddrs** buffer)
 	do
 	{
 		if ((pAdapter->ifa_flags & IFF_LOOPBACK) == 0 &&
-			(pAdapter->ifa_flags & IFF_UP != 0))
+			(pAdapter->ifa_flags & IFF_UP) != 0)
 		{
 			//Search for an adapter with;
 			//IPv4 Address

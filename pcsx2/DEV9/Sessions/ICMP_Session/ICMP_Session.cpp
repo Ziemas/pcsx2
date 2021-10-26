@@ -156,6 +156,7 @@ namespace Sessions
 				[[fallthrough]];
 #endif
 			default:
+				icmpResponseBufferLen = 0;
 				Console.Error("DEV9: ICMP: Failed To Ping");
 				return;
 		}

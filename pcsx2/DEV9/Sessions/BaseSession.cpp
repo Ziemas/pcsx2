@@ -32,9 +32,9 @@ namespace Sessions
 	}
 
 	BaseSession::BaseSession(ConnectionKey parKey, PacketReader::IP::IP_Address parAdapterIP)
+		: adapterIP{parAdapterIP}
+		, key{parKey}
 	{
-		adapterIP = parAdapterIP;
-		key = parKey;
 	}
 
 	void BaseSession::AddConnectionClosedHandler(ConnectionClosedEventHandler handler)

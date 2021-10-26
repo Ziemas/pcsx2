@@ -91,7 +91,7 @@ namespace Sessions
 		{
 			std::unique_ptr<u8[]> buffer;
 			int err = 0;
-			int recived = -1;
+			int recived = 0;
 
 			u_long available;
 #ifdef _WIN32
