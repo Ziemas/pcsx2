@@ -32,8 +32,8 @@ declare -a CLANG_PACKAGES=(
   "libomp5"
   "lld-10"
   "lldb-10"
-  "llvm-dev-10"
-  "llvm-runtime-10"
+  "llvm-10-dev"
+  "llvm-10-runtime"
   "llvm-10"
   "python3-clang-10"
 )
