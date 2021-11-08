@@ -606,6 +606,7 @@ void AppCoreThread::DoCpuExecute()
 		if (IsDevBuild)
 		{
 			_parent::PauseSelfDebug();
+			Msgbox::Alert(ex.FormatMessage());
 		}
 
 		if (++m_except_threshold > 6)
