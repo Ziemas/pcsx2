@@ -603,7 +603,10 @@ void AppCoreThread::DoCpuExecute()
 	{
 		Console.Error(ex.FormatMessage());
 
-		// [TODO] : Debugger Hook!
+		if (IsDevBuild)
+		{
+			_parent::PauseSelfDebug();
+		}
 
 		if (++m_except_threshold > 6)
 		{
