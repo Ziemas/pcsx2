@@ -196,9 +196,12 @@ namespace SPU
 		step = std::min(step, 0x3FFF);
 		m_Counter += step;
 
-		while (m_Counter >= 0x1000u)
+		auto steps = m_Counter >> 12;
+		m_Counter &= 0xFFF;
+
+		while (steps > 0)
 		{
-			m_Counter -= 0x1000u;
+			steps--;
 			m_DecodeBuf.Pop();
 		}
 
