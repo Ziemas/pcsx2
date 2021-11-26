@@ -15,29 +15,59 @@
 
 #include "PrecompiledHeader.h"
 #include "BiosDebugData.h"
+#include "IopMem.h"
 #include "Memory.h"
 
-std::vector<EEThread> getEEThreads()
-{
-	std::vector<EEThread> threads;
 
-	if (CurrentBiosInformation.threadListAddr <= 0)
+std::vector<std::unique_ptr<BiosThread>> getEEThreads()
+{
+	std::vector<std::unique_ptr<BiosThread>> threads;
+
+	if (CurrentBiosInformation.eeThreadListAddr <= 0)
 		return threads;
 
-	const u32 start = CurrentBiosInformation.threadListAddr & 0x3fffff;
+	const u32 start = CurrentBiosInformation.eeThreadListAddr & 0x3fffff;
 
 	for (int tid = 0; tid < 256; tid++)
 	{
-		EEThread thread;
 
 		EEInternalThread* internal = static_cast<EEInternalThread*>(PSM(start + tid * sizeof(EEInternalThread)));
-		if (internal->status != THS_BAD)
+		if (internal->status != (int)ThreadStatus::THS_BAD)
 		{
-			thread.tid = tid;
-			thread.data = *internal;
-			threads.push_back(thread);
+			auto thread = std::make_unique<EEThread>(tid, *internal);
+			threads.push_back(std::move(thread));
 		}
 	}
+
+	return threads;
+}
+
+
+std::vector<std::unique_ptr<BiosThread>> getIOPThreads()
+{
+	std::vector<std::unique_ptr<BiosThread>> threads;
+
+	if (CurrentBiosInformation.iopThreadListAddr <= 0)
+		return threads;
+
+	u32 item = iopMemRead32(CurrentBiosInformation.iopThreadListAddr);
+
+	while (item != 0)
+	{
+		IOPInternalThread data{};
+		data.SP = iopMemRead32(item + 0x10);
+		data.status = iopMemRead8(item + 0xc);
+		data.tid = iopMemRead16(item + 0xa);
+		data.entrypoint = iopMemRead32(item + 0x38);
+		data.waitstate = iopMemRead16(item + 0xe);
+		data.PC = iopMemRead32(data.SP + 0x8c);
+
+		auto thread = std::make_unique<IOPThread>(data);
+		threads.push_back(std::move(thread));
+
+		item = iopMemRead32(item + 0x24);
+	}
+
 
 	return threads;
 }
