@@ -21,6 +21,7 @@
 #include "IopBios.h"
 #include "IopMem.h"
 #include "iR3000A.h"
+#include "ps2/BiosTools.h"
 
 #include <ctype.h>
 #include <string.h>
@@ -993,11 +994,9 @@ namespace R3000A
 	namespace loadcore
 	{
 
-		void RegisterLibraryEntries_DEBUG()
+		// Get's the module list ptr when loading any module
+		u32 GetModList(u32 a0reg)
 		{
-			const std::string modname = iopMemReadString(a0 + 12);
-			DevCon.WriteLn(Color_Gray, "RegisterLibraryEntries: %8.8s version %x.%02x", modname.data(), (unsigned)iopMemRead8(a0 + 9), (unsigned)iopMemRead8(a0 + 8));
-
 			u32 lcptr = iopMemRead32(0x3f0);
 			u32 lcstring = irxFindLoadcore(lcptr);
 			u32 list = 0;
@@ -1020,6 +1019,36 @@ namespace R3000A
 				Console.WriteLn(Color_StrongGreen, "%s", iopMemReadString(mod + 12, 8).c_str());
 				mod = iopMemRead32(mod);
 			}
+
+			return list;
+		}
+
+		// Gets the thread list ptr from thbase
+		u32 GetThreadList(u32 a0reg)
+		{
+			// Function 3 returns the thread struct
+			u32 function = iopMemRead32(a0reg + 0x20);
+
+			u32 thstruct = (iopMemRead32(function) & 0xFFFF) << 16;
+			thstruct |= iopMemRead32(function + 4) & 0xFFFF;
+
+			Console.WriteLn(Color_StrongGreen, "func at: %08x, struct at: %08x", function, thstruct);
+
+			u32 list = thstruct + 0x42c;
+			return list;
+		}
+
+		void RegisterLibraryEntries_DEBUG()
+		{
+			const std::string modname = iopMemReadString(a0 + 12);
+			DevCon.WriteLn(Color_Gray, "RegisterLibraryEntries: %8.8s version %x.%02x", modname.data(), (unsigned)iopMemRead8(a0 + 9), (unsigned)iopMemRead8(a0 + 8));
+
+			if (modname == "thbase")
+			{
+				CurrentBiosInformation.iopThreadListAddr = GetThreadList(a0);
+			}
+
+			CurrentBiosInformation.iopModListAddr = GetModList(a0);
 		}
 	} // namespace loadcore
 
