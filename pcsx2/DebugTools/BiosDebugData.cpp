@@ -50,7 +50,8 @@ std::vector<std::unique_ptr<BiosThread>> getIOPThreads()
 	if (CurrentBiosInformation.iopThreadListAddr <= 0)
 		return threads;
 
-	u32 item = iopMemRead32(CurrentBiosInformation.iopThreadListAddr);
+	u32 list = iopMemRead32(CurrentBiosInformation.iopThreadListAddr);
+	u32 item = iopMemRead32(list);
 
 	while (item != 0)
 	{
@@ -60,6 +61,8 @@ std::vector<std::unique_ptr<BiosThread>> getIOPThreads()
 		data.tid = iopMemRead16(item + 0xa);
 		data.entrypoint = iopMemRead32(item + 0x38);
 		data.waitstate = iopMemRead16(item + 0xe);
+		data.initPriority = iopMemRead16(item + 0x2e);
+
 		data.PC = iopMemRead32(data.SP + 0x8c);
 
 		auto thread = std::make_unique<IOPThread>(data);

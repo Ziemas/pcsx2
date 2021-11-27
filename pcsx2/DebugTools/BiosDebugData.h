@@ -62,6 +62,7 @@ struct IOPInternalThread
 	u32 status;
 	u32 entrypoint;
 	u32 waitstate;
+	u32 initPriority;
 };
 
 enum class IOPWaitStatus
@@ -105,6 +106,7 @@ public:
 	[[nodiscard]] virtual WaitState WaitState() const = 0;
 	[[nodiscard]] virtual u32 EntryPoint() const = 0;
 	[[nodiscard]] virtual u32 SP() const = 0;
+	[[nodiscard]] virtual u32 Priority() const = 0;
 };
 
 class EEThread : public BiosThread
@@ -135,6 +137,7 @@ public:
 	};
 	[[nodiscard]] u32 EntryPoint() const override { return data.entry_init; };
 	[[nodiscard]] u32 SP() const override { return data.stack; };
+	[[nodiscard]] u32 Priority() const override { return data.currentPriority; };
 
 private:
 	u32 tid;
@@ -153,9 +156,31 @@ public:
 	[[nodiscard]] u32 TID() const override { return data.tid; };
 	[[nodiscard]] u32 PC() const override { return data.PC; };
 	[[nodiscard]] ThreadStatus Status() const override { return static_cast<ThreadStatus>(data.status); };
-	[[nodiscard]] enum WaitState WaitState() const override { return WaitState::NONE; };
+	[[nodiscard]] enum WaitState WaitState() const override
+	{
+		auto wait = static_cast<IOPWaitStatus>(data.waitstate);
+		switch (wait)
+		{
+			case IOPWaitStatus::TSW_DELAY:
+				return WaitState::DELAY;
+			case IOPWaitStatus::TSW_EVENTFLAG:
+				return WaitState::EVENTFLAG;
+			case IOPWaitStatus::TSW_SLEEP:
+				return WaitState::SLEEP;
+			case IOPWaitStatus::TSW_SEMA:
+				return WaitState::SEMA;
+			case IOPWaitStatus::TSW_MBX:
+				return WaitState::MBOX;
+			case IOPWaitStatus::TSW_VPL:
+				return WaitState::VPOOL;
+			case IOPWaitStatus::TSW_FPL:
+				return WaitState::FIXPOOL;
+		}
+		return WaitState::NONE;
+	};
 	[[nodiscard]] u32 EntryPoint() const override { return data.entrypoint; };
 	[[nodiscard]] u32 SP() const override { return data.SP; };
+	[[nodiscard]] u32 Priority() const override { return data.initPriority; };
 
 private:
 	IOPInternalThread data;
