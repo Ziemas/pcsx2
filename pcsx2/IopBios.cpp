@@ -22,8 +22,10 @@
 #include "IopMem.h"
 #include "iR3000A.h"
 #include "ps2/BiosTools.h"
+#include "DebugTools/SymbolMap.h"
 
 #include <ctype.h>
+#include <fmt/format.h>
 #include <string.h>
 #include <sys/stat.h>
 #include "common/FileSystem.h"
@@ -1038,11 +1040,29 @@ namespace R3000A
 			return list;
 		}
 
-		void RegisterLibraryEntries_DEBUG()
+		void LoadFuncs(u32 a0reg)
 		{
-			const std::string modname = iopMemReadString(a0 + 12);
+
+			const std::string modname = iopMemReadString(a0reg + 12);
 			DevCon.WriteLn(Color_Gray, "RegisterLibraryEntries: %8.8s version %x.%02x", modname.data(), (unsigned)iopMemRead8(a0 + 9), (unsigned)iopMemRead8(a0 + 8));
 
+			u32 func = a0reg + 20;
+			u32 funcptr = iopMemRead32(func);
+			u32 index = 0;
+			while (funcptr != 0) {
+				const char* funcname = irxImportFuncname(modname, index);
+				R3000SymbolMap.AddFunction(fmt::format("{}::{}", modname, funcname).c_str(), funcptr, 0);
+				index++;
+				func += 4;
+				funcptr = iopMemRead32(func);
+			}
+		}
+
+		void RegisterLibraryEntries_DEBUG()
+		{
+			LoadFuncs(a0);
+
+			const std::string modname = iopMemReadString(a0 + 12);
 			if (modname == "thbase")
 			{
 				CurrentBiosInformation.iopThreadListAddr = GetThreadList(a0);
@@ -1144,7 +1164,7 @@ namespace R3000A
 				// case 3: ???
 		}
 
-		return 0;
+		return "";
 	}
 
 // clang-format off
