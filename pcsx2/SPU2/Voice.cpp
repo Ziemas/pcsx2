@@ -71,6 +71,9 @@ namespace SPU
 	{
 		SPUCore::TestIrq(m_NAX.full);
 
+		// The block header (and thus LSA) updates every spu cycle
+		UpdateBlockHeader();
+
 		// This doesn't exactly match the real behaviour,
 		// it seems to initially decode a bigger chunk
 		// and then decode more data after a bit has drained
@@ -127,14 +130,12 @@ namespace SPU
 				}
 			}
 
-			UpdateBlockHeader();
-
 			m_NAX.full++;
 		}
 	}
 	void Voice::UpdateBlockHeader()
 	{
-		SPUCore::TestIrq(m_NAX.full);
+		SPUCore::TestIrq(m_NAX.full & ~0x7);
 		m_CurHeader.bits = m_SPU.Ram(m_NAX.full & ~0x7);
 		if (m_CurHeader.LoopStart && !m_CustomLoop)
 			m_LSA.full = m_NAX.full & ~0x7;
@@ -151,12 +152,10 @@ namespace SPU
 		if (m_KeyOn)
 		{
 			m_KeyOn = false;
+
 			m_NAX.full = m_SSA.full;
-
-			// We need the header before running DecodeSamples() in order to have NAX behave the way we want
-			UpdateBlockHeader();
-
 			m_NAX.full++;
+
 			m_ENDX = false;
 			m_ADSR.Attack();
 			m_Counter = 0;
