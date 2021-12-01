@@ -187,8 +187,7 @@ namespace SPU
 		if (m_ATTR[m_Id].CurrentTransMode == TransferMode::DMARead)
 			memcpy(m_MADR, &m_RAM[m_InternalTSA], DmaFifoSize * 2);
 
-		// Exclude initial, include final
-		TestIrq(m_InternalTSA + 1, m_InternalTSA + DmaFifoSize + 1);
+		TestIrq(m_InternalTSA, m_InternalTSA + DmaFifoSize - 1);
 
 		m_InternalTSA += DmaFifoSize;
 		m_MADR += DmaFifoSize;
@@ -236,7 +235,7 @@ namespace SPU
 
 	void SPUCore::DmaWrite(u16* madr, u32 size)
 	{
-		//Console.WriteLn(ConsoleColors::Color_Cyan, "SPU[%d] Dma WRITE %d shorts to %06x", m_Id, size, m_InternalTSA);
+		Console.WriteLn(ConsoleColors::Color_Cyan, "SPU[%d] Dma WRITE %d shorts to %06x irqa[%04x]", m_Id, size, m_InternalTSA, m_IRQA[m_Id]);
 		if (AdmaActive())
 		{
 			m_Stat.DMABusy = true;
