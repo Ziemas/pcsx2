@@ -235,7 +235,7 @@ namespace SPU
 
 	void SPUCore::DmaWrite(u16* madr, u32 size)
 	{
-		Console.WriteLn(ConsoleColors::Color_Cyan, "SPU[%d] Dma WRITE %d shorts to %06x irqa[%04x]", m_Id, size, m_InternalTSA, m_IRQA[m_Id]);
+		//Console.WriteLn(ConsoleColors::Color_Cyan, "SPU[%d] Dma WRITE %d shorts to %06x irqa[%04x]", m_Id, size, m_InternalTSA, m_IRQA[m_Id]);
 		if (AdmaActive())
 		{
 			m_Stat.DMABusy = true;
