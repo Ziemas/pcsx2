@@ -33,6 +33,9 @@ namespace SPU
 		MemOut(OutBuf::SINL, input.left);
 		MemOut(OutBuf::SINR, input.right);
 
+		AudioSample VoicesDry(0, 0);
+		AudioSample VoicesWet(0, 0);
+
 		// TODO this is bit ugly isn't it
 		// tempting to do the union thing spu2x does
 		u32 vDryL = m_VMIXL.full;
@@ -42,14 +45,17 @@ namespace SPU
 		for (auto& v : m_voices)
 		{
 			auto sample = v.GenSample();
-			Dry.Mix(sample, vDryL & 1, vDryR & 1);
-			Wet.Mix(sample, vWetL & 1, vWetR & 1);
+			VoicesDry.Mix(sample, vDryL & 1, vDryR & 1);
+			VoicesWet.Mix(sample, vWetL & 1, vWetR & 1);
 
 			vDryL >>= 1;
 			vDryR >>= 1;
 			vWetL >>= 1;
 			vWetR >>= 1;
 		}
+
+		Dry.Mix(VoicesDry, m_MMIX.VoiceL, m_MMIX.VoiceR);
+		Wet.Mix(VoicesWet, m_MMIX.VoiceWetL, m_MMIX.VoiceWetR);
 
 		input.Volume(m_AVOL);
 		Dry.Mix(input, m_MMIX.SinL, m_MMIX.SinR);
@@ -77,8 +83,8 @@ namespace SPU
 		MemOut(OutBuf::MemOutER, EOut.right);
 
 		AudioSample Out(0, 0);
-		Out.Mix(Dry, m_MMIX.VoiceL, m_MMIX.VoiceR);
-		Out.Mix(EOut, m_MMIX.VoiceWetL, m_MMIX.VoiceWetR);
+		Out.Mix(Dry, true, true);
+		Out.Mix(EOut, true, true);
 
 		m_BufPos++;
 		if (m_BufPos == 0x50)
