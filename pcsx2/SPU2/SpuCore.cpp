@@ -57,6 +57,9 @@ namespace SPU
 		Dry.Mix(VoicesDry, m_MMIX.VoiceL, m_MMIX.VoiceR);
 		Wet.Mix(VoicesWet, m_MMIX.VoiceWetL, m_MMIX.VoiceWetR);
 
+		MemOut(OutBuf::MemOutEL, VoicesWet.left);
+		MemOut(OutBuf::MemOutER, VoicesWet.right);
+
 		input.Volume(m_AVOL);
 		Dry.Mix(input, m_MMIX.SinL, m_MMIX.SinR);
 		Wet.Mix(input, m_MMIX.SinWetL, m_MMIX.SinWetR);
@@ -78,9 +81,6 @@ namespace SPU
 
 		auto EOut = m_Reverb.Run(Wet);
 		EOut.Volume(m_EVOL);
-
-		MemOut(OutBuf::MemOutEL, EOut.left);
-		MemOut(OutBuf::MemOutER, EOut.right);
 
 		AudioSample Out(0, 0);
 		Out.Mix(Dry, true, true);
