@@ -172,18 +172,18 @@ namespace SPU
 		{
 			u16 bits;
 
-			BitField<u16, bool, 11, 1> VoiceR;
-			BitField<u16, bool, 10, 1> VoiceL;
-			BitField<u16, bool, 9, 1> VoiceWetR;
-			BitField<u16, bool, 8, 1> VoiceWetL;
-			BitField<u16, bool, 7, 1> MeminR;
-			BitField<u16, bool, 6, 1> MeminL;
-			BitField<u16, bool, 5, 1> MeminWetR;
-			BitField<u16, bool, 4, 1> MeminWetL;
-			BitField<u16, bool, 3, 1> SinR;
-			BitField<u16, bool, 2, 1> SinL;
-			BitField<u16, bool, 1, 1> SinWetR;
-			BitField<u16, bool, 0, 1> SinWetL;
+			BitField<u16, bool, 11, 1> VoiceL;
+			BitField<u16, bool, 10, 1> VoiceR;
+			BitField<u16, bool, 9, 1> VoiceWetL;
+			BitField<u16, bool, 8, 1> VoiceWetR;
+			BitField<u16, bool, 7, 1> MeminL;
+			BitField<u16, bool, 6, 1> MeminR;
+			BitField<u16, bool, 5, 1> MeminWetL;
+			BitField<u16, bool, 4, 1> MeminWetR;
+			BitField<u16, bool, 3, 1> SinL;
+			BitField<u16, bool, 2, 1> SinR;
+			BitField<u16, bool, 1, 1> SinWetL;
+			BitField<u16, bool, 0, 1> SinWetR;
 		};
 
 
