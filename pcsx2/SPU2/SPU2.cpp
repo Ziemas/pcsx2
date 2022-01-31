@@ -42,9 +42,10 @@ namespace SPU
 	void Configure() {}
 	void Close() {}
 	void Shutdown() {}
-	void Open() {}
+	s32 Open() { return 0; }
 
-	void Init() {}
+	s32 Init() { return 0; }
 
 	s32 Freeze(FreezeAction mode, freezeData* data) { return 0; }
+	void SetOutputPaused(bool paused) {}
 } // namespace SPU

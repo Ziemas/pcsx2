@@ -195,7 +195,7 @@ void VMManager::SetState(VMState state)
 			frameLimitReset();
 		}
 
-		SPU2SetOutputPaused(state == VMState::Paused);
+		SPU::SetOutputPaused(state == VMState::Paused);
 		if (state == VMState::Paused)
 			Host::OnVMPaused();
 		else
@@ -892,15 +892,15 @@ bool VMManager::Initialize(VMBootParameters boot_params)
 	};
 
 	Console.WriteLn("Opening SPU2...");
-	if (SPU2init() != 0 || SPU2open() != 0)
+	if (SPU::Init() != 0 || SPU::Open() != 0)
 	{
 		Host::ReportErrorAsync("Startup Error", "Failed to initialize SPU2.");
-		SPU2shutdown();
+		SPU::Shutdown();
 		return false;
 	}
 	ScopedGuard close_spu2 = []() {
-		SPU2close();
-		SPU2shutdown();
+		SPU::Close();
+		SPU::Shutdown();
 	};
 
 	Console.WriteLn("Opening PAD...");
@@ -1052,7 +1052,7 @@ void VMManager::Shutdown(bool save_resume_state)
 	ForgetLoadedPatches();
 	R3000A::ioman::reset();
 	USBclose();
-	SPU2close();
+	SPU::Close();
 	PADclose();
 	DEV9close();
 	DoCDVDclose();
@@ -1072,7 +1072,7 @@ void VMManager::Shutdown(bool save_resume_state)
 	}
 
 	USBshutdown();
-	SPU2shutdown();
+	SPU::Shutdown();
 	PADshutdown();
 	DEV9shutdown();
 	GSshutdown();
@@ -1554,7 +1554,7 @@ void VMManager::CheckForSPU2ConfigChanges(const Pcsx2Config& old_config)
 
 	// kinda lazy, but until we move spu2 over...
 	freezeData fd = {};
-	if (SPU2freeze(FreezeAction::Size, &fd) != 0)
+	if (SPU::Freeze(FreezeAction::Size, &fd) != 0)
 	{
 		Console.Error("(CheckForSPU2ConfigChanges) Failed to get SPU2 freeze size");
 		return;
@@ -1562,21 +1562,21 @@ void VMManager::CheckForSPU2ConfigChanges(const Pcsx2Config& old_config)
 
 	std::unique_ptr<u8[]> fd_data = std::make_unique<u8[]>(fd.size);
 	fd.data = fd_data.get();
-	if (SPU2freeze(FreezeAction::Save, &fd) != 0)
+	if (SPU::Freeze(FreezeAction::Save, &fd) != 0)
 	{
 		Console.Error("(CheckForSPU2ConfigChanges) Failed to freeze SPU2");
 		return;
 	}
 
-	SPU2close();
-	SPU2shutdown();
-	if (SPU2init() != 0 || SPU2open() != 0)
+	SPU::Close();
+	SPU::Shutdown();
+	if (SPU::Init() != 0 || SPU::Open() != 0)
 	{
 		Console.Error("(CheckForSPU2ConfigChanges) Failed to reopen SPU2, we'll probably crash :(");
 		return;
 	}
 
-	if (SPU2freeze(FreezeAction::Load, &fd) != 0)
+	if (SPU::Freeze(FreezeAction::Load, &fd) != 0)
 	{
 		Console.Error("(CheckForSPU2ConfigChanges) Failed to unfreeze SPU2");
 		return;
