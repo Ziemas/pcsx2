@@ -97,11 +97,13 @@ namespace SPU
 	void Configure();
 	void Close();
 	void Shutdown();
-	void Open();
+	s32 Open(PS2Modes mode = PS2Modes::PS2);
+	bool IsRunningPSXMode();
 
 	s32 Freeze(FreezeAction mode, freezeData* data);
 	//void FreezeIn(pxInputStream& reader);
 	//void FreezeOut(void *dest);
-	void Init();
+	s32 Init();
+	void SetOutputPaused(bool paused);
 
 } // namespace SPU

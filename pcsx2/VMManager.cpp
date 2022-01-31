@@ -203,7 +203,7 @@ void VMManager::SetState(VMState state)
 			frameLimitReset();
 		}
 
-		SPU2SetOutputPaused(state == VMState::Paused);
+		SPU::SetOutputPaused(state == VMState::Paused);
 		if (state == VMState::Paused)
 			Host::OnVMPaused();
 		else
@@ -267,7 +267,7 @@ bool VMManager::Internal::InitializeGlobals()
 		return false;
 	}
 
-	if (!SPU2init())
+	if (SPU::Init() != 0)
 	{
 		Host::ReportErrorAsync("Error", "Failed to initialize SPU2 (SPU2init()).");
 		return false;
@@ -285,7 +285,7 @@ bool VMManager::Internal::InitializeGlobals()
 void VMManager::Internal::ReleaseGlobals()
 {
 	USBshutdown();
-	SPU2shutdown();
+	SPU::Shutdown();
 	GSshutdown();
 
 #ifdef _WIN32
@@ -970,12 +970,12 @@ bool VMManager::Initialize(VMBootParameters boot_params)
 	};
 
 	Console.WriteLn("Opening SPU2...");
-	if (!SPU2open())
+	if (SPU::Open() != 0)
 	{
 		Host::ReportErrorAsync("Startup Error", "Failed to initialize SPU2.");
 		return false;
 	}
-	ScopedGuard close_spu2(&SPU2close);
+	ScopedGuard close_spu2(&SPU::Close);
 
 	Console.WriteLn("Opening PAD...");
 	if (PADinit() != 0 || PADopen(g_host_display->GetWindowInfo()) != 0)
@@ -1127,7 +1127,7 @@ void VMManager::Shutdown(bool save_resume_state)
 	R3000A::ioman::reset();
 	vtlb_Shutdown();
 	USBclose();
-	SPU2close();
+	SPU::Close();
 	PADclose();
 	DEV9close();
 	DoCDVDclose();
@@ -1709,7 +1709,7 @@ void VMManager::CheckForSPU2ConfigChanges(const Pcsx2Config& old_config)
 
 	// kinda lazy, but until we move spu2 over...
 	freezeData fd = {};
-	if (SPU2freeze(FreezeAction::Size, &fd) != 0)
+	if (SPU::Freeze(FreezeAction::Size, &fd) != 0)
 	{
 		Console.Error("(CheckForSPU2ConfigChanges) Failed to get SPU2 freeze size");
 		return;
@@ -1717,22 +1717,22 @@ void VMManager::CheckForSPU2ConfigChanges(const Pcsx2Config& old_config)
 
 	std::unique_ptr<u8[]> fd_data = std::make_unique<u8[]>(fd.size);
 	fd.data = fd_data.get();
-	if (SPU2freeze(FreezeAction::Save, &fd) != 0)
+	if (SPU::Freeze(FreezeAction::Save, &fd) != 0)
 	{
 		Console.Error("(CheckForSPU2ConfigChanges) Failed to freeze SPU2");
 		return;
 	}
 
-	const bool psxmode = SPU2IsRunningPSXMode();
+	const bool psxmode = SPU::IsRunningPSXMode();
 
-	SPU2close();
-	if (!SPU2open(psxmode ? PS2Modes::PSX : PS2Modes::PS2))
+	SPU::Close();
+	if (SPU::Open(psxmode ? SPU::PS2Modes::PSX : SPU::PS2Modes::PS2) != 0)
 	{
 		Console.Error("(CheckForSPU2ConfigChanges) Failed to reopen SPU2, we'll probably crash :(");
 		return;
 	}
 
-	if (SPU2freeze(FreezeAction::Load, &fd) != 0)
+	if (SPU::Freeze(FreezeAction::Load, &fd) != 0)
 	{
 		Console.Error("(CheckForSPU2ConfigChanges) Failed to unfreeze SPU2");
 		return;
