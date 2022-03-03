@@ -1026,7 +1026,7 @@ namespace R3000A
 		}
 
 		// Gets the thread list ptr from thbase
-		u32 GetThreadList(u32 a0reg)
+		u32 GetThreadList(u32 a0reg, u32 version)
 		{
 			// Function 3 returns the thread struct
 			u32 function = iopMemRead32(a0reg + 0x20);
@@ -1037,6 +1037,10 @@ namespace R3000A
 			Console.WriteLn(Color_StrongGreen, "func at: %08x, struct at: %08x", function, thstruct);
 
 			u32 list = thstruct + 0x42c;
+
+			if (version > 0x101)
+				list = thstruct + 0x430;
+
 			return list;
 		}
 
@@ -1065,7 +1069,8 @@ namespace R3000A
 			const std::string modname = iopMemReadString(a0 + 12);
 			if (modname == "thbase")
 			{
-				CurrentBiosInformation.iopThreadListAddr = GetThreadList(a0);
+				const u32 version = iopMemRead32(a0 + 8);
+				CurrentBiosInformation.iopThreadListAddr = GetThreadList(a0, version);
 			}
 
 			CurrentBiosInformation.iopModListAddr = GetModList(a0);
