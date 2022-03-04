@@ -419,7 +419,7 @@ namespace SPU
 				u32 ret = 0;
 				for (int i = 0; i < 24; i++)
 				{
-					if (m_voices[i].m_KeyOff)
+					if (m_voices[i].m_ENDX)
 						SET_BIT(ret, i);
 				}
 				return GET_LOW(ret);
@@ -429,7 +429,7 @@ namespace SPU
 				u32 ret = 0;
 				for (int i = 0; i < 24; i++)
 				{
-					if (m_voices[i].m_KeyOff)
+					if (m_voices[i].m_ENDX)
 						SET_BIT(ret, i);
 				}
 				return GET_HIGH(ret);
