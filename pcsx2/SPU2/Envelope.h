@@ -87,6 +87,7 @@ namespace SPU
 		void Release();
 		void Stop();
 		[[nodiscard]] s16 Level() const;
+		void SetLevel(s16 value) { m_Level = value; }
 		void UpdateSettings();
 		ADSRReg m_Reg{0};
 		[[nodiscard]] Phase GetPhase() const { return m_Phase; }
