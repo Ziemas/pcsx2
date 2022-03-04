@@ -103,7 +103,7 @@ public:
 	[[nodiscard]] virtual u32 TID() const = 0;
 	[[nodiscard]] virtual u32 PC() const = 0;
 	[[nodiscard]] virtual ThreadStatus Status() const = 0;
-	[[nodiscard]] virtual WaitState WaitState() const = 0;
+	[[nodiscard]] virtual WaitState State() const = 0;
 	[[nodiscard]] virtual u32 EntryPoint() const = 0;
 	[[nodiscard]] virtual u32 SP() const = 0;
 	[[nodiscard]] virtual u32 Priority() const = 0;
@@ -122,7 +122,7 @@ public:
 	[[nodiscard]] u32 TID() const override { return tid; };
 	[[nodiscard]] u32 PC() const override { return data.entry; };
 	[[nodiscard]] ThreadStatus Status() const override { return static_cast<ThreadStatus>(data.status); };
-	[[nodiscard]] enum WaitState WaitState() const override
+	[[nodiscard]] WaitState State() const override
 	{
 		auto wait = static_cast<EEWaitStatus>(data.waitType);
 		switch (wait)
@@ -156,7 +156,7 @@ public:
 	[[nodiscard]] u32 TID() const override { return data.tid; };
 	[[nodiscard]] u32 PC() const override { return data.PC; };
 	[[nodiscard]] ThreadStatus Status() const override { return static_cast<ThreadStatus>(data.status); };
-	[[nodiscard]] enum WaitState WaitState() const override
+	[[nodiscard]] WaitState State() const override
 	{
 		auto wait = static_cast<IOPWaitStatus>(data.waitstate);
 		switch (wait)
