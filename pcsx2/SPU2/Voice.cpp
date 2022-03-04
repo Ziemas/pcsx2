@@ -293,6 +293,14 @@ namespace SPU
 				m_ADSR.m_Reg.hi = value;
 				m_ADSR.UpdateSettings();
 				return;
+			case 10:
+				// writeable envx
+				m_ADSR.SetLevel(static_cast<s16>(value));
+				return;
+			case 12:
+			case 14:
+				// These two are not writeable though
+				return;
 			default:
 				Console.WriteLn("UNHANDLED SPU[%d]:VOICE[%d] WRITE %04x -> %04x", m_SPU.m_Id, m_Id, value, addr);
 				pxAssertMsg(false, "Unhandled SPU Write");

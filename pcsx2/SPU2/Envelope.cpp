@@ -144,7 +144,7 @@ namespace SPU
 
 	s16 ADSR::Level() const
 	{
-		return static_cast<s16>(m_Level);
+		return static_cast<u16>(m_Level);
 	}
 
 	void Volume::Run()
