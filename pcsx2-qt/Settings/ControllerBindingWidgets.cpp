@@ -51,7 +51,11 @@ void ControllerBindingWidget::populateControllerTypes()
 {
 	m_ui.controllerType->addItem(tr("None (Not Connected)"), QStringLiteral("None"));
 	for (const std::string& type : PAD::GetControllerTypeNames())
+	{
+		Console.WriteLn("Adding controller %s", type.c_str());
+
 		m_ui.controllerType->addItem(QString::fromStdString(type), QString::fromStdString(type));
+	}
 }
 
 void ControllerBindingWidget::onTypeChanged()
@@ -74,6 +78,8 @@ void ControllerBindingWidget::onTypeChanged()
 
 	if (m_controller_type == "DualShock2")
 		m_current_widget = ControllerBindingWidget_DualShock2::createInstance(this);
+	else if (m_controller_type == "IIDX")
+		m_current_widget = ControllerBindingWidget_IIDX::createInstance(this);
 	else
 		m_current_widget = new ControllerBindingWidget_Base(this);
 
@@ -154,5 +160,25 @@ ControllerBindingWidget_Base* ControllerBindingWidget_DualShock2::createInstance
 {
 	return new ControllerBindingWidget_DualShock2(parent);
 }
+
+//////////////////////////////////////////////////////////////////////////
+
+ControllerBindingWidget_IIDX::ControllerBindingWidget_IIDX(ControllerBindingWidget* parent)
+	: ControllerBindingWidget_Base(parent)
+{
+	m_ui.setupUi(this);
+	initBindingWidgets();
+}
+
+ControllerBindingWidget_IIDX::~ControllerBindingWidget_IIDX()
+{
+}
+
+ControllerBindingWidget_Base* ControllerBindingWidget_IIDX::createInstance(ControllerBindingWidget* parent)
+{
+	return new ControllerBindingWidget_IIDX(parent);
+}
+
+
 
 //////////////////////////////////////////////////////////////////////////

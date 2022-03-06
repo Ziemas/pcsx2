@@ -256,7 +256,7 @@ void PAD::Update()
 
 std::vector<std::string> PAD::GetControllerTypeNames()
 {
-	return {"DualShock2"};
+	return {"DualShock2", "IIDX"};
 }
 
 std::vector<std::string> PAD::GetControllerBinds(const std::string_view& type)

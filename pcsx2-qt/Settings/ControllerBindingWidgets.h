@@ -19,6 +19,7 @@
 
 #include "ui_ControllerBindingWidget.h"
 #include "ui_ControllerBindingWidget_DualShock2.h"
+#include "ui_ControllerBindingWidget_IIDX.h"
 
 class InputBindingWidget;
 class ControllerSettingsDialog;
@@ -83,4 +84,19 @@ public:
 
 private:
 	Ui::ControllerBindingWidget_DualShock2 m_ui;
+};
+
+
+class ControllerBindingWidget_IIDX final : public ControllerBindingWidget_Base
+{
+	Q_OBJECT
+
+public:
+	ControllerBindingWidget_IIDX(ControllerBindingWidget* parent);
+	~ControllerBindingWidget_IIDX();
+
+	static ControllerBindingWidget_Base* createInstance(ControllerBindingWidget* parent);
+
+private:
+	Ui::ControllerBindingWidget_IIDX m_ui;
 };
