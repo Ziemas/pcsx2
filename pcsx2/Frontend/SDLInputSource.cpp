@@ -285,9 +285,9 @@ bool SDLInputSource::ProcessSDLEvent(const SDL_Event* event)
 		case SDL_CONTROLLERAXISMOTION:
 			return HandleControllerAxisEvent(&event->caxis);
 
-		case SDL_CONTROLLERBUTTONDOWN:
-		case SDL_CONTROLLERBUTTONUP:
-			return HandleControllerButtonEvent(&event->cbutton);
+		case SDL_JOYBUTTONDOWN:
+		case SDL_JOYBUTTONUP:
+			return HandleControllerButtonEvent(&event->jbutton);
 
 		default:
 			return false;
@@ -436,7 +436,7 @@ bool SDLInputSource::HandleControllerAxisEvent(const SDL_ControllerAxisEvent* ev
 	return InputManager::InvokeEvents(key, value);
 }
 
-bool SDLInputSource::HandleControllerButtonEvent(const SDL_ControllerButtonEvent* ev)
+bool SDLInputSource::HandleControllerButtonEvent(const SDL_JoyButtonEvent* ev)
 {
 	auto it = GetControllerDataForJoystickId(ev->which);
 	if (it == m_controllers.end())

@@ -76,7 +76,7 @@ private:
   bool OpenGameController(int index);
   bool CloseGameController(int joystick_index);
   bool HandleControllerAxisEvent(const SDL_ControllerAxisEvent* event);
-  bool HandleControllerButtonEvent(const SDL_ControllerButtonEvent* event);
+  bool HandleControllerButtonEvent(const SDL_JoyButtonEvent* event);
   void SendRumbleUpdate(ControllerData* cd);
 
   ControllerDataVector m_controllers;
