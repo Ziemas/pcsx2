@@ -325,6 +325,12 @@ namespace SPU
 				m_LSA.lo = value;
 				m_CustomLoop = true;
 				return;
+			case 8:
+				m_NAX.hi = value & 0xF;
+				return;
+			case 10:
+				m_NAX.lo = value;
+				return;
 			default:
 				Console.WriteLn("UNHANDLED SPU[%d]:VOICE[%d] WriteAddr %04x -> %04x", m_SPU.m_Id, m_Id, value, addr);
 				pxAssertMsg(false, "Unhandled SPU Write");
