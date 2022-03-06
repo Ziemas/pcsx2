@@ -290,6 +290,36 @@ std::vector<std::string> PAD::GetControllerBinds(const std::string_view& type)
 			"RLeft"};
 	}
 
+	if (type == "IIDX")
+	{
+		return {
+			"TTUp", // "Up",
+			"Right", // "Right",
+			"TTDown", // "Down",
+			"Key7", // "Left",
+			"Triangle", // "Triangle",
+			"Key5", // "Circle",
+			"Key3", // "Cross",
+			"Key1", // "Square",
+			"Select", // "Select",
+			"Start", // "Start",
+			"Key2", // "L1",
+			"Key6", // "L2",
+			"Key4", // "R1",
+			"R2", // "R2",
+			"L3", // "L3",
+			"R3", // "R3",
+			"LUp", // "LUp",
+			"LRight", // "LRight",
+			"LDown", // "LDown",
+			"LLeft", // "LLeft",
+			"RUp", // "RUp",
+			"RRight", // "RRight",
+			"RDown", // "RDown",
+			"RLeft", // "RLeft"
+		};
+	}
+
 	return {};
 }
 

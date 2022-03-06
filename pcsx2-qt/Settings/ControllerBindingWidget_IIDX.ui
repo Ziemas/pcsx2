@@ -101,7 +101,7 @@
           </property>
           <layout class="QHBoxLayout" name="horizontalLayout_3">
            <item>
-            <widget class="InputBindingWidget" name="pushButton">
+            <widget class="InputBindingWidget" name="TTUp">
              <property name="text">
               <string>PushButton</string>
              </property>
@@ -117,7 +117,7 @@
           </property>
           <layout class="QHBoxLayout" name="horizontalLayout_2">
            <item>
-            <widget class="InputBindingWidget" name="pushButton_2">
+            <widget class="InputBindingWidget" name="TTDown">
              <property name="text">
               <string>PushButton</string>
              </property>
@@ -148,7 +148,7 @@
              </property>
              <layout class="QHBoxLayout" name="horizontalLayout_11">
               <item>
-               <widget class="InputBindingWidget" name="pushButton_10">
+               <widget class="InputBindingWidget" name="Start">
                 <property name="text">
                  <string>PushButton</string>
                 </property>
@@ -164,7 +164,7 @@
              </property>
              <layout class="QVBoxLayout" name="verticalLayout_4">
               <item>
-               <widget class="InputBindingWidget" name="pushButton_11">
+               <widget class="InputBindingWidget" name="Select">
                 <property name="text">
                  <string>PushButton</string>
                 </property>
@@ -189,7 +189,7 @@
              </property>
              <layout class="QHBoxLayout" name="horizontalLayout_8">
               <item>
-               <widget class="InputBindingWidget" name="pushButton_7">
+               <widget class="InputBindingWidget" name="Key5">
                 <property name="text">
                  <string>PushButton</string>
                 </property>
@@ -205,7 +205,7 @@
              </property>
              <layout class="QHBoxLayout" name="horizontalLayout_4">
               <item>
-               <widget class="InputBindingWidget" name="pushButton_12">
+               <widget class="InputBindingWidget" name="Key2">
                 <property name="text">
                  <string>PushButton</string>
                 </property>
@@ -221,7 +221,7 @@
              </property>
              <layout class="QHBoxLayout" name="horizontalLayout_5">
               <item>
-               <widget class="InputBindingWidget" name="pushButton_5">
+               <widget class="InputBindingWidget" name="Key3">
                 <property name="text">
                  <string>PushButton</string>
                 </property>
@@ -237,7 +237,7 @@
              </property>
              <layout class="QHBoxLayout" name="horizontalLayout_6">
               <item>
-               <widget class="InputBindingWidget" name="pushButton_3">
+               <widget class="InputBindingWidget" name="Key1">
                 <property name="text">
                  <string>PushButton</string>
                 </property>
@@ -253,7 +253,7 @@
              </property>
              <layout class="QHBoxLayout" name="horizontalLayout_10">
               <item>
-               <widget class="InputBindingWidget" name="pushButton_9">
+               <widget class="InputBindingWidget" name="Key7">
                 <property name="text">
                  <string>PushButton</string>
                 </property>
@@ -269,7 +269,7 @@
              </property>
              <layout class="QHBoxLayout" name="horizontalLayout_7">
               <item>
-               <widget class="InputBindingWidget" name="pushButton_6">
+               <widget class="InputBindingWidget" name="Key4">
                 <property name="text">
                  <string>PushButton</string>
                 </property>
@@ -285,7 +285,7 @@
              </property>
              <layout class="QHBoxLayout" name="horizontalLayout_9">
               <item>
-               <widget class="InputBindingWidget" name="pushButton_8">
+               <widget class="InputBindingWidget" name="Key6">
                 <property name="text">
                  <string>PushButton</string>
                 </property>
