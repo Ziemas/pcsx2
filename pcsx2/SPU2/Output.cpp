@@ -132,23 +132,34 @@ namespace SPU
 
 		if (buf->underrun)
 		{
-			memset(out, 0, sizeof(S16Out)*nframes);
+			memset(out, 0, sizeof(S16Out) * nframes);
 			return nframes;
 		}
 
 		for (u32 i = 0; i < nframes; i++)
 		{
+
+			S16Out filter_in{};
+			S16Out filter_out{};
+
 			if (avail)
 			{
 				size_t idx = buf->read.fetch_add(1, std::memory_order_relaxed);
-
-				*out++ = buf->buffer[idx & 0x1FFF];
+				filter_in = buf->buffer[idx & 0x1FFF];
 				avail--;
 			}
-			else
-			{
-				*out++ = S16Out{};
-			}
+
+			filter_in.left *= 0.8;
+			filter_in.right *= 0.8;
+
+			// DC filtering
+			filter_out.left = static_cast<s16>(std::clamp<double>(filter_in.left - buf->oldFilterIn.left + 0.995 * buf->oldFilterOut.left, INT16_MIN, INT16_MAX));
+			filter_out.right = static_cast<s16>(std::clamp<double>(filter_in.right - buf->oldFilterIn.right + 0.995 * buf->oldFilterOut.right, INT16_MIN, INT16_MAX));
+			buf->oldFilterIn = filter_in;
+			buf->oldFilterOut = filter_out;
+
+
+			*out++ = filter_out;
 		}
 
 		return nframes;

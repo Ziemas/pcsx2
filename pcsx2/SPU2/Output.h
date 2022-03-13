@@ -65,6 +65,7 @@ namespace SPU
 		struct Buffer
 		{
 			bool underrun{false};
+			S16Out oldFilterIn{}, oldFilterOut{};
 			std::array<S16Out, 0x2000> buffer;
 			std::atomic<size_t> read{0};
 			std::atomic<size_t> write{0};
