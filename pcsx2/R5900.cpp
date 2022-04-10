@@ -555,6 +555,8 @@ void __fastcall eeGameStarting()
 		g_GameStarted = true;
 		g_GameLoading = false;
 
+		vtlb_VMap(0x02000000, 0x02000000, 0x06000000);
+
 		// GameStartingInThread may issue a reset of the cpu and/or recompilers.  Check for and
 		// handle such things here:
 #ifndef PCSX2_CORE
