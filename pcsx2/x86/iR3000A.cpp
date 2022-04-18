@@ -1238,6 +1238,94 @@ static void psxEncodeMemcheck()
 	}
 }
 
+bool print = true;
+static u32 base = 0xa7930;
+
+static void hook_GetPan() {
+	u32 sound = psxRegs.GPR.n.a0;
+	u32 recordPtr = sound + 0x34;
+
+	std::string name = iopMemReadString(iopMemRead32(recordPtr), 15);
+
+	if (name == "fountain") {
+		print = true;
+	} else {
+		print = false;
+		return;
+	}
+
+	Console.WriteLn(Color_White, "Calling GetPan for sound %s", name.c_str());
+
+	u32 trans = sound + 0x14 + 0x10;
+	u32 gCamTrans = base + 0x55160;
+	u32 gCamAngle = base + 0x5516c;
+	Console.WriteLn(Color_White, "sound loc: XYZ: %d, %d, %d", iopMemRead32(trans), iopMemRead32(trans+4), iopMemRead32(trans+8));
+	Console.WriteLn(Color_White, "gCamTrans: XYZ: %d, %d, %d", iopMemRead32(gCamTrans), iopMemRead32(gCamTrans+4), iopMemRead32(gCamTrans+8));
+	Console.WriteLn(Color_White, "gCamAngle: %d", iopMemRead32(gCamAngle));
+}
+
+static void hook_UpdateLocation() {
+	if (!print)
+		return;
+
+    Console.WriteLn(Color_Gray, "snd_SetSoundVolPan(%x, 0x%x, %d)", psxRegs.GPR.n.a0, psxRegs.GPR.n.a1, psxRegs.GPR.n.v0);
+}
+
+static u32 sndbase = 0x83730;
+
+static void hook_SetSFXVolPan() {
+	if (!print)
+		return;
+
+    Console.WriteLn(Color_Gray, "MakeVolumes arg3/4 %d %d", psxRegs.GPR.n.a2, psxRegs.GPR.n.a3);
+}
+
+static void hook_AdjustVolToGroupL() {
+	if (!print)
+		return;
+
+    Console.WriteLn(Color_Gray, "left AdjustVolToGroup(%x, %d)", psxRegs.GPR.n.a0, psxRegs.GPR.n.a1);
+}
+static void hook_AdjustVolToGroupR() {
+	if (!print)
+		return;
+
+    Console.WriteLn(Color_Gray, "right AdjustVolToGroup(%x, %d)", psxRegs.GPR.n.a0, psxRegs.GPR.n.a1);
+}
+
+using hookFun = void (*)();
+//static std::unordered_map<u32, hookFun> hooks = { { base+0xc1ec, hook_GetPan},
+//												  { base+0xc310, hook_UpdateLocation},
+//												  { sndbase+0x1584c, hook_SetSFXVolPan},
+//												  { sndbase+0x15864, hook_AdjustVolToGroupL},
+//												  { sndbase+0x15888, hook_AdjustVolToGroupR},
+//};
+
+static void hook_QueueVag() {
+	//Console.WriteLn("QueueVAG");
+}
+static void hook_PlayVag() {
+	//Console.WriteLn("PlayVAG");
+}
+
+static void hook_CheckVAG() {
+	u32 playpos = iopMemRead32(base+0xfba8);
+	Console.WriteLn("gPlayPos %x", playpos);
+}
+
+static std::unordered_map<u32, hookFun> hooks = { { base+0x3890, hook_PlayVag }, {base+0x36a8, hook_QueueVag}, {base+0x6444, hook_CheckVAG}  };
+
+
+
+static void psxHookPC(const u32 pc) {
+	auto hook = hooks.find(pc);
+	if (hook == hooks.end())
+		return;
+
+	//_psxFlushCall(FLUSH_NODESTROY | FLUSH_PC);
+	xFastCall((void*)hook->second);
+}
+
 void psxRecompileNextInstruction(int delayslot)
 {
 	// pblock isn't used elsewhere in this function.
@@ -1255,6 +1343,8 @@ void psxRecompileNextInstruction(int delayslot)
 		xNOP();
 		xMOV(eax, psxpc);
 	}
+
+	psxHookPC(psxpc);
 
 	psxRegs.code = iopMemRead32(psxpc);
 	s_psxBlockCycles++;

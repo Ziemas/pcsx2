@@ -888,6 +888,13 @@ namespace R3000A
 		}
 	} // namespace sifcmd
 
+	namespace snd989 {
+		void snd_SetSoundVolPan_DEBUG() {
+			Console.WriteLn(Color_Gray, "snd_SetSoundVolPan(%x, %x, %d)", a0, a1, a2);
+		}
+	}
+
+
 	u32 irxImportTableAddr(u32 entrypc)
 	{
 		u32 i;
@@ -977,6 +984,9 @@ namespace R3000A
 		MODULE(sifcmd)
 			EXPORT_D( 17, sceSifRegisterRpc)
 		END_MODULE
+		//MODULE(snd989)
+		//	EXPORT_D( 32, snd_SetSoundVolPan)
+		//END_MODULE
 		// clang-format off
 
 		return 0;
