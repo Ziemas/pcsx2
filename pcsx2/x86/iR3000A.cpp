@@ -1310,7 +1310,12 @@ static void hook_PlayVag() {
 
 static void hook_CheckVAG() {
 	u32 playpos = iopMemRead32(base+0xfba8);
-	Console.WriteLn("gPlayPos %x", playpos);
+	u32 real = iopMemRead32(base+0xfb98);
+	u32 realon = iopMemRead32(base+0xf23c);
+	u32 fake = iopMemRead32(base+0xfb9c);
+	u32 fakeon = iopMemRead32(base+0xf230);
+	//Console.WriteLn("gPlayPos %x", playpos);
+	Console.WriteLn("fake %d - %d, real %d - %d", fakeon, fake, realon, real);
 }
 
 static std::unordered_map<u32, hookFun> hooks = { { base+0x3890, hook_PlayVag }, {base+0x36a8, hook_QueueVag}, {base+0x6444, hook_CheckVAG}  };
