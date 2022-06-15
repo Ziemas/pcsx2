@@ -32,7 +32,7 @@
 #include "ps2/HwInternal.h"
 #include "Sio.h"
 #include "HostDisplay.h"
-#include "SPU2/spu2.h"
+#include "SPU2/SPU2.h"
 
 #ifndef PCSX2_CORE
 #include "gui/App.h"
@@ -355,7 +355,7 @@ static double AdjustToHostRefreshRate(double vertical_frequency, double frame_li
 {
 	if (!EmuConfig.GS.SyncToHostRefreshRate || EmuConfig.GS.LimitScalar != 1.0f)
 	{
-		SPU2SetDeviceSampleRateMultiplier(1.0);
+		SPU::SetDeviceSampleRateMultiplier(1.0);
 		s_use_vsync_for_timing = false;
 		return frame_limit;
 	}
@@ -364,7 +364,7 @@ static double AdjustToHostRefreshRate(double vertical_frequency, double frame_li
 	if (!g_host_display->GetHostRefreshRate(&host_refresh_rate))
 	{
 		Console.Warning("Cannot sync to host refresh since the query failed.");
-		SPU2SetDeviceSampleRateMultiplier(1.0);
+		SPU::SetDeviceSampleRateMultiplier(1.0);
 		s_use_vsync_for_timing = false;
 		return frame_limit;
 	}
@@ -380,7 +380,7 @@ static double AdjustToHostRefreshRate(double vertical_frequency, double frame_li
 		return frame_limit;
 
 	frame_limit *= ratio;
-	SPU2SetDeviceSampleRateMultiplier(ratio);
+	SPU::SetDeviceSampleRateMultiplier(ratio);
 	return frame_limit;
 }
 
