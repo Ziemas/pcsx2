@@ -14,6 +14,7 @@
  */
 
 #include "SpuCore.h"
+#include "common/Assertions.h"
 #include "common/Console.h"
 #include "IopDma.h"
 #include "IopHw.h"

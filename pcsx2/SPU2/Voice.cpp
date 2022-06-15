@@ -15,6 +15,7 @@
 
 #include "SpuCore.h"
 #include "gcem.hpp"
+#include "common/Assertions.h"
 #include "common/Console.h"
 #include "Voice.h"
 
