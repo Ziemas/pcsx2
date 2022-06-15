@@ -58,5 +58,6 @@ namespace SPU
 	//void FreezeOut(void *dest);
 	s32 Init();
 	void SetOutputPaused(bool paused);
+	void SetDeviceSampleRateMultiplier(double multiplier);
 
 } // namespace SPU

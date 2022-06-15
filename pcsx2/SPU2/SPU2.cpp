@@ -216,4 +216,5 @@ namespace SPU
 
 	void SetOutputPaused(bool paused) {}
 
+	void SetDeviceSampleRateMultiplier(double multiplier) {}
 } // namespace SPU
