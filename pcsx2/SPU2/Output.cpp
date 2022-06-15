@@ -15,6 +15,7 @@
 
 #include "Output.h"
 #include "common/Console.h"
+#include <cstdarg>
 
 namespace SPU
 {
