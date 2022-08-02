@@ -578,6 +578,7 @@ void eeGameStarting()
 	{
 		Console.WriteLn( Color_Green, "(R5900) Re-executed ELF Entry point (ignored) [addr=0x%08X]", ElfEntry );
 	}
+	Cpu->ThrowCpuException(R5900Exception::DebugBreakpoint());
 }
 
 // Count arguments, save their starting locations, and replace the space separators with null terminators so they're separate strings
@@ -741,6 +742,8 @@ void eeloadHook()
 
 	if (!g_GameStarted && ((disctype == 2 && elfname == discelf) || disctype == 1))
 		g_GameLoading = true;
+
+	Cpu->ThrowCpuException(R5900Exception::DebugBreakpoint());
 }
 
 // Called from recompilers; define is mandatory.
@@ -785,6 +788,9 @@ void eeloadHook2()
 #endif
 	cpuRegs.GPR.n.a0.SD[0] = argc;
 	cpuRegs.GPR.n.a1.UD[0] = block_start;
+
+	Cpu->ThrowCpuException(R5900Exception::DebugBreakpoint());
+
 }
 
 inline bool isBranchOrJump(u32 addr)
