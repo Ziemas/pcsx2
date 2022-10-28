@@ -46,6 +46,8 @@ public:
 	{
 		None,
 		D3D11,
+		Metal,
+		D3D12,
 		Vulkan,
 		OpenGL,
 		OpenGLES
@@ -99,7 +101,6 @@ public:
 	virtual bool InitializeRenderDevice(std::string_view shader_cache_directory, bool debug_device) = 0;
 	virtual bool MakeRenderContextCurrent() = 0;
 	virtual bool DoneRenderContextCurrent() = 0;
-	virtual void DestroyRenderDevice() = 0;
 	virtual void DestroyRenderSurface() = 0;
 	virtual bool ChangeRenderWindow(const WindowInfo& wi) = 0;
 	virtual bool SupportsFullscreen() const = 0;
@@ -133,6 +134,12 @@ public:
 	/// Returns the effective refresh rate of this display.
 	virtual bool GetHostRefreshRate(float* refresh_rate);
 
+	/// Enables/disables GPU frame timing.
+	virtual bool SetGPUTimingEnabled(bool enabled);
+
+	/// Returns the amount of GPU time utilized since the last time this method was called.
+	virtual float GetAndResetAccumulatedGPUTime();
+
 	/// Returns true if it's an OpenGL-based renderer.
 	bool UsesLowerLeftOrigin() const;
 
@@ -142,16 +149,16 @@ protected:
 	VsyncMode m_vsync_mode = VsyncMode::Off;
 };
 
+/// Returns a pointer to the current host display abstraction. Assumes AcquireHostDisplay() has been caled.
+extern std::unique_ptr<HostDisplay> g_host_display;
+
 namespace Host
 {
 	/// Creates the host display. This may create a new window. The API used depends on the current configuration.
-	HostDisplay* AcquireHostDisplay(HostDisplay::RenderAPI api);
+	bool AcquireHostDisplay(HostDisplay::RenderAPI api);
 
 	/// Destroys the host display. This may close the display window.
 	void ReleaseHostDisplay();
-
-	/// Returns a pointer to the current host display abstraction. Assumes AcquireHostDisplay() has been caled.
-	HostDisplay* GetHostDisplay();
 
 	/// Returns false if the window was completely occluded. If frame_skip is set, the frame won't be
 	/// displayed, but the GPU command queue will still be flushed.

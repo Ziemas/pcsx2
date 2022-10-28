@@ -18,6 +18,9 @@
 #include <QtWidgets/QStackedWidget>
 #include <QtWidgets/QWidget>
 #include <optional>
+#include <vector>
+
+class QCloseEvent;
 
 class DisplayWidget final : public QWidget
 {
@@ -29,31 +32,43 @@ public:
 
 	QPaintEngine* paintEngine() const override;
 
+	__fi void setShouldHideCursor(bool hide) { m_should_hide_cursor = hide; }
+
 	int scaledWindowWidth() const;
 	int scaledWindowHeight() const;
 	qreal devicePixelRatioFromScreen() const;
 
-	std::optional<WindowInfo> getWindowInfo() const;
+	std::optional<WindowInfo> getWindowInfo();
 
-	void setRelativeMode(bool enabled);
+	void updateRelativeMode(bool master_enable);
+	void updateCursor(bool master_enable);
+
+	void handleCloseEvent(QCloseEvent* event);
 
 Q_SIGNALS:
-	void windowFocusEvent();
 	void windowResizedEvent(int width, int height, float scale);
 	void windowRestoredEvent();
-	void windowClosedEvent();
-	void windowKeyEvent(int key_code, int mods, bool pressed);
-	void windowMouseMoveEvent(int x, int y);
-	void windowMouseButtonEvent(int button, bool pressed);
-	void windowMouseWheelEvent(const QPoint& angle_delta);
 
 protected:
 	bool event(QEvent* event) override;
 
 private:
-	QPoint m_relative_mouse_start_position{};
-	QPoint m_relative_mouse_last_position{};
+	void updateCenterPos();
+
+	QPoint m_relative_mouse_start_pos{};
+	QPoint m_relative_mouse_center_pos{};
 	bool m_relative_mouse_enabled = false;
+#ifdef _WIN32
+	bool m_clip_mouse_enabled = false;
+#endif
+	bool m_should_hide_cursor = false;
+	bool m_cursor_hidden = false;
+
+	std::vector<int> m_keys_pressed_with_modifiers;
+
+	u32 m_last_window_width = 0;
+	u32 m_last_window_height = 0;
+	float m_last_window_scale = 1.0f;
 };
 
 class DisplayContainer final : public QStackedWidget
@@ -64,7 +79,10 @@ public:
 	DisplayContainer();
 	~DisplayContainer();
 
-	static bool IsNeeded(bool fullscreen, bool render_to_main);
+	// Wayland is broken in lots of ways, so we need to check for it.
+	static bool isRunningOnWayland();
+
+	static bool isNeeded(bool fullscreen, bool render_to_main);
 
 	void setDisplayWidget(DisplayWidget* widget);
 	DisplayWidget* removeDisplayWidget();

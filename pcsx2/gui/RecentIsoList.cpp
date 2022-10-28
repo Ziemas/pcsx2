@@ -18,7 +18,7 @@
 #include "AppCoreThread.h"
 #include "RecentIsoList.h"
 #include "IsoDropTarget.h"
-#include "common/IniInterface.h"
+#include "IniInterface.h"
 
 extern wxString GetMsg_IsoImageChanged();
 
@@ -99,7 +99,7 @@ void RecentIsoManager::RemoveAllFromMenu()
 		m_Menu->Destroy( curitem.ItemPtr );
 		curitem.ItemPtr = NULL;
 	}
-	
+
 	if( m_Separator != nullptr )
 	{
 		m_Menu->Destroy( m_Separator );

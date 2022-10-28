@@ -209,11 +209,7 @@ struct microVU
 	alignas(16) u32 macFlag [4]; // 4 instances of mac    flag (used in execution)
 	alignas(16) u32 clipFlag[4]; // 4 instances of clip   flag (used in execution)
 	alignas(16) u32 xmmCTemp[4];     // Backup used in mVUclamp2()
-#ifdef __M_X86_64
 	alignas(16) u32 xmmBackup[16][4]; // Backup for xmm0~xmm15
-#else
-	alignas(16) u32 xmmBackup[8][4]; // Backup for xmm0~xmm7
-#endif
 
 	u32 index;        // VU Index (VU0 or VU1)
 	u32 cop2;         // VU is in COP2 mode?  (No/Yes)
@@ -226,7 +222,7 @@ struct microVU
 	microProgManager               prog;     // Micro Program Data
 	microProfiler                  profiler; // Opcode Profiler
 	std::unique_ptr<microRegAlloc> regAlloc; // Reg Alloc Class
-	std::unique_ptr<AsciiFile>     logFile;  // Log File Pointer
+	std::FILE*                     logFile;  // Log File Pointer
 
 	RecompiledCodeReserve* cache_reserve;
 	u8* cache;        // Dynarec Cache Start (where we will start writing the recompiled code to)
@@ -270,11 +266,11 @@ int mVUdebugNow = 0;
 extern void mVUclear(mV, u32, u32);
 extern void mVUreset(microVU& mVU, bool resetReserve);
 extern void* mVUblockFetch(microVU& mVU, u32 startPC, uptr pState);
-_mVUt extern void* __fastcall mVUcompileJIT(u32 startPC, uptr ptr);
+_mVUt extern void* mVUcompileJIT(u32 startPC, uptr ptr);
 
 // Prototypes for Linux
-extern void __fastcall mVUcleanUpVU0();
-extern void __fastcall mVUcleanUpVU1();
+extern void mVUcleanUpVU0();
+extern void mVUcleanUpVU1();
 mVUop(mVUopU);
 mVUop(mVUopL);
 
@@ -282,11 +278,11 @@ mVUop(mVUopL);
 extern void mVUcacheProg(microVU& mVU, microProgram& prog);
 extern void mVUdeleteProg(microVU& mVU, microProgram*& prog);
 _mVUt extern void* mVUsearchProg(u32 startPC, uptr pState);
-extern void* __fastcall mVUexecuteVU0(u32 startPC, u32 cycles);
-extern void* __fastcall mVUexecuteVU1(u32 startPC, u32 cycles);
+extern void* mVUexecuteVU0(u32 startPC, u32 cycles);
+extern void* mVUexecuteVU1(u32 startPC, u32 cycles);
 
 // recCall Function Pointer
-typedef void(__fastcall* mVUrecCall)(u32, u32);
+typedef void (*mVUrecCall)(u32, u32);
 typedef void (*mVUrecCallXG)(void);
 
 template <typename T>

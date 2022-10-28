@@ -24,8 +24,8 @@
 
 using namespace x86Emitter;
 
-__tls_emit u8* j8Ptr[32];
-__tls_emit u32* j32Ptr[32];
+thread_local u8* j8Ptr[32];
+thread_local u32* j32Ptr[32];
 
 u16 g_x86AllocCounter = 0;
 u16 g_xmmAllocCounter = 0;
@@ -48,11 +48,7 @@ _x86regs x86regs[iREGCNT_GPR], s_saveX86regs[iREGCNT_GPR];
 
 alignas(16) u32 xmmBackup[iREGCNT_XMM][4];
 
-#ifdef __M_X86_64
 alignas(16) u64 gprBackup[iREGCNT_GPR];
-#else
-alignas(16) u32 gprBackup[iREGCNT_GPR];
-#endif
 
 static int s_xmmchecknext = 0;
 
@@ -84,11 +80,7 @@ void _backupNeededx86()
 	{
 		if (x86regs[i].inuse)
 		{
-#ifdef __M_X86_64
 			xMOV(ptr64[&gprBackup[i]], xRegister64(i));
-#else
-			xMOV(ptr32[&gprBackup[i]], xRegister32(i));
-#endif
 		}
 	}
 }
@@ -99,11 +91,7 @@ void _restoreNeededx86()
 	{
 		if (x86regs[i].inuse)
 		{
-#ifdef __M_X86_64
 			xMOV(xRegister64(i), ptr64[&gprBackup[i]]);
-#else
-			xMOV(xRegister32(i), ptr32[&gprBackup[i]]);
-#endif
 		}
 	}
 }
@@ -248,11 +236,19 @@ int _allocTempXMMreg(XMMSSEType type, int xmmreg)
 	else
 		_freeXMMreg(xmmreg);
 
-	xmmregs[xmmreg].inuse = 1;
-	xmmregs[xmmreg].type = XMMTYPE_TEMP;
-	xmmregs[xmmreg].needed = 1;
-	xmmregs[xmmreg].counter = g_xmmAllocCounter++;
-	g_xmmtypes[xmmreg] = type;
+	if (xmmreg == -1)
+	{
+		pxFailDev("*PCSX2*: XMM Reg Allocation Error in _allocTempXMMreg()!");
+		throw Exception::FailedToAllocateRegister();
+	}
+	else
+	{
+		xmmregs[xmmreg].inuse = 1;
+		xmmregs[xmmreg].type = XMMTYPE_TEMP;
+		xmmregs[xmmreg].needed = 1;
+		xmmregs[xmmreg].counter = g_xmmAllocCounter++;
+		g_xmmtypes[xmmreg] = type;
+	}
 
 	return xmmreg;
 }
@@ -329,13 +325,21 @@ int _allocFPtoXMMreg(int xmmreg, int fpreg, int mode)
 	if (xmmreg == -1)
 		xmmreg = _getFreeXMMreg();
 
-	g_xmmtypes[xmmreg] = XMMT_FPS;
-	xmmregs[xmmreg].inuse = 1;
-	xmmregs[xmmreg].type = XMMTYPE_FPREG;
-	xmmregs[xmmreg].reg = fpreg;
-	xmmregs[xmmreg].mode = mode;
-	xmmregs[xmmreg].needed = 1;
-	xmmregs[xmmreg].counter = g_xmmAllocCounter++;
+	if (xmmreg == -1)
+	{
+		pxFailDev("*PCSX2*: XMM Reg Allocation Error in _allocFPtoXMMreg()!");
+		throw Exception::FailedToAllocateRegister();
+	}
+	else
+	{
+		g_xmmtypes[xmmreg] = XMMT_FPS;
+		xmmregs[xmmreg].inuse = 1;
+		xmmregs[xmmreg].type = XMMTYPE_FPREG;
+		xmmregs[xmmreg].reg = fpreg;
+		xmmregs[xmmreg].mode = mode;
+		xmmregs[xmmreg].needed = 1;
+		xmmregs[xmmreg].counter = g_xmmAllocCounter++;
+	}
 
 	if (mode & MODE_READ)
 		xMOVSSZX(xRegisterSSE(xmmreg), ptr[&fpuRegs.fpr[fpreg].f]);
@@ -396,13 +400,21 @@ int _allocGPRtoXMMreg(int xmmreg, int gprreg, int mode)
 	if (xmmreg == -1)
 		xmmreg = _getFreeXMMreg();
 
-	g_xmmtypes[xmmreg] = XMMT_INT;
-	xmmregs[xmmreg].inuse = 1;
-	xmmregs[xmmreg].type = XMMTYPE_GPRREG;
-	xmmregs[xmmreg].reg = gprreg;
-	xmmregs[xmmreg].mode = mode;
-	xmmregs[xmmreg].needed = 1;
-	xmmregs[xmmreg].counter = g_xmmAllocCounter++;
+	if (xmmreg == -1)
+	{
+		pxFailDev("*PCSX2*: XMM Reg Allocation Error in _allocGPRtoXMMreg()!");
+		throw Exception::FailedToAllocateRegister();
+	}
+	else
+	{
+		g_xmmtypes[xmmreg] = XMMT_INT;
+		xmmregs[xmmreg].inuse = 1;
+		xmmregs[xmmreg].type = XMMTYPE_GPRREG;
+		xmmregs[xmmreg].reg = gprreg;
+		xmmregs[xmmreg].mode = mode;
+		xmmregs[xmmreg].needed = 1;
+		xmmregs[xmmreg].counter = g_xmmAllocCounter++;
+	}
 
 	if (mode & MODE_READ)
 	{
@@ -450,13 +462,21 @@ int _allocFPACCtoXMMreg(int xmmreg, int mode)
 	if (xmmreg == -1)
 		xmmreg = _getFreeXMMreg();
 
-	g_xmmtypes[xmmreg] = XMMT_FPS;
-	xmmregs[xmmreg].inuse = 1;
-	xmmregs[xmmreg].type = XMMTYPE_FPACC;
-	xmmregs[xmmreg].mode = mode;
-	xmmregs[xmmreg].needed = 1;
-	xmmregs[xmmreg].reg = 0;
-	xmmregs[xmmreg].counter = g_xmmAllocCounter++;
+	if (xmmreg == -1)
+	{
+		pxFailDev("*PCSX2*: XMM Reg Allocation Error in _allocFPACCtoXMMreg()!");
+		throw Exception::FailedToAllocateRegister();
+	}
+	else
+	{
+		g_xmmtypes[xmmreg] = XMMT_FPS;
+		xmmregs[xmmreg].inuse = 1;
+		xmmregs[xmmreg].type = XMMTYPE_FPACC;
+		xmmregs[xmmreg].mode = mode;
+		xmmregs[xmmreg].needed = 1;
+		xmmregs[xmmreg].reg = 0;
+		xmmregs[xmmreg].counter = g_xmmAllocCounter++;
+	}
 
 	if (mode & MODE_READ)
 	{

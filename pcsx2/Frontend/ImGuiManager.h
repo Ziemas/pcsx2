@@ -15,6 +15,11 @@
 
 #pragma once
 
+struct ImFont;
+
+union InputBindingKey;
+enum class GenericInputBinding : u8;
+
 namespace ImGuiManager
 {
 	/// Initializes ImGui, creates fonts, etc.
@@ -34,5 +39,63 @@ namespace ImGuiManager
 
 	/// Renders any on-screen display elements.
 	void RenderOSD();
+
+	/// Returns the scale of all on-screen elements.
+	float GetGlobalScale();
+
+	/// Returns true if fullscreen fonts are present.
+	bool HasFullscreenFonts();
+
+	/// Allocates/adds fullscreen fonts if they're not loaded.
+	bool AddFullscreenFontsIfMissing();
+
+	/// Returns the standard font for external drawing.
+	ImFont* GetStandardFont();
+
+	/// Returns the fixed-width font for external drawing.
+	ImFont* GetFixedFont();
+
+	/// Returns the medium font for external drawing, scaled by ImGuiFullscreen.
+	/// This font is allocated on demand.
+	ImFont* GetMediumFont();
+
+	/// Returns the large font for external drawing, scaled by ImGuiFullscreen.
+	/// This font is allocated on demand.
+	ImFont* GetLargeFont();
+
+#ifdef PCSX2_CORE
+	/// Returns true if imgui wants to intercept text input.
+	bool WantsTextInput();
+
+	/// Called on the UI or CPU thread in response to a key press. String is UTF-8.
+	void AddTextInput(std::string str);
+
+	/// Called on the UI or CPU thread in response to mouse movement.
+	void UpdateMousePosition(float x, float y);
+
+	/// Called on the CPU thread in response to a mouse button press.
+	/// Returns true if ImGui intercepted the event, and regular handlers should not execute.
+	bool ProcessPointerButtonEvent(InputBindingKey key, float value);
+
+	/// Called on the CPU thread in response to a mouse wheel movement.
+	/// Returns true if ImGui intercepted the event, and regular handlers should not execute.
+	bool ProcessPointerAxisEvent(InputBindingKey key, float value);
+
+	/// Called on the CPU thread in response to a key press.
+	/// Returns true if ImGui intercepted the event, and regular handlers should not execute.
+	bool ProcessHostKeyEvent(InputBindingKey key, float value);
+
+	/// Called on the CPU thread when any input event fires. Allows imgui to take over controller navigation.
+	bool ProcessGenericInputEvent(GenericInputBinding key, float value);
+#endif
 } // namespace ImGuiManager
 
+namespace Host
+{
+	/// Called by ImGuiManager when the cursor enters a text field. The host may choose to open an on-screen
+	/// keyboard for devices without a physical keyboard.
+	void BeginTextInput();
+
+	/// Called by ImGuiManager when the cursor leaves a text field.
+	void EndTextInput();
+}

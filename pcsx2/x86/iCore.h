@@ -215,11 +215,18 @@ int _signExtendXMMtoM(uptr to, x86SSERegType from, int candestroy); // returns t
 #define EEINSTINFO_COP1 1
 #define EEINSTINFO_COP2 2
 
+#define EEINST_COP2_DENORMALIZE_STATUS_FLAG 0x100
+#define EEINST_COP2_NORMALIZE_STATUS_FLAG 0x200
+#define EEINST_COP2_STATUS_FLAG 0x400
+#define EEINST_COP2_MAC_FLAG 0x800
+#define EEINST_COP2_CLIP_FLAG 0x1000
+#define EEINST_COP2_FINISH_VU0_MICRO 0x2000
+
 struct EEINST
 {
+	u16 info; // extra info, if 1 inst is COP1, 2 inst is COP2. Also uses EEINST_XMM
 	u8 regs[34]; // includes HI/LO (HI=32, LO=33)
 	u8 fpuregs[33]; // ACC=32
-	u8 info; // extra info, if 1 inst is COP1, 2 inst is COP2. Also uses EEINST_XMM
 
 	// uses XMMTYPE_ flags; if type == XMMTYPE_TEMP, not used
 	u8 writeType[3], writeReg[3]; // reg written in this inst, 0 if no reg
@@ -250,8 +257,8 @@ extern u32 g_recWriteback; // used for jumps (VUrec mess!)
 
 extern _xmmregs xmmregs[iREGCNT_XMM], s_saveXMMregs[iREGCNT_XMM];
 
-extern __tls_emit u8* j8Ptr[32];   // depreciated item.  use local u8* vars instead.
-extern __tls_emit u32* j32Ptr[32]; // depreciated item.  use local u32* vars instead.
+extern thread_local u8* j8Ptr[32];   // depreciated item.  use local u8* vars instead.
+extern thread_local u32* j32Ptr[32]; // depreciated item.  use local u32* vars instead.
 
 extern u16 g_x86AllocCounter;
 extern u16 g_xmmAllocCounter;

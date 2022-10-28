@@ -132,22 +132,20 @@ public:
 		{
 			struct
 			{
-				u32 int_fst : 1;
-				u32 iip : 1;
-				u32 point_size : 1;
-				u32 _free : 29;
+				u8 int_fst : 1;
+				u8 iip : 1;
+				u8 point_size : 1;
+				u8 _free : 5;
 			};
 
-			u32 key;
+			u8 key;
 		};
-
-		operator u32() const { return key; }
 
 		VSSelector()
 			: key(0)
 		{
 		}
-		VSSelector(u32 k)
+		VSSelector(u8 k)
 			: key(k)
 		{
 		}
@@ -159,15 +157,15 @@ public:
 		{
 			struct
 			{
-				u32 sprite : 1;
-				u32 point  : 1;
-				u32 line   : 1;
-				u32 iip    : 1;
+				u8 sprite : 1;
+				u8 point  : 1;
+				u8 line   : 1;
+				u8 iip    : 1;
 
-				u32 _free : 28;
+				u8 _free : 4;
 			};
 
-			u32 key;
+			u8 key;
 		};
 
 		operator u32() const { return key; }
@@ -176,7 +174,7 @@ public:
 			: key(0)
 		{
 		}
-		GSSelector(u32 k)
+		GSSelector(u8 k)
 			: key(k)
 		{
 		}
@@ -187,22 +185,24 @@ public:
 	using OMDepthStencilSelector = GSHWDrawConfig::DepthStencilSelector;
 	using OMColorMaskSelector = GSHWDrawConfig::ColorMaskSelector;
 
-	struct ProgramSelector
+	struct alignas(16) ProgramSelector
 	{
+		PSSelector ps;
 		VSSelector vs;
 		GSSelector gs;
-		PSSelector ps;
+		u16 pad;
 
-		__fi bool operator==(const ProgramSelector& p) const { return vs.key == p.vs.key && gs.key == p.gs.key && ps.key == p.ps.key; }
-		__fi bool operator!=(const ProgramSelector& p) const { return vs.key != p.vs.key || gs.key != p.gs.key || ps.key != p.ps.key; }
+		__fi bool operator==(const ProgramSelector& p) const { return (std::memcmp(this, &p, sizeof(*this)) == 0); }
+		__fi bool operator!=(const ProgramSelector& p) const { return (std::memcmp(this, &p, sizeof(*this)) != 0); }
 	};
+	static_assert(sizeof(ProgramSelector) == 16, "Program selector is 16 bytes");
 
 	struct ProgramSelectorHash
 	{
 		__fi std::size_t operator()(const ProgramSelector& p) const noexcept
 		{
 			std::size_t h = 0;
-			HashCombine(h, p.vs.key, p.gs.key, p.ps.key);
+			HashCombine(h, p.vs.key, p.gs.key, p.ps.key_hi, p.ps.key_lo);
 			return h;
 		}
 	};
@@ -212,7 +212,7 @@ public:
 
 private:
 	// Increment this constant whenever shaders change, to invalidate user's program binary cache.
-	static constexpr u32 SHADER_VERSION = 1;
+	static constexpr u32 SHADER_VERSION = 3;
 
 	static FILE* m_debug_gl_file;
 
@@ -249,11 +249,13 @@ private:
 	{
 		std::string vs;
 		GL::Program ps[static_cast<int>(ShaderConvert::Count)]; // program object
-		GLuint ln; // sampler object
-		GLuint pt; // sampler object
-		GSDepthStencilOGL* dss;
-		GSDepthStencilOGL* dss_write;
+		GLuint ln = 0; // sampler object
+		GLuint pt = 0; // sampler object
+		GSDepthStencilOGL* dss = nullptr;
+		GSDepthStencilOGL* dss_write = nullptr;
 	} m_convert;
+
+	GL::Program m_present[static_cast<int>(PresentShader::Count)];
 
 	struct
 	{
@@ -269,8 +271,8 @@ private:
 
 	struct
 	{
-		GSDepthStencilOGL* dss;
-		GSTexture* t;
+		GSDepthStencilOGL* dss = nullptr;
+		GL::Program primid_ps[2];
 	} m_date;
 
 	struct
@@ -280,14 +282,14 @@ private:
 
 	struct
 	{
-		u16 last_query;
-		GLuint timer_query[1 << 16];
+		u16 last_query = 0;
+		GLuint timer_query[1 << 16] = {};
 
 		GLuint timer() { return timer_query[last_query]; }
 	} m_profiler;
 
 	GLuint m_ps_ss[1 << 8];
-	GSDepthStencilOGL* m_om_dss[1 << 5];
+	GSDepthStencilOGL* m_om_dss[1 << 5] = {};
 	std::unordered_map<ProgramSelector, GL::Program, ProgramSelectorHash> m_programs;
 	GL::ShaderCache m_shader_cache;
 
@@ -303,14 +305,12 @@ private:
 	void DoMerge(GSTexture* sTex[3], GSVector4* sRect, GSTexture* dTex, GSVector4* dRect, const GSRegPMODE& PMODE, const GSRegEXTBUF& EXTBUF, const GSVector4& c) final;
 	void DoInterlace(GSTexture* sTex, GSTexture* dTex, int shader, bool linear, float yoffset = 0) final;
 	void DoFXAA(GSTexture* sTex, GSTexture* dTex) final;
-	void DoShadeBoost(GSTexture* sTex, GSTexture* dTex) final;
+	void DoShadeBoost(GSTexture* sTex, GSTexture* dTex, const float params[4]) final;
 	void DoExternalFX(GSTexture* sTex, GSTexture* dTex) final;
 
 	void OMAttachRt(GSTextureOGL* rt = NULL);
 	void OMAttachDs(GSTextureOGL* ds = NULL);
 	void OMSetFBO(GLuint fbo);
-
-	u16 ConvertBlendEnum(u16 generic) final;
 
 	void DrawStretchRect(const GSVector4& sRect, const GSVector4& dRect, const GSVector2i& ds);
 
@@ -323,7 +323,7 @@ public:
 	// Used by OpenGL, so the same calling convention is required.
 	static void APIENTRY DebugOutputToFile(GLenum gl_source, GLenum gl_type, GLuint id, GLenum gl_severity, GLsizei gl_length, const GLchar* gl_message, const void* userParam);
 
-	bool Create(HostDisplay* display) override;
+	bool Create() override;
 
 	void ResetAPIState() override;
 	void RestoreAPIState() override;
@@ -338,12 +338,11 @@ public:
 	void ClearDepth(GSTexture* t) final;
 	void ClearStencil(GSTexture* t, u8 c) final;
 
-	void InitPrimDateTexture(GSTexture* rt, const GSVector4i& area);
-	void RecycleDateTexture();
+	GSTexture* InitPrimDateTexture(GSTexture* rt, const GSVector4i& area, bool datm);
 
 	bool DownloadTexture(GSTexture* src, const GSVector4i& rect, GSTexture::GSMap& out_map) final;
 
-	void CopyRect(GSTexture* sTex, GSTexture* dTex, const GSVector4i& r) final;
+	void CopyRect(GSTexture* sTex, GSTexture* dTex, const GSVector4i& r, u32 destX, u32 destY) final;
 
 	void PushDebugGroup(const char* fmt, ...) final;
 	void PopDebugGroup() final;
@@ -355,10 +354,11 @@ public:
 	void StretchRect(GSTexture* sTex, const GSVector4& sRect, GSTexture* dTex, const GSVector4& dRect, ShaderConvert shader = ShaderConvert::COPY, bool linear = true) final;
 	void StretchRect(GSTexture* sTex, const GSVector4& sRect, GSTexture* dTex, const GSVector4& dRect, const GL::Program& ps, bool linear = true);
 	void StretchRect(GSTexture* sTex, const GSVector4& sRect, GSTexture* dTex, const GSVector4& dRect, bool red, bool green, bool blue, bool alpha) final;
-	void StretchRect(GSTexture* sTex, const GSVector4& sRect, GSTexture* dTex, const GSVector4& dRect, const GL::Program& ps, int bs, OMColorMaskSelector cms, bool linear = true);
+	void StretchRect(GSTexture* sTex, const GSVector4& sRect, GSTexture* dTex, const GSVector4& dRect, const GL::Program& ps, bool alpha_blend, OMColorMaskSelector cms, bool linear = true);
+	void PresentRect(GSTexture* sTex, const GSVector4& sRect, GSTexture* dTex, const GSVector4& dRect, PresentShader shader, float shaderTime, bool linear) final;
 
 	void RenderHW(GSHWDrawConfig& config) final;
-	void SendHWDraw(const GSHWDrawConfig& config);
+	void SendHWDraw(const GSHWDrawConfig& config, bool needs_barrier);
 
 	void SetupDATE(GSTexture* rt, GSTexture* ds, const GSVertexPT1* vertices, bool datm);
 
@@ -372,19 +372,16 @@ public:
 	void ClearSamplerCache() final;
 
 	void OMSetDepthStencilState(GSDepthStencilOGL* dss);
-	void OMSetBlendState(u8 blend_index = 0, u8 blend_factor = 0, bool is_blend_constant = false, bool accumulation_blend = false, bool blend_mix = false);
+	void OMSetBlendState(bool enable = false, GLenum src_factor = GL_ONE, GLenum dst_factor = GL_ZERO, GLenum op = GL_FUNC_ADD, bool is_constant = false, u8 constant = 0);
 	void OMSetRenderTargets(GSTexture* rt, GSTexture* ds, const GSVector4i* scissor = NULL);
 	void OMSetColorMaskState(OMColorMaskSelector sel = OMColorMaskSelector());
-
-	bool HasColorSparse() final { return GLLoader::found_compatible_GL_ARB_sparse_texture2; }
-	bool HasDepthSparse() final { return GLLoader::found_compatible_sparse_depth; }
 
 	bool CreateTextureFX();
 	std::string GetShaderSource(const std::string_view& entry, GLenum type, const std::string_view& common_header, const std::string_view& glsl_h_code, const std::string_view& macro_sel);
 	std::string GenGlslHeader(const std::string_view& entry, GLenum type, const std::string_view& macro);
 	std::string GetVSSource(VSSelector sel);
 	std::string GetGSSource(GSSelector sel);
-	std::string GetPSSource(PSSelector sel);
+	std::string GetPSSource(const PSSelector& sel);
 	GLuint CreateSampler(PSSamplerSelector sel);
 	GSDepthStencilOGL* CreateDepthStencil(OMDepthStencilSelector dssel);
 
@@ -393,6 +390,4 @@ public:
 	void SetupOM(OMDepthStencilSelector dssel);
 	GLuint GetSamplerID(PSSamplerSelector ssel);
 	GLuint GetPaletteSamplerID();
-
-	void Barrier(GLbitfield b);
 };

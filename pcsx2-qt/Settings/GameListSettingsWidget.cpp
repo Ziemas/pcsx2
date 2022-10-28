@@ -31,7 +31,7 @@
 #include "QtHost.h"
 #include "QtUtils.h"
 
-GameListSettingsWidget::GameListSettingsWidget(QWidget* parent, SettingsDialog* dialog)
+GameListSettingsWidget::GameListSettingsWidget(SettingsDialog* dialog, QWidget* parent)
 	: QWidget(parent)
 {
 	m_ui.setupUi(this);
@@ -65,9 +65,10 @@ GameListSettingsWidget::~GameListSettingsWidget() = default;
 
 bool GameListSettingsWidget::addExcludedPath(const std::string& path)
 {
-	if (!QtHost::AddBaseValueToStringList("GameList", "ExcludedPaths", path.c_str()))
+	if (!Host::AddBaseValueToStringList("GameList", "ExcludedPaths", path.c_str()))
 		return false;
 
+	Host::CommitBaseSettingChanges();
 	m_ui.excludedPaths->addItem(QString::fromStdString(path));
 	g_main_window->refreshGameList(false);
 	return true;
@@ -77,7 +78,7 @@ void GameListSettingsWidget::refreshExclusionList()
 {
 	m_ui.excludedPaths->clear();
 
-	const std::vector<std::string> paths(QtHost::GetBaseStringListSetting("GameList", "ExcludedPaths"));
+	const std::vector<std::string> paths(Host::GetBaseStringListSetting("GameList", "ExcludedPaths"));
 	for (const std::string& path : paths)
 		m_ui.excludedPaths->addItem(QString::fromStdString(path));
 }
@@ -96,24 +97,26 @@ void GameListSettingsWidget::addPathToTable(const std::string& path, bool recurs
 
 	QTableWidgetItem* item = new QTableWidgetItem();
 	item->setText(QString::fromStdString(path));
+	item->setFlags(item->flags() & ~(Qt::ItemIsEditable));
 	m_ui.searchDirectoryList->setItem(row, 0, item);
 
 	QCheckBox* cb = new QCheckBox(m_ui.searchDirectoryList);
 	m_ui.searchDirectoryList->setCellWidget(row, 1, cb);
 	cb->setChecked(recursive);
 
-	connect(cb, &QCheckBox::stateChanged, [this, item](int state) {
+	connect(cb, &QCheckBox::stateChanged, [item](int state) {
 		const std::string path(item->text().toStdString());
 		if (state == Qt::Checked)
 		{
-			QtHost::RemoveBaseValueFromStringList("GameList", "Paths", path.c_str());
-			QtHost::AddBaseValueToStringList("GameList", "RecursivePaths", path.c_str());
+			Host::RemoveBaseValueFromStringList("GameList", "Paths", path.c_str());
+			Host::AddBaseValueToStringList("GameList", "RecursivePaths", path.c_str());
 		}
 		else
 		{
-			QtHost::RemoveBaseValueFromStringList("GameList", "RecursivePaths", path.c_str());
-			QtHost::AddBaseValueToStringList("GameList", "Paths", path.c_str());
+			Host::RemoveBaseValueFromStringList("GameList", "RecursivePaths", path.c_str());
+			Host::AddBaseValueToStringList("GameList", "Paths", path.c_str());
 		}
+		Host::CommitBaseSettingChanges();
 	});
 }
 
@@ -123,11 +126,11 @@ void GameListSettingsWidget::refreshDirectoryList()
 	while (m_ui.searchDirectoryList->rowCount() > 0)
 		m_ui.searchDirectoryList->removeRow(0);
 
-	std::vector<std::string> path_list = QtHost::GetBaseStringListSetting("GameList", "Paths");
+	std::vector<std::string> path_list = Host::GetBaseStringListSetting("GameList", "Paths");
 	for (const std::string& entry : path_list)
 		addPathToTable(entry, false);
 
-	path_list = QtHost::GetBaseStringListSetting("GameList", "RecursivePaths");
+	path_list = Host::GetBaseStringListSetting("GameList", "RecursivePaths");
 	for (const std::string& entry : path_list)
 		addPathToTable(entry, true);
 
@@ -137,8 +140,9 @@ void GameListSettingsWidget::refreshDirectoryList()
 void GameListSettingsWidget::addSearchDirectory(const QString& path, bool recursive)
 {
 	const std::string spath(path.toStdString());
-	QtHost::RemoveBaseValueFromStringList("GameList", recursive ? "Paths" : "RecursivePaths", spath.c_str());
-	QtHost::AddBaseValueToStringList("GameList", recursive ? "RecursivePaths" : "Paths", spath.c_str());
+	Host::RemoveBaseValueFromStringList("GameList", recursive ? "Paths" : "RecursivePaths", spath.c_str());
+	Host::AddBaseValueToStringList("GameList", recursive ? "RecursivePaths" : "Paths", spath.c_str());
+	Host::CommitBaseSettingChanges();
 	refreshDirectoryList();
 	g_main_window->refreshGameList(false);
 }
@@ -146,12 +150,13 @@ void GameListSettingsWidget::addSearchDirectory(const QString& path, bool recurs
 void GameListSettingsWidget::removeSearchDirectory(const QString& path)
 {
 	const std::string spath(path.toStdString());
-	if (!QtHost::RemoveBaseValueFromStringList("GameList", "Paths", spath.c_str()) &&
-		!QtHost::RemoveBaseValueFromStringList("GameList", "RecursivePaths", spath.c_str()))
+	if (!Host::RemoveBaseValueFromStringList("GameList", "Paths", spath.c_str()) &&
+		!Host::RemoveBaseValueFromStringList("GameList", "RecursivePaths", spath.c_str()))
 	{
 		return;
 	}
 
+	Host::CommitBaseSettingChanges();
 	refreshDirectoryList();
 	g_main_window->refreshGameList(false);
 }
@@ -227,7 +232,9 @@ void GameListSettingsWidget::onRemoveExcludedPathButtonClicked()
 	if (!item)
 		return;
 
-	QtHost::RemoveBaseValueFromStringList("GameList", "ExcludedPaths", item->text().toUtf8().constData());
+	if (Host::RemoveBaseValueFromStringList("GameList", "ExcludedPaths", item->text().toUtf8().constData()))
+		Host::CommitBaseSettingChanges();
+
 	delete item;
 
 	g_main_window->refreshGameList(false);

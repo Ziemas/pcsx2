@@ -93,7 +93,7 @@ Panels::GameFixesPanel::GameFixesPanel( wxWindow* parent )
 			wxEmptyString
 		},
 		{
-			_("VU Kickstart (Run ahead) to avoid sync problems when reading or writing VU registers"),
+			_("VU Sync (Run behind) to avoid sync problems when reading or writing VU registers"),
 			wxEmptyString
 		},
 		{
@@ -103,6 +103,11 @@ Panels::GameFixesPanel::GameFixesPanel( wxWindow* parent )
 		{
 			_("VU XGkick Sync - Use accurate timing for VU XGKicks (Slower)"),
 			pxEt(L"Fixes graphical errors on WRC, Erementar Gerad, Tennis Court Smash and others."
+			)
+		},
+		{
+			_("Use Blit for internal FPS"),
+			pxEt(L"Use alternative method to calclate internal FPS to avoid false readings in some games."
 			)
 		}
 	};
@@ -169,9 +174,9 @@ void Panels::GameFixesPanel::ApplyConfigToGui( AppConfig& configToApply, int fla
 	const Pcsx2Config::GamefixOptions& opts( configToApply.EmuOptions.Gamefixes );
 	for (GamefixId i=GamefixId_FIRST; i < pxEnumEnd; ++i)
 		m_checkbox[i]->SetValue( opts.Get((GamefixId)i) );//apply the use/don't-use fix values
-	
+
 	m_check_Enable->SetValue( configToApply.EnableGameFixes );//main gamefixes checkbox
 	EnableStuff( &configToApply );// enable/disable the all the fixes controls according to the main one
-	
+
 	this->Enable(!configToApply.EnablePresets);
 }

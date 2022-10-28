@@ -79,9 +79,6 @@ GSLocalMemory::GSLocalMemory()
 		m_use_fifo_alloc = false;
 	}
 
-	m_vm16 = (u16*)m_vm8;
-	m_vm32 = (u32*)m_vm8;
-
 	memset(m_vm8, 0, m_vmsize);
 
 	for (psm_t& psm : m_psm)
@@ -106,6 +103,7 @@ GSLocalMemory::GSLocalMemory()
 		psm.pgs = GSVector2i(64, 32);
 		psm.msk = 0xff;
 		psm.depth = 0;
+		psm.fmsk = 0xffffffff;
 	}
 
 	m_psm[PSM_PSGPU24].info = GSLocalMemory::swizzle16;
@@ -346,6 +344,17 @@ GSLocalMemory::GSLocalMemory()
 	m_psm[PSM_PSMZ24].depth  = 1;
 	m_psm[PSM_PSMZ16].depth  = 1;
 	m_psm[PSM_PSMZ16S].depth = 1;
+
+	m_psm[PSM_PSMCT24].fmsk = 0x00FFFFFF;
+	m_psm[PSM_PSGPU24].fmsk = 0x00FFFFFF;
+	m_psm[PSM_PSMCT16].fmsk = 0x80F8F8F8;
+	m_psm[PSM_PSMCT16S].fmsk = 0x80F8F8F8;
+	m_psm[PSM_PSMT8H].fmsk = 0xFF000000;
+	m_psm[PSM_PSMT4HL].fmsk = 0x0F000000;
+	m_psm[PSM_PSMT4HH].fmsk = 0xF0000000;
+	m_psm[PSM_PSMZ24].fmsk = 0x00FFFFFF;
+	m_psm[PSM_PSMZ16].fmsk = 0x80F8F8F8;
+	m_psm[PSM_PSMZ16S].fmsk = 0x80F8F8F8;
 }
 
 GSLocalMemory::~GSLocalMemory()
@@ -472,8 +481,6 @@ GSPixelOffset4* GSLocalMemory::GetPixelOffset4(const GIFRegFRAME& FRAME, const G
 	return off;
 }
 
-static bool cmp_vec2x(const GSVector2i& a, const GSVector2i& b) { return a.x < b.x; }
-
 std::vector<GSVector2i>* GSLocalMemory::GetPage2TileMap(const GIFRegTEX0& TEX0)
 {
 	u64 hash = TEX0.U64 & 0x3ffffffffull; // TBP0 TBW PSM TW TH
@@ -544,7 +551,7 @@ std::vector<GSVector2i>* GSLocalMemory::GetPage2TileMap(const GIFRegTEX0& TEX0)
 			p2t[page].push_back(GSVector2i(j.first, ~j.second));
 		}
 
-		std::sort(p2t[page].begin(), p2t[page].end(), cmp_vec2x);
+		std::sort(p2t[page].begin(), p2t[page].end(), [](const GSVector2i& a, const GSVector2i& b) { return a.x < b.x; });
 	}
 
 	m_p2tmap[hash] = p2t;
@@ -808,8 +815,8 @@ void GSLocalMemory::WriteImage(int& tx, int& ty, const u8* src, int len, GIFRegB
 	if (TRXREG.RRW == 0)
 		return;
 
-	int l = (int)TRXPOS.DSAX;
-	int r = l + (int)TRXREG.RRW;
+	const int l = (int)TRXPOS.DSAX;
+	const int r = l + (int)TRXREG.RRW;
 
 	// finish the incomplete row first
 
@@ -821,10 +828,31 @@ void GSLocalMemory::WriteImage(int& tx, int& ty, const u8* src, int len, GIFRegB
 		len -= n;
 	}
 
-	int la = (l + (bsx - 1)) & ~(bsx - 1);
-	int ra = r & ~(bsx - 1);
-	int srcpitch = (r - l) * trbpp >> 3;
+	const int la = (l + (bsx - 1)) & ~(bsx - 1);
+	const int ra = r & ~(bsx - 1);
+	// Round up to the nearest byte (NFL 2K5 does r = 1, l = 0 bpp =4, causing divide by zero)
+	const int srcpitch = (((r - l) * trbpp) + 7) >> 3;
 	int h = len / srcpitch;
+
+	// Slow path for odd width 4bpp, the fast path expects everything to be perfectly aligned and great,
+	// but things get hairy with 4bpp pixels and odd widths since the lowest size we can address is 8bits, it goes out of sync.
+	// Although I call this a slow path, it's probably faster than modifying the data alignment every other line.
+	// GT3 demo, Jak 2 Japanese subtitles, and the BG Dark Alliance minimap do this.
+	if (trbpp == 4 && (TRXREG.RRW & 0x1))
+	{
+		int count = 0;
+		const int t = TRXPOS.DSAY;
+		const int b = t + (int)TRXREG.RRH;
+		for (int y = t; y < b; y++)
+		{
+			for (int x = l; x < r; x++)
+			{
+				WritePixel4(x, y, src[count >> 1] >> ((count & 1) << 2), BITBLTBUF.DBP, BITBLTBUF.DBW);
+				count++;
+			}
+		}
+		return;
+	}
 
 	if (ra - la >= bsx && h > 0) // "transfer width" >= "block width" && there is at least one full row
 	{
@@ -1178,7 +1206,7 @@ void GSLocalMemory::WriteImageX(int& tx, int& ty, const u8* src, int len, GIFReg
 	{
 		case PSM_PSMCT32:
 		case PSM_PSMZ32:
-			readWriteHelper(m_vm32, tx, ty, len / 4, 1, sx, w, off.assertSizesMatch(swizzle32), [&](auto& pa, int x)
+			readWriteHelper(vm32(), tx, ty, len / 4, 1, sx, w, off.assertSizesMatch(swizzle32), [&](auto& pa, int x)
 			{
 				*pa.value(x) = *pd;
 				pd++;
@@ -1187,7 +1215,7 @@ void GSLocalMemory::WriteImageX(int& tx, int& ty, const u8* src, int len, GIFReg
 
 		case PSM_PSMCT24:
 		case PSM_PSMZ24:
-			readWriteHelper(m_vm32, tx, ty, len / 3, 1, sx, w, off.assertSizesMatch(swizzle32), [&](auto& pa, int x)
+			readWriteHelper(vm32(), tx, ty, len / 3, 1, sx, w, off.assertSizesMatch(swizzle32), [&](auto& pa, int x)
 			{
 				WritePixel24(pa.value(x), *(u32*)pb);
 				pb += 3;
@@ -1198,7 +1226,7 @@ void GSLocalMemory::WriteImageX(int& tx, int& ty, const u8* src, int len, GIFReg
 		case PSM_PSMCT16S:
 		case PSM_PSMZ16:
 		case PSM_PSMZ16S:
-			readWriteHelper(m_vm16, tx, ty, len / 2, 1, sx, w, off.assertSizesMatch(swizzle16), [&](auto& pa, int x)
+			readWriteHelper(vm16(), tx, ty, len / 2, 1, sx, w, off.assertSizesMatch(swizzle16), [&](auto& pa, int x)
 			{
 				*pa.value(x) = *pw;
 				pw++;
@@ -1223,7 +1251,7 @@ void GSLocalMemory::WriteImageX(int& tx, int& ty, const u8* src, int len, GIFReg
 			break;
 
 		case PSM_PSMT8H:
-			readWriteHelper(m_vm32, tx, ty, len, 1, sx, w, GSOffset::fromKnownPSM(bp, bw, PSM_PSMT8H), [&](auto& pa, int x)
+			readWriteHelper(vm32(), tx, ty, len, 1, sx, w, GSOffset::fromKnownPSM(bp, bw, PSM_PSMT8H), [&](auto& pa, int x)
 			{
 				WritePixel8H(pa.value(x), *pb);
 				pb++;
@@ -1231,7 +1259,7 @@ void GSLocalMemory::WriteImageX(int& tx, int& ty, const u8* src, int len, GIFReg
 			break;
 
 		case PSM_PSMT4HL:
-			readWriteHelper(m_vm32, tx, ty, len * 2, 2, sx, w, GSOffset::fromKnownPSM(bp, bw, PSM_PSMT4HL), [&](auto& pa, int x)
+			readWriteHelper(vm32(), tx, ty, len * 2, 2, sx, w, GSOffset::fromKnownPSM(bp, bw, PSM_PSMT4HL), [&](auto& pa, int x)
 			{
 				WritePixel4HL(pa.value(x), *pb & 0xf);
 				WritePixel4HL(pa.value(x + 1), *pb >> 4);
@@ -1240,7 +1268,7 @@ void GSLocalMemory::WriteImageX(int& tx, int& ty, const u8* src, int len, GIFReg
 			break;
 
 		case PSM_PSMT4HH:
-			readWriteHelper(m_vm32, tx, ty, len * 2, 2, sx, w, GSOffset::fromKnownPSM(bp, bw, PSM_PSMT4HH), [&](auto& pa, int x)
+			readWriteHelper(vm32(), tx, ty, len * 2, 2, sx, w, GSOffset::fromKnownPSM(bp, bw, PSM_PSMT4HH), [&](auto& pa, int x)
 			{
 				WritePixel4HH(pa.value(x), *pb & 0xf);
 				WritePixel4HH(pa.value(x + 1), *pb >> 4);
@@ -1284,7 +1312,7 @@ void GSLocalMemory::ReadImageX(int& tx, int& ty, u8* dst, int len, GIFRegBITBLTB
 
 			len /= 4;
 
-			GSOffset::PAPtrHelper pa = off.assertSizesMatch(swizzle32).paMulti(m_vm32, 0, y);
+			GSOffset::PAPtrHelper pa = off.assertSizesMatch(swizzle32).paMulti(vm32(), 0, y);
 
 			while (len > 0)
 			{
@@ -1315,7 +1343,7 @@ void GSLocalMemory::ReadImageX(int& tx, int& ty, u8* dst, int len, GIFRegBITBLTB
 				{
 					y++;
 					x = sx;
-					pa = off.assertSizesMatch(swizzle32).paMulti(m_vm32, 0, y);
+					pa = off.assertSizesMatch(swizzle32).paMulti(vm32(), 0, y);
 				}
 			}
 
@@ -1326,7 +1354,7 @@ void GSLocalMemory::ReadImageX(int& tx, int& ty, u8* dst, int len, GIFRegBITBLTB
 
 		case PSM_PSMCT24:
 		case PSM_PSMZ24:
-			readWriteHelper(m_vm32, tx, ty, len / 3, 1, sx, w, off.assertSizesMatch(swizzle32), [&](auto& pa, int x)
+			readWriteHelper(vm32(), tx, ty, len / 3, 1, sx, w, off.assertSizesMatch(swizzle32), [&](auto& pa, int x)
 			{
 				u32 c = *pa.value(x);
 				pb[0] = (u8)(c);
@@ -1340,7 +1368,7 @@ void GSLocalMemory::ReadImageX(int& tx, int& ty, u8* dst, int len, GIFRegBITBLTB
 		case PSM_PSMCT16S:
 		case PSM_PSMZ16:
 		case PSM_PSMZ16S:
-			readWriteHelper(m_vm16, tx, ty, len / 2, 1, sx, w, off.assertSizesMatch(swizzle16), [&](auto& pa, int x)
+			readWriteHelper(vm16(), tx, ty, len / 2, 1, sx, w, off.assertSizesMatch(swizzle16), [&](auto& pa, int x)
 			{
 				*pw = *pa.value(x);
 				pw++;
@@ -1365,7 +1393,7 @@ void GSLocalMemory::ReadImageX(int& tx, int& ty, u8* dst, int len, GIFRegBITBLTB
 			break;
 
 		case PSM_PSMT8H:
-			readWriteHelper(m_vm32, tx, ty, len, 1, sx, w, GSOffset::fromKnownPSM(bp, bw, PSM_PSMT8H), [&](auto& pa, int x)
+			readWriteHelper(vm32(), tx, ty, len, 1, sx, w, GSOffset::fromKnownPSM(bp, bw, PSM_PSMT8H), [&](auto& pa, int x)
 			{
 				*pb = (u8)(*pa.value(x) >> 24);
 				pb++;
@@ -1373,7 +1401,7 @@ void GSLocalMemory::ReadImageX(int& tx, int& ty, u8* dst, int len, GIFRegBITBLTB
 			break;
 
 		case PSM_PSMT4HL:
-			readWriteHelper(m_vm32, tx, ty, len * 2, 2, sx, w, GSOffset::fromKnownPSM(bp, bw, PSM_PSMT4HL), [&](auto& pa, int x)
+			readWriteHelper(vm32(), tx, ty, len * 2, 2, sx, w, GSOffset::fromKnownPSM(bp, bw, PSM_PSMT4HL), [&](auto& pa, int x)
 			{
 				u32 c0 = *pa.value(x) >> 24 & 0x0f;
 				u32 c1 = *pa.value(x + 1) >> 20 & 0xf0;
@@ -1383,7 +1411,7 @@ void GSLocalMemory::ReadImageX(int& tx, int& ty, u8* dst, int len, GIFRegBITBLTB
 			break;
 
 		case PSM_PSMT4HH:
-			readWriteHelper(m_vm32, tx, ty, len * 2, 2, sx, w, GSOffset::fromKnownPSM(bp, bw, PSM_PSMT4HH), [&](auto& pa, int x)
+			readWriteHelper(vm32(), tx, ty, len * 2, 2, sx, w, GSOffset::fromKnownPSM(bp, bw, PSM_PSMT4HH), [&](auto& pa, int x)
 			{
 				u32 c0 = *pa.value(x) >> 28 & 0x0f;
 				u32 c1 = *pa.value(x + 1) >> 24 & 0xf0;
@@ -1658,15 +1686,9 @@ void GSLocalMemory::ReadTexture(const GSOffset& off, const GSVector4i& r, u8* ds
 		}
 		else
 		{
-			for (int y = r.top; y < cr.top; y++, dst += dstpitch)
-			{
-				for (int x = r.left, i = 0; x < r.right; x++, i++)
-				{
-					((u32*)dst)[i] = (this->*rt)(x, y, TEX0, TEXA);
-				}
-			}
+			u8* crdst = dst;
 
-			for (int y = cr.bottom; y < r.bottom; y++, dst += dstpitch)
+			for (int y = r.top; y < cr.top; y++, dst += dstpitch)
 			{
 				for (int x = r.left, i = 0; x < r.right; x++, i++)
 				{
@@ -1687,9 +1709,19 @@ void GSLocalMemory::ReadTexture(const GSOffset& off, const GSVector4i& r, u8* ds
 				}
 			}
 
+			for (int y = cr.bottom; y < r.bottom; y++, dst += dstpitch)
+			{
+				for (int x = r.left, i = 0; x < r.right; x++, i++)
+				{
+					((u32*)dst)[i] = (this->*rt)(x, y, TEX0, TEXA);
+				}
+			}
+
 			if (!cr.rempty())
 			{
-				(this->*rtx)(off, cr, dst + (cr.left - r.left) * sizeof(u32), dstpitch, TEXA);
+				crdst += dstpitch * (cr.top - r.top);
+				crdst += sizeof(u32) * (cr.left - r.left);
+				(this->*rtx)(off, cr, crdst, dstpitch, TEXA);
 			}
 		}
 	}

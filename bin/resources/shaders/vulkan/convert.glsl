@@ -6,16 +6,13 @@
 
 layout(location = 0) in vec4 a_pos;
 layout(location = 1) in vec2 a_tex;
-layout(location = 2) in vec4 a_color;
 
 layout(location = 0) out vec2 v_tex;
-layout(location = 1) out vec4 v_color;
 
 void main()
 {
 	gl_Position = vec4(a_pos.x, -a_pos.y, a_pos.z, a_pos.w);
 	v_tex = a_tex;
-	v_color = a_color;
 }
 
 #endif
@@ -23,7 +20,6 @@ void main()
 #ifdef FRAGMENT_SHADER
 
 layout(location = 0) in vec2 v_tex;
-layout(location = 1) in vec4 v_color;
 
 #if defined(ps_convert_rgba8_16bits) || defined(ps_convert_float32_32bits)
 layout(location = 0) out uint o_col0;
@@ -36,29 +32,6 @@ layout(set = 0, binding = 0) uniform sampler2D samp0;
 vec4 sample_c(vec2 uv)
 {
 	return texture(samp0, uv);
-}
-
-vec4 ps_crt(uint i)
-{
-		vec4 mask[4] = vec4[4]
-				(
-				 vec4(1, 0, 0, 0),
-				 vec4(0, 1, 0, 0),
-				 vec4(0, 0, 1, 0),
-				 vec4(1, 1, 1, 0)
-				);
-		return sample_c(v_tex) * clamp((mask[i] + 0.5f), 0.0f, 1.0f);
-}
-
-vec4 ps_scanlines(uint i)
-{
-		vec4 mask[2] =
-		{
-				vec4(1, 1, 1, 0),
-				vec4(0, 0, 0, 0)
-		};
-
-		return sample_c(v_tex) * clamp((mask[i] + 0.5f), 0.0f, 1.0f);
 }
 
 #ifdef ps_copy
@@ -90,7 +63,7 @@ void ps_filter_transparency()
 // Need to be careful with precision here, it can break games like Spider-Man 3 and Dogs Life
 void ps_convert_rgba8_16bits()
 {
-	highp uvec4 i = uvec4(sample_c(v_tex) * vec4(255.5f, 255.5f, 255.5f, 255.5f));
+	uvec4 i = uvec4(sample_c(v_tex) * vec4(255.5f, 255.5f, 255.5f, 255.5f));
 
 	o_col0 = ((i.x & 0x00F8u) >> 3) | ((i.y & 0x00F8u) << 2) | ((i.z & 0x00f8u) << 7) | ((i.w & 0x80u) << 8);
 }
@@ -129,45 +102,6 @@ void ps_mod256()
 }
 #endif
 
-#ifdef ps_filter_scanlines
-void ps_filter_scanlines() // scanlines
-{
-	uvec4 p = uvec4(gl_FragCoord);
-
-	o_col0 = ps_scanlines(p.y % 2);
-}
-#endif
-
-#ifdef ps_filter_diagonal
-void ps_filter_diagonal() // diagonal
-{
-	uvec4 p = uvec4(gl_FragCoord);
-	o_col0 = ps_crt((p.x + (p.y % 3)) % 3);
-}
-#endif
-
-#ifdef ps_filter_triangular
-void ps_filter_triangular() // triangular
-{
-	uvec4 p = uvec4(gl_FragCoord);
-
-	// output.c = ps_crt(input, ((p.x + (p.y & 1) * 3) >> 1) % 3); 
-	o_col0 = ps_crt(((p.x + ((p.y >> 1) & 1) * 3) >> 1) % 3);
-}
-#endif
-
-#ifdef ps_filter_complex
-void ps_filter_complex() // triangular
-{
-	const float PI = 3.14159265359f;
-	vec2 texdim = vec2(textureSize(samp0, 0));
-	if (dFdy(v_tex.y) * texdim.y > 0.5) 
-		o_col0 = sample_c(v_tex); 
-	else
-		o_col0 = (0.9 - 0.4 * cos(2 * PI * v_tex.y * texdim.y)) * sample_c(vec2(v_tex.x, (floor(v_tex.y * texdim.y) + 0.5) / texdim.y));
-}
-#endif
-
 #ifdef ps_convert_float32_32bits
 void ps_convert_float32_32bits()
 {
@@ -180,12 +114,8 @@ void ps_convert_float32_32bits()
 void ps_convert_float32_rgba8()
 {
 	// Convert a vec32 depth texture into a RGBA color texture
-	const vec4 bitSh = vec4(exp2(24.0f), exp2(16.0f), exp2(8.0f), exp2(0.0f));
-	const vec4 bitMsk = vec4(0.0, 1.0 / 256.0, 1.0 / 256.0, 1.0 / 256.0);
-
-	vec4 res = fract(vec4(sample_c(v_tex).rrrr) * bitSh);
-
-	o_col0 = (res - res.xxyz * bitMsk) * 256.0f / 255.0f;
+	uint d = uint(sample_c(v_tex).r * exp2(32.0f));
+	o_col0 = vec4(uvec4((d & 0xFFu), ((d >> 8) & 0xFFu), ((d >> 16) & 0xFFu), (d >> 24))) / vec4(255.0);
 }
 #endif
 
@@ -193,22 +123,40 @@ void ps_convert_float32_rgba8()
 void ps_convert_float16_rgb5a1()
 {
 	// Convert a vec32 (only 16 lsb) depth into a RGB5A1 color texture
-	const vec4 bitSh = vec4(exp2(32.0f), exp2(27.0f), exp2(22.0f), exp2(17.0f));
-	const uvec4 bitMsk = uvec4(0x1F, 0x1F, 0x1F, 0x1);
-	uvec4 color = uvec4(vec4(sample_c(v_tex).rrrr) * bitSh) & bitMsk;
-
-	o_col0 = vec4(color) / vec4(32.0f, 32.0f, 32.0f, 1.0f);
+	uint d = uint(sample_c(v_tex).r * exp2(32.0f));
+	o_col0 = vec4(uvec4((d & 0x1Fu), ((d >> 5) & 0x1Fu), ((d >> 10) & 0x1Fu), (d >> 15) & 0x01u)) / vec4(32.0f, 32.0f, 32.0f, 1.0f);
 }
 #endif
+
+float rgba8_to_depth32(vec4 unorm)
+{
+	uvec4 c = uvec4(unorm * vec4(255.5f));
+	return float(c.r | (c.g << 8) | (c.b << 16) | (c.a << 24)) * exp2(-32.0f);
+}
+
+float rgba8_to_depth24(vec4 unorm)
+{
+	uvec3 c = uvec3(unorm.rgb * vec3(255.5f));
+	return float(c.r | (c.g << 8) | (c.b << 16)) * exp2(-32.0f);
+}
+
+float rgba8_to_depth16(vec4 unorm)
+{
+	uvec2 c = uvec2(unorm.rg * vec2(255.5f));
+	return float(c.r | (c.g << 8)) * exp2(-32.0f);
+}
+
+float rgb5a1_to_depth16(vec4 unorm)
+{
+	uvec4 c = uvec4(unorm * vec4(255.5f));
+	return float(((c.r & 0xF8u) >> 3) | ((c.g & 0xF8u) << 2) | ((c.b & 0xF8u) << 7) | ((c.a & 0x80u) << 8)) * exp2(-32.0f);
+}
 
 #ifdef ps_convert_rgba8_float32
 void ps_convert_rgba8_float32()
 {
-	// Convert a RRGBA texture into a float depth texture
-	// FIXME: I'm afraid of the accuracy
-	const vec4 bitSh = vec4(exp2(-32.0f), exp2(-24.0f), exp2(-16.0f), exp2(-8.0f)) * vec4(255.0);
-
-	gl_FragDepth = dot(sample_c(v_tex), bitSh);
+	// Convert an RGBA texture into a float depth texture
+	gl_FragDepth = rgba8_to_depth32(sample_c(v_tex));
 }
 #endif
 
@@ -217,10 +165,8 @@ void ps_convert_rgba8_float24()
 {
 	// Same as above but without the alpha channel (24 bits Z)
 
-	// Convert a RRGBA texture into a float depth texture
-	const vec3 bitSh = vec3(exp2(-32.0f), exp2(-24.0f), exp2(-16.0f)) * vec3(255.0);
-
-	gl_FragDepth = dot(sample_c(v_tex).rgb, bitSh);
+	// Convert an RGBA texture into a float depth texture
+	gl_FragDepth = rgba8_to_depth24(sample_c(v_tex));
 }
 #endif
 
@@ -229,24 +175,64 @@ void ps_convert_rgba8_float16()
 {
 	// Same as above but without the A/B channels (16 bits Z)
 
-	// Convert a RRGBA texture into a float depth texture
-	// FIXME: I'm afraid of the accuracy
-	const vec2 bitSh = vec2(exp2(-32.0f), exp2(-24.0f)) * vec2(255.0);
-
-	gl_FragDepth = dot(sample_c(v_tex).rg, bitSh);
+	// Convert an RGBA texture into a float depth texture
+	gl_FragDepth = rgba8_to_depth16(sample_c(v_tex));
 }
 #endif
 
 #ifdef ps_convert_rgb5a1_float16
 void ps_convert_rgb5a1_float16()
 {
-	// Convert a RGB5A1 (saved as RGBA8) color to a 16 bit Z
-	// FIXME: I'm afraid of the accuracy
-	const vec4 bitSh = vec4(exp2(-32.0f), exp2(-27.0f), exp2(-22.0f), exp2(-17.0f));
-	// Trunc color to drop useless lsb
-	vec4 color = trunc(sample_c(v_tex) * vec4(255.0f) / vec4(8.0f, 8.0f, 8.0f, 128.0f));
+	// Convert an RGB5A1 (saved as RGBA8) color to a 16 bit Z
+	gl_FragDepth = rgb5a1_to_depth16(sample_c(v_tex));
+}
+#endif
 
-	gl_FragDepth = dot(vec4(color), bitSh);
+#define SAMPLE_RGBA_DEPTH_BILN(CONVERT_FN) \
+	ivec2 dims = textureSize(samp0, 0); \
+	vec2 top_left_f = v_tex * vec2(dims) - 0.5f; \
+	ivec2 top_left = ivec2(floor(top_left_f)); \
+	ivec4 coords = clamp(ivec4(top_left, top_left + 1), ivec4(0), dims.xyxy - 1); \
+	vec2 mix_vals = fract(top_left_f); \
+	float depthTL = CONVERT_FN(texelFetch(samp0, coords.xy, 0)); \
+	float depthTR = CONVERT_FN(texelFetch(samp0, coords.zy, 0)); \
+	float depthBL = CONVERT_FN(texelFetch(samp0, coords.xw, 0)); \
+	float depthBR = CONVERT_FN(texelFetch(samp0, coords.zw, 0)); \
+	gl_FragDepth = mix(mix(depthTL, depthTR, mix_vals.x), mix(depthBL, depthBR, mix_vals.x), mix_vals.y);
+
+#ifdef ps_convert_rgba8_float32_biln
+void ps_convert_rgba8_float32_biln()
+{
+	// Convert an RGBA texture into a float depth texture
+	SAMPLE_RGBA_DEPTH_BILN(rgba8_to_depth32);
+}
+#endif
+
+#ifdef ps_convert_rgba8_float24_biln
+void ps_convert_rgba8_float24_biln()
+{
+	// Same as above but without the alpha channel (24 bits Z)
+
+	// Convert an RGBA texture into a float depth texture
+	SAMPLE_RGBA_DEPTH_BILN(rgba8_to_depth24);
+}
+#endif
+
+#ifdef ps_convert_rgba8_float16_biln
+void ps_convert_rgba8_float16_biln()
+{
+	// Same as above but without the A/B channels (16 bits Z)
+
+	// Convert an RGBA texture into a float depth texture
+	SAMPLE_RGBA_DEPTH_BILN(rgba8_to_depth16);
+}
+#endif
+
+#ifdef ps_convert_rgb5a1_float16_biln
+void ps_convert_rgb5a1_float16_biln()
+{
+	// Convert an RGB5A1 (saved as RGBA8) color to a 16 bit Z
+	SAMPLE_RGBA_DEPTH_BILN(rgb5a1_to_depth16);
 }
 #endif
 
@@ -348,21 +334,21 @@ layout(push_constant) uniform cb10
 
 void ps_yuv()
 {
-  vec4 i = sample_c(v_tex);
-  vec4 o;
+	vec4 i = sample_c(v_tex);
+	vec4 o;
 
-  mat3 rgb2yuv;
-  rgb2yuv[0] = vec3(0.587, -0.311, -0.419);
-  rgb2yuv[1] = vec3(0.114, 0.500, -0.081);
-  rgb2yuv[2] = vec3(0.299, -0.169, 0.500);
+	mat3 rgb2yuv;
+	rgb2yuv[0] = vec3(0.587, -0.311, -0.419);
+	rgb2yuv[1] = vec3(0.114, 0.500, -0.081);
+	rgb2yuv[2] = vec3(0.299, -0.169, 0.500);
 
-  vec3 yuv = rgb2yuv * i.gbr;
+	vec3 yuv = rgb2yuv * i.gbr;
 
-  float Y = float(0xDB)/255.0f * yuv.x + float(0x10)/255.0f;
-  float Cr = float(0xE0)/255.0f * yuv.y + float(0x80)/255.0f;
-  float Cb = float(0xE0)/255.0f * yuv.z + float(0x80)/255.0f;
+	float Y = float(0xDB)/255.0f * yuv.x + float(0x10)/255.0f;
+	float Cr = float(0xE0)/255.0f * yuv.y + float(0x80)/255.0f;
+	float Cb = float(0xE0)/255.0f * yuv.z + float(0x80)/255.0f;
 
-  switch(EMODA) {
+	switch(EMODA) {
 		case 0:
 			o.a = i.a;
 			break;
@@ -375,22 +361,22 @@ void ps_yuv()
 		case 3:
 			o.a = 0.0f;
 			break;
-  }
+	}
 
-  switch(EMODC) {
-    case 0:
-      o.rgb = i.rgb;
-      break;
-    case 1:
-      o.rgb = vec3(Y);
-      break;
-    case 2:
-      o.rgb = vec3(Y, Cb, Cr);
-      break;
-    case 3:
-      o.rgb = vec3(i.a);
-      break;
-  }
+	switch(EMODC) {
+		case 0:
+			o.rgb = i.rgb;
+			break;
+		case 1:
+			o.rgb = vec3(Y);
+			break;
+		case 2:
+			o.rgb = vec3(Y, Cb, Cr);
+			break;
+		case 3:
+			o.rgb = vec3(i.a);
+			break;
+	}
 
 	o_col0 = o;
 }

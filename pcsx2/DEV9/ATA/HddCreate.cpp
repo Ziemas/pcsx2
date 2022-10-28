@@ -15,143 +15,114 @@
 
 #include "PrecompiledHeader.h"
 
-#include <fstream>
+#include "common/FileSystem.h"
+
+#include <fmt/format.h>
 #include "HddCreate.h"
 
 void HddCreate::Start()
 {
-#ifndef PCSX2_CORE
-	//This can be called from the EE Core thread
-	//ensure that UI creation/deletaion is done on main thread
-	if (!wxIsMainThread())
-	{
-		wxTheApp->CallAfter([&] { Start(); });
-		//Block until done
-		std::unique_lock competedLock(completedMutex);
-		completedCV.wait(competedLock, [&] { return completed; });
-		return;
-	}
-
-	//This creates a modeless dialog
-	progressDialog = new wxProgressDialog(_("Creating HDD file"), _("Creating HDD file"), neededSize, nullptr, wxPD_APP_MODAL | wxPD_AUTO_HIDE | wxPD_CAN_ABORT | wxPD_ELAPSED_TIME | wxPD_REMAINING_TIME);
-#endif
-
-	fileThread = std::thread(&HddCreate::WriteImage, this, filePath, neededSize);
-
-	//This code was written for a modal dialog, however wxProgressDialog is modeless only
-	//The idea was block here in a ShowModal() call, and have the worker thread update the UI
-	//via CallAfter()
-
-	//Instead, loop here to update UI
-	wxString msg;
-	int currentSize;
-	while ((currentSize = written.load()) != neededSize && !errored.load())
-	{
-		msg.Printf(_("%i / %i MiB"), written.load(), neededSize);
-
-#ifndef PCSX2_CORE
-		if (!progressDialog->Update(currentSize, msg))
-			canceled.store(true);
-#endif
-
-		std::this_thread::sleep_for(std::chrono::milliseconds(50));
-	}
-
-	fileThread.join();
-
-	if (errored.load())
-	{
-#ifndef PCSX2_CORE
-		wxMessageDialog dialog(nullptr, _("Failed to create HDD file"), _("Info"), wxOK);
-		dialog.ShowModal();
-#endif
-	}
-
-#ifndef PCSX2_CORE
-	delete progressDialog;
-#endif
-	//Signal calling thread to resume
-	{
-		std::lock_guard ioSignallock(completedMutex);
-		completed = true;
-	}
-	completedCV.notify_all();
+	Init();
+	WriteImage(filePath, neededSize);
+	Cleanup();
 }
 
-void HddCreate::WriteImage(ghc::filesystem::path hddPath, int reqSizeMiB)
+void HddCreate::WriteImage(std::string hddPath, u64 reqSizeBytes)
 {
 	constexpr int buffsize = 4 * 1024;
 	u8 buff[buffsize] = {0}; //4kb
 
-	if (ghc::filesystem::exists(hddPath))
+	if (FileSystem::FileExists(hddPath.c_str()))
 	{
+		errored.store(true);
 		SetError();
 		return;
 	}
 
-	std::fstream newImage = ghc::filesystem::fstream(hddPath, std::ios::out | std::ios::binary);
-
-	if (newImage.fail())
+	auto newImage = FileSystem::OpenManagedCFile(hddPath.c_str(), "wb");
+	if (!newImage)
 	{
+		errored.store(true);
 		SetError();
 		return;
 	}
 
 	//Size file
-	newImage.seekp(((u64)reqSizeMiB) * 1024 * 1024 - 1, std::ios::beg);
 	const char zero = 0;
-	newImage.write(&zero, 1);
+	bool success = FileSystem::FSeek64(newImage.get(), reqSizeBytes - 1, SEEK_SET) == 0;
+	success = success && std::fwrite(&zero, 1, 1, newImage.get()) == 1;
+	success = success && FileSystem::FSeek64(newImage.get(), 0, SEEK_SET) == 0;
 
-	if (newImage.fail())
+	if (!success)
 	{
-		newImage.close();
-		ghc::filesystem::remove(filePath);
+		newImage.reset();
+		FileSystem::DeleteFilePath(filePath.c_str());
+		errored.store(true);
 		SetError();
 		return;
 	}
 
 	lastUpdate = std::chrono::steady_clock::now();
 
-	newImage.seekp(0, std::ios::beg);
-
-	for (int iMiB = 0; iMiB < reqSizeMiB; iMiB++)
+	//Round up
+	const s32 reqMiB = (reqSizeBytes + ((1024 * 1024) - 1)) / (1024 * 1024);
+	for (s32 iMiB = 0; iMiB < reqMiB; iMiB++)
 	{
-		for (int i4kb = 0; i4kb < 256; i4kb++)
+		//Round down
+		const s32 req4Kib = std::min<s32>(1024, (reqSizeBytes / 1024) - (u64)iMiB * 1024) / 4;
+		for (s32 i4kb = 0; i4kb < req4Kib; i4kb++)
 		{
-			newImage.write((char*)buff, buffsize);
-			if (newImage.fail())
+			if (std::fwrite(buff, buffsize, 1, newImage.get()) != 1)
 			{
-				newImage.close();
-				ghc::filesystem::remove(filePath);
+				newImage.reset();
+				FileSystem::DeleteFilePath(filePath.c_str());
+				errored.store(true);
+				SetError();
+				return;
+			}
+		}
+
+		if (req4Kib != 256)
+		{
+			const s32 remainingBytes = reqSizeBytes - (((u64)iMiB) * (1024 * 1024) + req4Kib * 4096);
+			if (std::fwrite(buff, remainingBytes, 1, newImage.get()) != 1)
+			{
+				newImage.reset();
+				FileSystem::DeleteFilePath(filePath.c_str());
+				errored.store(true);
 				SetError();
 				return;
 			}
 		}
 
 		const std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
-		if (std::chrono::duration_cast<std::chrono::milliseconds>(now - lastUpdate).count() >= 100 || (iMiB + 1) == neededSize)
+		if (std::chrono::duration_cast<std::chrono::milliseconds>(now - lastUpdate).count() >= 100 || (iMiB + 1) == reqMiB)
 		{
 			lastUpdate = now;
-			SetFileProgress(iMiB + 1);
+			SetFileProgress(static_cast<u64>(FileSystem::FTell64(newImage.get())));
 		}
 		if (canceled.load())
 		{
-			newImage.close();
-			ghc::filesystem::remove(filePath);
+			newImage.reset();
+			FileSystem::DeleteFilePath(filePath.c_str());
+			errored.store(true);
 			SetError();
 			return;
 		}
 	}
-	newImage.flush();
-	newImage.close();
 }
 
-void HddCreate::SetFileProgress(int currentSize)
+void HddCreate::SetFileProgress(u64 currentSize)
 {
-	written.store(currentSize);
+	Console.WriteLn(fmt::format("{} / {} Bytes", currentSize, neededSize).c_str());
 }
 
 void HddCreate::SetError()
 {
-	errored.store(true);
+	Console.WriteLn("Failed to create HDD file");
+}
+
+void HddCreate::SetCanceled()
+{
+	canceled.store(true);
 }

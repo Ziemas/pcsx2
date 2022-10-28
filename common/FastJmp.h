@@ -20,20 +20,16 @@
 
 struct fastjmp_buf
 {
-#if defined(_M_X86_64) && defined(_WIN32)
+#if defined(_WIN32)
 	static constexpr std::size_t BUF_SIZE = 240;
-#elif defined(_M_X86_64)
-	static constexpr std::size_t BUF_SIZE = 64;
-#elif defined(_M_X86_32)
-	static constexpr std::size_t BUF_SIZE = 24;
 #else
-#error Unknown architecture.
+	static constexpr std::size_t BUF_SIZE = 64;
 #endif
 
 	alignas(16) std::uint8_t buf[BUF_SIZE];
 };
 
 extern "C" {
-int __fastcall fastjmp_set(fastjmp_buf* buf);
-__noreturn void __fastcall fastjmp_jmp(const fastjmp_buf* buf, int ret);
+int fastjmp_set(fastjmp_buf* buf);
+__noreturn void fastjmp_jmp(const fastjmp_buf* buf, int ret);
 }

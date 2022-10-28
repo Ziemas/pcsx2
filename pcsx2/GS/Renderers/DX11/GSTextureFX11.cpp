@@ -137,6 +137,7 @@ void GSDevice11::SetupGS(GSSelector sel)
 			sm.AddMacro("GS_IIP", sel.iip);
 			sm.AddMacro("GS_PRIM", static_cast<int>(sel.topology));
 			sm.AddMacro("GS_EXPAND", sel.expand);
+			sm.AddMacro("GS_FORWARD_PRIMID", sel.forward_primid);
 
 			gs = m_shader_cache.GetGeometryShader(m_dev.get(), m_tfx_source, sm.GetPtr(), "gs_main");
 
@@ -147,15 +148,15 @@ void GSDevice11::SetupGS(GSSelector sel)
 	GSSetShader(gs.get(), m_vs_cb.get());
 }
 
-void GSDevice11::SetupPS(PSSelector sel, const GSHWDrawConfig::PSConstantBuffer* cb, PSSamplerSelector ssel)
+void GSDevice11::SetupPS(const PSSelector& sel, const GSHWDrawConfig::PSConstantBuffer* cb, PSSamplerSelector ssel)
 {
-	auto i = std::as_const(m_ps).find(sel.key);
+	auto i = std::as_const(m_ps).find(sel);
 
 	if (i == m_ps.end())
 	{
 		ShaderMacro sm(m_shader_cache.GetFeatureLevel());
 
-		sm.AddMacro("PS_SCALE_FACTOR", std::max(1u, GSConfig.UpscaleMultiplier));
+		sm.AddMacro("PS_SCALE_FACTOR", GSConfig.UpscaleMultiplier);
 		sm.AddMacro("PS_FST", sel.fst);
 		sm.AddMacro("PS_WMS", sel.wms);
 		sm.AddMacro("PS_WMT", sel.wmt);
@@ -163,6 +164,7 @@ void GSDevice11::SetupPS(PSSelector sel, const GSHWDrawConfig::PSConstantBuffer*
 		sm.AddMacro("PS_AEM", sel.aem);
 		sm.AddMacro("PS_TFX", sel.tfx);
 		sm.AddMacro("PS_TCC", sel.tcc);
+		sm.AddMacro("PS_DATE", sel.date);
 		sm.AddMacro("PS_ATST", sel.atst);
 		sm.AddMacro("PS_FOG", sel.fog);
 		sm.AddMacro("PS_IIP", sel.iip);
@@ -187,7 +189,8 @@ void GSDevice11::SetupPS(PSSelector sel, const GSHWDrawConfig::PSConstantBuffer*
 		sm.AddMacro("PS_BLEND_B", sel.blend_b);
 		sm.AddMacro("PS_BLEND_C", sel.blend_c);
 		sm.AddMacro("PS_BLEND_D", sel.blend_d);
-		sm.AddMacro("PS_ALPHA_CLAMP", sel.alpha_clamp);
+		sm.AddMacro("PS_BLEND_MIX", sel.blend_mix);
+		sm.AddMacro("PS_FIXED_ONE_A", sel.fixed_one_a);
 		sm.AddMacro("PS_PABE", sel.pabe);
 		sm.AddMacro("PS_DITHER", sel.dither);
 		sm.AddMacro("PS_ZCLAMP", sel.zclamp);
@@ -195,9 +198,13 @@ void GSDevice11::SetupPS(PSSelector sel, const GSHWDrawConfig::PSConstantBuffer*
 		sm.AddMacro("PS_AUTOMATIC_LOD", sel.automatic_lod);
 		sm.AddMacro("PS_MANUAL_LOD", sel.manual_lod);
 		sm.AddMacro("PS_TEX_IS_FB", sel.tex_is_fb);
+		sm.AddMacro("PS_NO_COLOR", sel.no_color);
+		sm.AddMacro("PS_NO_COLOR1", sel.no_color1);
+		sm.AddMacro("PS_NO_ABLEND", sel.no_ablend);
+		sm.AddMacro("PS_ONLY_ALPHA", sel.only_alpha);
 
 		wil::com_ptr_nothrow<ID3D11PixelShader> ps = m_shader_cache.GetPixelShader(m_dev.get(), m_tfx_source, sm.GetPtr(), "ps_main");
-		i = m_ps.try_emplace(sel.key, std::move(ps)).first;
+		i = m_ps.try_emplace(sel, std::move(ps)).first;
 	}
 
 	if (cb && m_ps_cb_cache.Update(*cb))
@@ -225,7 +232,7 @@ void GSDevice11::SetupPS(PSSelector sel, const GSHWDrawConfig::PSConstantBuffer*
 			D3D11_SAMPLER_DESC sd = {};
 
 			const int anisotropy = GSConfig.MaxAnisotropy;
-			if (anisotropy && ssel.aniso)
+			if (anisotropy > 1 && ssel.aniso)
 			{
 				sd.Filter = D3D11_FILTER_ANISOTROPIC;
 			}
@@ -276,6 +283,18 @@ void GSDevice11::ClearSamplerCache()
 {
 	m_ps_ss.clear();
 }
+
+// clang-format off
+static constexpr std::array<D3D11_BLEND, 16> s_d3d11_blend_factors = { {
+	D3D11_BLEND_SRC_COLOR, D3D11_BLEND_INV_SRC_COLOR, D3D11_BLEND_DEST_COLOR, D3D11_BLEND_INV_DEST_COLOR,
+	D3D11_BLEND_SRC1_COLOR, D3D11_BLEND_INV_SRC1_COLOR, D3D11_BLEND_SRC_ALPHA, D3D11_BLEND_INV_SRC_ALPHA,
+	D3D11_BLEND_DEST_ALPHA, D3D11_BLEND_INV_DEST_ALPHA, D3D11_BLEND_SRC1_ALPHA, D3D11_BLEND_INV_SRC1_ALPHA,
+	D3D11_BLEND_BLEND_FACTOR, D3D11_BLEND_INV_BLEND_FACTOR, D3D11_BLEND_ONE, D3D11_BLEND_ZERO
+} };
+static constexpr std::array<D3D11_BLEND_OP, 4> s_d3d11_blend_ops = { {
+	D3D11_BLEND_OP_ADD, D3D11_BLEND_OP_SUBTRACT, D3D11_BLEND_OP_REV_SUBTRACT, D3D11_BLEND_OP_MIN
+} };
+// clang-format on
 
 void GSDevice11::SetupOM(OMDepthStencilSelector dssel, OMBlendSelector bsel, u8 afix)
 {
@@ -333,24 +352,15 @@ void GSDevice11::SetupOM(OMDepthStencilSelector dssel, OMBlendSelector bsel, u8 
 
 		memset(&bd, 0, sizeof(bd));
 
-		if (bsel.abe)
+		if (bsel.blend_enable && (bsel.wrgba & 0x7))
 		{
-			const HWBlend blend = GetBlend(bsel.blend_index);
 			bd.RenderTarget[0].BlendEnable = TRUE;
-			bd.RenderTarget[0].BlendOp = (D3D11_BLEND_OP)blend.op;
-			bd.RenderTarget[0].SrcBlend = (D3D11_BLEND)blend.src;
-			bd.RenderTarget[0].DestBlend = (D3D11_BLEND)blend.dst;
+			bd.RenderTarget[0].BlendOp = s_d3d11_blend_ops[bsel.blend_op];
+			bd.RenderTarget[0].SrcBlend = s_d3d11_blend_factors[bsel.blend_src_factor];
+			bd.RenderTarget[0].DestBlend = s_d3d11_blend_factors[bsel.blend_dst_factor];
 			bd.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
 			bd.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;
 			bd.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ZERO;
-
-			if (bsel.accu_blend)
-			{
-				bd.RenderTarget[0].SrcBlend = D3D11_BLEND_ONE;
-				bd.RenderTarget[0].DestBlend = D3D11_BLEND_ONE;
-			}
-			else if (bsel.blend_mix)
-				bd.RenderTarget[0].SrcBlend = D3D11_BLEND_ONE;
 		}
 
 		if (bsel.wr) bd.RenderTarget[0].RenderTargetWriteMask |= D3D11_COLOR_WRITE_ENABLE_RED;

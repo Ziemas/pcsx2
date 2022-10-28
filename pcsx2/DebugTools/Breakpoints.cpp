@@ -31,7 +31,7 @@ std::vector<MemCheck *> CBreakPoints::cleanupMemChecks_;
 bool CBreakPoints::breakpointTriggered_ = false;
 
 // called from the dynarec
-u32 __fastcall standardizeBreakpointAddress(u32 addr)
+u32 standardizeBreakpointAddress(u32 addr)
 {
 	if (addr >= 0xFFFF8000)
 		return addr;
@@ -52,11 +52,11 @@ MemCheck::MemCheck()
 	, cond(MEMCHECK_READWRITE)
 	, result(MEMCHECK_BOTH)
 	, cpu(BREAKPOINT_EE)
+	, numHits(0)
 	, lastPC(0)
 	, lastAddr(0)
 	, lastSize(0)
 {
-	numHits = 0;
 }
 
 void MemCheck::Log(u32 addr, bool write, int size, u32 pc)

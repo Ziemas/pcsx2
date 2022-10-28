@@ -15,6 +15,7 @@
 
 #include "PrecompiledHeader.h"
 #include "CDVD/CDVDdiscReader.h"
+#include "CDVD/CDVD.h"
 
 #include <winioctl.h>
 #include <ntddcdvd.h>
@@ -211,7 +212,7 @@ bool IOCtlSrc::ReadDVDInfo()
 	// least 18 bytes of the layer descriptor or else the ioctl will fail. The
 	// media specific information seems to be empty, so there's no point reading
 	// any more than that.
-	
+
 	// UPDATE 15 Jan 2021
 	// Okay so some drives seem to have descriptors BIGGER than 22 bytes!
 	// This causes the read to fail with INVALID_PARAMETER.

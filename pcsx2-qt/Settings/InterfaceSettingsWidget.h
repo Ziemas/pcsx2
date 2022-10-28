@@ -26,11 +26,14 @@ class InterfaceSettingsWidget : public QWidget
 	Q_OBJECT
 
 public:
-	InterfaceSettingsWidget(QWidget* parent, SettingsDialog* dialog);
+	InterfaceSettingsWidget(SettingsDialog* dialog, QWidget* parent);
 	~InterfaceSettingsWidget();
 
 Q_SIGNALS:
 	void themeChanged();
+
+private Q_SLOTS:
+	void onRenderToSeparateWindowChanged();
 
 private:
 	Ui::InterfaceSettingsWidget m_ui;

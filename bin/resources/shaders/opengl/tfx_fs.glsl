@@ -20,6 +20,11 @@
 #endif
 
 #define SW_BLEND (PS_BLEND_A || PS_BLEND_B || PS_BLEND_D)
+#define SW_BLEND_NEEDS_RT (SW_BLEND && (PS_BLEND_A == 1 || PS_BLEND_B == 1 || PS_BLEND_C == 1 || PS_BLEND_D == 1))
+#define SW_AD_TO_HW (PS_BLEND_C == 1 && PS_CLR_HW > 3)
+#define PS_PRIMID_INIT (PS_DATE == 1 || PS_DATE == 2)
+#define NEEDS_RT_EARLY (PS_TEX_IS_FB == 1 || PS_DATE >= 5)
+#define NEEDS_RT (NEEDS_RT_EARLY || (!PS_PRIMID_INIT && (PS_FBMASK || SW_BLEND_NEEDS_RT || SW_AD_TO_HW)))
 
 #ifdef FRAGMENT_SHADER
 
@@ -38,48 +43,59 @@ in SHADER
     #endif
 } PSin;
 
-// Same buffer but 2 colors for dual source blending
-layout(location = 0, index = 0) out vec4 SV_Target0;
-layout(location = 0, index = 1) out vec4 SV_Target1;
+#define TARGET_0_QUALIFIER out
+
+// Only enable framebuffer fetch when we actually need it.
+#if HAS_FRAMEBUFFER_FETCH && NEEDS_RT
+  // We need to force the colour to be defined here, to read from it.
+  // Basically the only scenario where this'll happen is RGBA masked and DATE is active.
+  #undef PS_NO_COLOR
+  #define PS_NO_COLOR 0
+  #if defined(GL_EXT_shader_framebuffer_fetch)
+    #undef TARGET_0_QUALIFIER
+    #define TARGET_0_QUALIFIER inout
+    #define LAST_FRAG_COLOR SV_Target0
+  #endif
+#endif
+
+#if !PS_NO_COLOR
+#if !defined(DISABLE_DUAL_SOURCE) && !PS_NO_COLOR1
+  // Same buffer but 2 colors for dual source blending
+  layout(location = 0, index = 0) TARGET_0_QUALIFIER vec4 SV_Target0;
+  layout(location = 0, index = 1) out vec4 SV_Target1;
+#else
+  layout(location = 0) TARGET_0_QUALIFIER vec4 SV_Target0;
+#endif
+#endif
 
 layout(binding = 1) uniform sampler2D PaletteSampler;
+
+#if !HAS_FRAMEBUFFER_FETCH && NEEDS_RT
 layout(binding = 2) uniform sampler2D RtSampler; // note 2 already use by the image below
-
-#ifndef DISABLE_GL42_image
-#if PS_DATE > 0
-// Performance note: images mustn't be declared if they are unused. Otherwise it will
-// require extra shader validation.
-
-// FIXME how to declare memory access
-layout(r32i, binding = 3) uniform iimage2D img_prim_min;
-// WARNING:
-// You can't enable it if you discard the fragment. The depth is still
-// updated (shadow in Shin Megami Tensei Nocturne)
-//
-// early_fragment_tests must still be enabled in the first pass of the 2 passes algo
-// First pass search the first primitive that will write the bad alpha value. Value
-// won't be written if the fragment fails the depth test.
-//
-// In theory the best solution will be do
-// 1/ copy the depth buffer
-// 2/ do the full depth (current depth writes are disabled)
-// 3/ restore the depth buffer for 2nd pass
-// Of course, it is likely too costly.
-#if PS_DATE == 1 || PS_DATE == 2
-layout(early_fragment_tests) in;
 #endif
+
+#if PS_DATE == 3
+layout(binding = 3) uniform sampler2D img_prim_min;
 
 // I don't remember why I set this parameter but it is surely useless
 //layout(pixel_center_integer) in vec4 gl_FragCoord;
 #endif
+
+vec4 fetch_rt()
+{
+#if !NEEDS_RT
+    return vec4(0.0);
+#elif HAS_FRAMEBUFFER_FETCH
+    return LAST_FRAG_COLOR;
 #else
-// use basic stencil
+    return texelFetch(RtSampler, ivec2(gl_FragCoord.xy), 0);
 #endif
+}
 
 vec4 sample_c(vec2 uv)
 {
 #if PS_TEX_IS_FB == 1
-    return texelFetch(RtSampler, ivec2(gl_FragCoord.xy), 0);
+    return fetch_rt();
 #else
 
 #if PS_POINT_SAMPLER
@@ -234,7 +250,7 @@ mat4 sample_4p(vec4 u)
 int fetch_raw_depth()
 {
 #if PS_TEX_IS_FB == 1
-    return int(texelFetch(RtSampler, ivec2(gl_FragCoord.xy), 0).r * exp2(32.0f));
+    return int(fetch_rt().r * exp2(32.0f));
 #else
     return int(texelFetch(TextureSampler, ivec2(gl_FragCoord.xy), 0).r * exp2(32.0f));
 #endif
@@ -243,7 +259,7 @@ int fetch_raw_depth()
 vec4 fetch_raw_color()
 {
 #if PS_TEX_IS_FB == 1
-    return texelFetch(RtSampler, ivec2(gl_FragCoord.xy), 0);
+    return fetch_rt();
 #else
     return texelFetch(TextureSampler, ivec2(gl_FragCoord.xy), 0);
 #endif
@@ -326,25 +342,16 @@ vec4 sample_depth(vec2 st)
 
 
 #elif PS_DEPTH_FMT == 1
-    // Based on ps_main11 of convert
-
+    // Based on ps_convert_float32_rgba8 of convert
     // Convert a GL_FLOAT32 depth texture into a RGBA color texture
-    const vec4 bitSh = vec4(exp2(24.0f), exp2(16.0f), exp2(8.0f), exp2(0.0f));
-    const vec4 bitMsk = vec4(0.0, 1.0/256.0, 1.0/256.0, 1.0/256.0);
-
-    vec4 res = fract(vec4(fetch_c(uv).r) * bitSh);
-
-    t = (res - res.xxyz * bitMsk) * 256.0f;
+    uint d = uint(fetch_c(uv).r * exp2(32.0f));
+    t = vec4(uvec4((d & 0xFFu), ((d >> 8) & 0xFFu), ((d >> 16) & 0xFFu), (d >> 24)));
 
 #elif PS_DEPTH_FMT == 2
-    // Based on ps_main12 of convert
-
+    // Based on ps_convert_float16_rgb5a1 of convert
     // Convert a GL_FLOAT32 (only 16 lsb) depth into a RGB5A1 color texture
-    const vec4 bitSh = vec4(exp2(32.0f), exp2(27.0f), exp2(22.0f), exp2(17.0f));
-    const uvec4 bitMsk = uvec4(0x1F, 0x1F, 0x1F, 0x1);
-    uvec4 color = uvec4(vec4(fetch_c(uv).r) * bitSh) & bitMsk;
-
-    t = vec4(color) * vec4(8.0f, 8.0f, 8.0f, 128.0f);
+    uint d = uint(fetch_c(uv).r * exp2(32.0f));
+    t = vec4(uvec4((d & 0x1Fu), ((d >> 5) & 0x1Fu), ((d >> 10) & 0x1Fu), (d >> 15) & 0x01u)) * vec4(8.0f, 8.0f, 8.0f, 128.0f);
 
 #elif PS_DEPTH_FMT == 3
     // Convert a RGBA/RGB5A1 color texture into a RGBA/RGB5A1 color texture
@@ -612,7 +619,7 @@ void ps_fbmask(inout vec4 C)
 {
     // FIXME do I need special case for 16 bits
 #if PS_FBMASK
-    vec4 RT = trunc(texelFetch(RtSampler, ivec2(gl_FragCoord.xy), 0) * 255.0f + 0.1f);
+    vec4 RT = trunc(fetch_rt() * 255.0f + 0.1f);
     C = vec4((uvec4(C) & ~FbMask) | (uvec4(RT) & FbMask));
 #endif
 }
@@ -647,7 +654,7 @@ void ps_color_clamp_wrap(inout vec3 C)
     // Warning: normally blending equation is mult(A, B) = A * B >> 7. GPU have the full accuracy
     // GS: Color = 1, Alpha = 255 => output 1
     // GPU: Color = 1/255, Alpha = 255/255 * 255/128 => output 1.9921875
-#if PS_DFMT == FMT_16
+#if PS_DFMT == FMT_16 && PS_BLEND_MIX == 0
     // In 16 bits format, only 5 bits of colors are used. It impacts shadows computation of Castlevania
     C = vec3(ivec3(C) & ivec3(0xF8));
 #elif PS_COLCLIP == 1 && PS_HDR == 0
@@ -657,7 +664,7 @@ void ps_color_clamp_wrap(inout vec3 C)
 #endif
 }
 
-void ps_blend(inout vec4 Color, float As)
+void ps_blend(inout vec4 Color, inout float As)
 {
 #if SW_BLEND
 
@@ -668,19 +675,17 @@ void ps_blend(inout vec4 Color, float As)
         return;
 #endif
 
-    vec4 RT = trunc(texelFetch(RtSampler, ivec2(gl_FragCoord.xy), 0) * 255.0f + 0.1f);
+    vec3 Cs = Color.rgb;
 
-#if PS_DFMT == FMT_24
-    float Ad = 1.0f;
-#else
+#if SW_BLEND_NEEDS_RT
+    vec4 RT = trunc(fetch_rt() * 255.0f + 0.1f);
     // FIXME FMT_16 case
     // FIXME Ad or Ad * 2?
     float Ad = RT.a / 128.0f;
-#endif
 
     // Let the compiler do its jobs !
     vec3 Cd = RT.rgb;
-    vec3 Cs = Color.rgb;
+#endif
 
 #if PS_BLEND_A == 0
     vec3 A = Cs;
@@ -715,14 +720,41 @@ void ps_blend(inout vec4 Color, float As)
 #endif
 
     // As/Af clamp alpha for Blend mix
-#if PS_ALPHA_CLAMP
-    C = min(C, float(1.0f));
+    // We shouldn't clamp blend mix with clr1 as we want alpha higher
+#if PS_BLEND_MIX > 0 && PS_CLR_HW != 1
+    C = min(C, 1.0f);
 #endif
 
 #if PS_BLEND_A == PS_BLEND_B
     Color.rgb = D;
+// In blend_mix, HW adds on some alpha factor * dst.
+// Truncating here wouldn't quite get the right result because it prevents the <1 bit here from combining with a <1 bit in dst to form a ≥1 amount that pushes over the truncation.
+// Instead, apply an offset to convert HW's round to a floor.
+// Since alpha is in 1/128 increments, subtracting (0.5 - 0.5/128 == 127/256) would get us what we want if GPUs blended in full precision.
+// But they don't.  Details here: https://github.com/PCSX2/pcsx2/pull/6809#issuecomment-1211473399
+// Based on the scripts at the above link, the ideal choice for Intel GPUs is 126/256, AMD 120/256.  Nvidia is a lost cause.
+// 124/256 seems like a reasonable compromise, providing the correct answer 99.3% of the time on Intel (vs 99.6% for 126/256), and 97% of the time on AMD (vs 97.4% for 120/256).
+#elif PS_BLEND_MIX == 2
+    Color.rgb = ((A - B) * C + D) + (124.0f/256.0f);
+#elif PS_BLEND_MIX == 1
+    Color.rgb = ((A - B) * C + D) - (124.0f/256.0f);
 #else
     Color.rgb = trunc((A - B) * C + D);
+#endif
+
+#if PS_CLR_HW == 1
+    // Replace Af with As so we can do proper compensation for Alpha.
+#if PS_BLEND_C == 2
+    As = Af;
+#endif
+    // Subtract 1 for alpha to compensate for the changed equation,
+    // if c.rgb > 255.0f then we further need to adjust alpha accordingly,
+    // we pick the lowest overflow from all colors because it's the safest,
+    // we divide by 255 the color because we don't know Cd value,
+    // changed alpha should only be done for hw blend.
+    float min_color = min(min(Color.r, Color.g), Color.b);
+    float alpha_compensate = max(1.0f, min_color / 255.0f);
+    As -= alpha_compensate;
 #endif
 
 #else
@@ -757,13 +789,14 @@ void ps_main()
  	if ((int(gl_FragCoord.y) & 1) == (PS_SCANMSK & 1))
  	 	discard;
 #endif
-#if ((PS_DATE & 3) == 1 || (PS_DATE & 3) == 2)
+
+#if PS_DATE >= 5
 
 #if PS_WRITE_RG == 1
     // Pseudo 16 bits access.
-    float rt_a = texelFetch(RtSampler, ivec2(gl_FragCoord.xy), 0).g;
+    float rt_a = fetch_rt().g;
 #else
-    float rt_a = texelFetch(RtSampler, ivec2(gl_FragCoord.xy), 0).a;
+    float rt_a = fetch_rt().a;
 #endif
 
 #if (PS_DATE & 3) == 1
@@ -775,18 +808,13 @@ void ps_main()
 #endif
 
     if (bad) {
-#if PS_DATE >= 5 || defined(DISABLE_GL42_image)
         discard;
-#else
-        imageStore(img_prim_min, ivec2(gl_FragCoord.xy), ivec4(-1));
-        return;
-#endif
     }
 
 #endif
 
-#if PS_DATE == 3 && !defined(DISABLE_GL42_image)
-    int stencil_ceil = imageLoad(img_prim_min, ivec2(gl_FragCoord.xy)).r;
+#if PS_DATE == 3
+    int stencil_ceil = int(texelFetch(img_prim_min, ivec2(gl_FragCoord.xy), 0).r);
     // Note gl_PrimitiveID == stencil_ceil will be the primitive that will update
     // the bad alpha value so we must keep it.
 
@@ -853,9 +881,15 @@ void ps_main()
 #endif
 
     // Must be done before alpha correction
-#if (PS_BLEND_C == 1 && PS_CLR_HW > 3)
-    vec4 RT = trunc(texelFetch(RtSampler, ivec2(gl_FragCoord.xy), 0) * 255.0f + 0.1f);
-    float alpha_blend = (PS_DFMT == FMT_24) ? 1.0f : RT.a / 128.0f;
+
+   // AA (Fixed one) will output a coverage of 1.0 as alpha
+#if PS_FIXED_ONE_A
+   C.a = 128.0f;
+#endif
+
+#if SW_AD_TO_HW
+    vec4 RT = trunc(fetch_rt() * 255.0f + 0.1f);
+    float alpha_blend = RT.a / 128.0f;
 #else
     float alpha_blend = C.a / 128.0f;
 #endif
@@ -869,19 +903,15 @@ void ps_main()
 #endif
 
     // Get first primitive that will write a failling alpha value
-#if PS_DATE == 1 && !defined(DISABLE_GL42_image)
+#if PS_DATE == 1
     // DATM == 0
     // Pixel with alpha equal to 1 will failed (128-255)
-    if (C.a > 127.5f) {
-        imageAtomicMin(img_prim_min, ivec2(gl_FragCoord.xy), gl_PrimitiveID);
-    }
+    SV_Target0 = (C.a > 127.5f) ? vec4(gl_PrimitiveID) : vec4(0x7FFFFFFF);
     return;
-#elif PS_DATE == 2 && !defined(DISABLE_GL42_image)
+#elif PS_DATE == 2
     // DATM == 1
     // Pixel with alpha equal to 0 will failed (0-127)
-    if (C.a < 127.5f) {
-        imageAtomicMin(img_prim_min, ivec2(gl_FragCoord.xy), gl_PrimitiveID);
-    }
+    SV_Target0 = (C.a < 127.5f) ? vec4(gl_PrimitiveID) : vec4(0x7FFFFFFF);
     return;
 #endif
 
@@ -894,8 +924,21 @@ void ps_main()
 
     ps_fbmask(C);
 
+#if !PS_NO_COLOR
     SV_Target0 = C / 255.0f;
+#if !defined(DISABLE_DUAL_SOURCE) && !PS_NO_COLOR1
     SV_Target1 = vec4(alpha_blend);
+#endif
+
+#if PS_NO_ABLEND
+    // write alpha blend factor into col0
+    SV_Target0.a = alpha_blend;
+#endif
+#if PS_ONLY_ALPHA
+    // rgb isn't used
+    SV_Target0.rgb = vec3(0.0f);
+#endif
+#endif
 
 #if PS_ZCLAMP
 	gl_FragDepth = min(gl_FragCoord.z, MaxDepthPS);

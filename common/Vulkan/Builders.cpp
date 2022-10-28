@@ -16,6 +16,7 @@
 #include "common/Vulkan/Builders.h"
 #include "common/Vulkan/Util.h"
 #include "common/Assertions.h"
+#include <limits>
 
 namespace Vulkan
 {
@@ -350,6 +351,11 @@ namespace Vulkan
 			m_blend_state.pAttachments = m_blend_attachments.data();
 			m_ci.pColorBlendState = &m_blend_state;
 		}
+	}
+
+	void GraphicsPipelineBuilder::AddBlendFlags(u32 flags)
+	{
+		m_blend_state.flags |= flags;
 	}
 
 	void GraphicsPipelineBuilder::ClearBlendAttachments()

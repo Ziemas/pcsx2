@@ -27,10 +27,6 @@
 
 #include "common/Assertions.h"
 #include "Frontend/ImGuiManager.h"
-#include "Frontend/OpenGLHostDisplay.h"
-#ifdef _WIN32
-#include "Frontend/D3D11HostDisplay.h"
-#endif
 
 #include "gui/App.h"
 #include "gui/AppHost.h"
@@ -45,7 +41,7 @@
 
 static auto OpenResourceCFile(const char* filename, const char* mode)
 {
-	const std::string full_filename(Path::CombineStdString(EmuFolders::Resources, filename));
+	const std::string full_filename(Path::Combine(EmuFolders::Resources, filename));
 	auto fp = FileSystem::OpenManagedCFile(full_filename.c_str(), mode);
 	if (!fp)
 		Console.Error("Failed to open resource file '%s'", filename);
@@ -88,6 +84,16 @@ std::optional<std::string> Host::ReadResourceFileToString(const char* filename)
 	return ret;
 }
 
+std::optional<std::time_t> Host::GetResourceFileTimestamp(const char* filename)
+{
+	const std::string path(Path::Combine(EmuFolders::Resources, filename));
+	FILESYSTEM_STAT_DATA sd;
+	if (!FileSystem::StatFile(filename, &sd))
+		return std::nullopt;
+
+	return sd.ModificationTime;
+}
+
 bool Host::GetBoolSettingValue(const char* section, const char* key, bool default_value /* = false */)
 {
 	return default_value;
@@ -106,61 +112,67 @@ void Host::ReportErrorAsync(const std::string_view& title, const std::string_vie
 		MsgButtons().OK()));
 }
 
-static std::unique_ptr<HostDisplay> s_host_display;
+bool Host::ConfirmMessage(const std::string_view& title, const std::string_view& message)
+{
+	return true;
+}
 
-HostDisplay* Host::AcquireHostDisplay(HostDisplay::RenderAPI api)
+bool Host::AcquireHostDisplay(HostDisplay::RenderAPI api)
 {
 	sApp.OpenGsPanel();
 
 	// can't go anywhere if we don't have a window to render into!
 	if (g_gs_window_info.type == WindowInfo::Type::Surfaceless)
-		return nullptr;
+		return false;
 
-	s_host_display = HostDisplay::CreateDisplayForAPI(api);
-	if (!s_host_display)
-		return nullptr;
+	g_host_display = HostDisplay::CreateDisplayForAPI(api);
+	if (!g_host_display)
+		return false;
 
-	if (!s_host_display->CreateRenderDevice(g_gs_window_info, GSConfig.Adapter, EmuConfig.GetEffectiveVsyncMode(),
+	if (!g_host_display->CreateRenderDevice(g_gs_window_info, GSConfig.Adapter, EmuConfig.GetEffectiveVsyncMode(),
 			GSConfig.ThreadedPresentation, GSConfig.UseDebugDevice) ||
-		!s_host_display->InitializeRenderDevice(StringUtil::wxStringToUTF8String(EmuFolders::Cache.ToString()), GSConfig.UseDebugDevice) ||
+		!g_host_display->InitializeRenderDevice(EmuFolders::Cache, GSConfig.UseDebugDevice) ||
 		!ImGuiManager::Initialize())
 	{
-		s_host_display->DestroyRenderDevice();
-		s_host_display.reset();
-		return nullptr;
+		g_host_display.reset();
+		return false;
 	}
 
-	return s_host_display.get();
+	Console.WriteLn(Color_StrongGreen, "%s Graphics Driver Info:", HostDisplay::RenderAPIToString(g_host_display->GetRenderAPI()));
+	Console.Indent().WriteLn(g_host_display->GetDriverInfo());
+
+	return true;
 }
 
 void Host::ReleaseHostDisplay()
 {
 	ImGuiManager::Shutdown();
 
-	if (s_host_display)
-	{
-		s_host_display->DestroyRenderDevice();
-		s_host_display.reset();
-	}
+	if (g_host_display)
+		g_host_display.reset();
 
 	sApp.CloseGsPanel();
-}
-
-HostDisplay* Host::GetHostDisplay()
-{
-	return s_host_display.get();
 }
 
 bool Host::BeginPresentFrame(bool frame_skip)
 {
 	CheckForGSWindowResize();
-	return s_host_display->BeginPresent(frame_skip);
+
+	if (!g_host_display->BeginPresent(frame_skip))
+	{
+		// if we're skipping a frame, we need to reset imgui's state, since
+		// we won't be calling EndPresentFrame().
+		ImGuiManager::NewFrame();
+		return false;
+	}
+
+	return true;
 }
 
 void Host::EndPresentFrame()
 {
 	ImGuiManager::RenderOSD();
-	s_host_display->EndPresent();
+	g_host_display->EndPresent();
 	ImGuiManager::NewFrame();
 }
 
@@ -205,10 +217,12 @@ void Host::CheckForGSWindowResize()
 		s_gs_window_resized.store(false);
 	}
 
-	if (!s_host_display)
+	if (!g_host_display)
 		return;
 
-	s_host_display->ResizeRenderWindow(width, height, scale);
+	GSResetAPIState();
+	g_host_display->ResizeRenderWindow(width, height, scale);
+	GSRestoreAPIState();
 	ImGuiManager::WindowResized();
 }
 

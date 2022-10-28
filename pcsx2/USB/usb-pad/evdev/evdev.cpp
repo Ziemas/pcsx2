@@ -525,7 +525,7 @@ namespace usb_pad
 				if ((ret_abs < 0) && (ret_key < 0))
 				{
 					// Probably isn't a evdev joystick
-					SysMessage("%s: Getting atleast some of the bits failed: %s\n", APINAME, strerror(errno));
+					//SysMessage("%s: Getting atleast some of the bits failed: %s\n", APINAME, strerror(errno));
 					continue;
 				}
 
@@ -629,7 +629,9 @@ namespace usb_pad
 				{
 					uint8_t reset[7] = {0};
 					reset[0] = 0xF3; //stop forces
-					write(mHidHandle, reset, sizeof(reset));
+					if (write(mHidHandle, reset, sizeof(reset)) == -1)
+					{
+					}
 				}
 				close(mHidHandle);
 			}

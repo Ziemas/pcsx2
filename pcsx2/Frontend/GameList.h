@@ -17,6 +17,7 @@
 #include "GameDatabase.h"
 #include "common/Pcsx2Defs.h"
 #include <ctime>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -42,10 +43,35 @@ namespace GameList
 
 	enum class Region
 	{
-		NTSC_UC,
+		NTSC_B,
+		NTSC_C,
+		NTSC_HK,
 		NTSC_J,
-		PAL,
+		NTSC_K,
+		NTSC_T,
+		NTSC_U,
 		Other,
+		PAL_A,
+		PAL_AU,
+		PAL_AF,
+		PAL_BE,
+		PAL_E,
+		PAL_F,
+		PAL_FI,
+		PAL_G,
+		PAL_GR,
+		PAL_I,
+		PAL_IN,
+		PAL_M,
+		PAL_NL,
+		PAL_NO,
+		PAL_P,
+		PAL_R,
+		PAL_S,
+		PAL_SC,
+		PAL_SW,
+		PAL_SWI,
+		PAL_UK,
 		Count
 	};
 
@@ -66,27 +92,43 @@ namespace GameList
 		u32 crc = 0;
 
 		CompatibilityRating compatibility_rating = CompatibilityRating::Unknown;
+
+		__fi bool IsDisc() const { return (type == EntryType::PS1Disc || type == EntryType::PS2Disc); }
 	};
 
 	const char* EntryTypeToString(EntryType type);
+	const char* EntryTypeToDisplayString(EntryType type);
+	const char* RegionToString(Region region);
 	const char* EntryCompatibilityRatingToString(CompatibilityRating rating);
-
-	bool IsScannableFilename(const std::string& path);
 
 	/// Fills in boot parameters (iso or elf) based on the game list entry.
 	void FillBootParametersForEntry(VMBootParameters* params, const Entry* entry);
+
+	/// Populates a game list entry struct with information from the iso/elf.
+	/// Do *not* call while the system is running, it will mess with CDVD state.
+	bool PopulateEntryFromPath(const std::string& path, GameList::Entry* entry);
 
 	// Game list access. It's the caller's responsibility to hold the lock while manipulating the entry in any way.
 	std::unique_lock<std::recursive_mutex> GetLock();
 	const Entry* GetEntryByIndex(u32 index);
 	const Entry* GetEntryForPath(const char* path);
+	const Entry* GetEntryByCRC(u32 crc);
 	const Entry* GetEntryBySerialAndCRC(const std::string_view& serial, u32 crc);
 	u32 GetEntryCount();
 
 	bool IsGameListLoaded();
-	void Refresh(bool invalidate_cache, ProgressCallback* progress = nullptr);
+
+	/// Populates the game list with files in the configured directories.
+	/// If invalidate_cache is set, all files will be re-scanned.
+	/// If only_cache is set, no new files will be scanned, only those present in the cache.
+	void Refresh(bool invalidate_cache, bool only_cache = false, ProgressCallback* progress = nullptr);
 
 	std::string GetCoverImagePathForEntry(const Entry* entry);
 	std::string GetCoverImagePath(const std::string& path, const std::string& code, const std::string& title);
-	std::string GetNewCoverImagePathForEntry(const Entry* entry, const char* new_filename);
+	std::string GetNewCoverImagePathForEntry(const Entry* entry, const char* new_filename, bool use_serial = false);
+
+	/// Downloads covers using the specified URL templates. By default, covers are saved by title, but this can be changed with
+	/// the use_serial parameter. save_callback optionall takes the entry and the path the new cover is saved to.
+	bool DownloadCovers(const std::vector<std::string>& url_templates, bool use_serial = false, ProgressCallback* progress = nullptr,
+		std::function<void(const Entry*, std::string)> save_callback = {});
 } // namespace GameList

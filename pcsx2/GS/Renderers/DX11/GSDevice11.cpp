@@ -28,6 +28,15 @@
 #include <VersionHelpers.h>
 #include <d3dcompiler.h>
 
+static bool SupportsTextureFormat(ID3D11Device* dev, DXGI_FORMAT format)
+{
+	UINT support;
+	if (FAILED(dev->CheckFormatSupport(format, &support)))
+		return false;
+
+	return (support & D3D11_FORMAT_SUPPORT_TEXTURE2D) != 0;
+}
+
 GSDevice11::GSDevice11()
 {
 	memset(&m_state, 0, sizeof(m_state));
@@ -36,17 +45,30 @@ GSDevice11::GSDevice11()
 	m_state.bf = -1;
 
 	m_features.geometry_shader = true;
-	m_features.image_load_store = false;
+	m_features.primitive_id = true;
 	m_features.texture_barrier = false;
 	m_features.provoking_vertex_last = false;
 	m_features.point_expand = false;
 	m_features.line_expand = false;
 	m_features.prefer_new_textures = false;
+	m_features.dxt_textures = false;
+	m_features.bptc_textures = false;
+	m_features.framebuffer_fetch = false;
+	m_features.dual_source_blend = true;
+	m_features.stencil_buffer = true;
 }
 
-bool GSDevice11::Create(HostDisplay* display)
+GSDevice11::~GSDevice11()
 {
-	if (!__super::Create(display))
+	if (m_state.rt_view)
+		m_state.rt_view->Release();
+	if (m_state.dsv)
+		m_state.dsv->Release();
+}
+
+bool GSDevice11::Create()
+{
+	if (!GSDevice::Create())
 		return false;
 
 	D3D11_BUFFER_DESC bd;
@@ -57,35 +79,19 @@ bool GSDevice11::Create(HostDisplay* display)
 
 	D3D_FEATURE_LEVEL level;
 
-	if (display->GetRenderAPI() != HostDisplay::RenderAPI::D3D11)
+	if (g_host_display->GetRenderAPI() != HostDisplay::RenderAPI::D3D11)
 	{
 		fprintf(stderr, "Render API is incompatible with D3D11\n");
 		return false;
 	}
 
-	m_dev = static_cast<ID3D11Device*>(display->GetRenderDevice());
-	m_ctx = static_cast<ID3D11DeviceContext*>(display->GetRenderContext());
+	m_dev = static_cast<ID3D11Device*>(g_host_display->GetRenderDevice());
+	m_ctx = static_cast<ID3D11DeviceContext*>(g_host_display->GetRenderContext());
 	level = m_dev->GetFeatureLevel();
-
-	bool nvidia_vendor = false;
-	bool amd_vendor = false;
-	{
-		if (auto dxgi_device = m_dev.try_query<IDXGIDevice>())
-		{
-			wil::com_ptr_nothrow<IDXGIAdapter> dxgi_adapter;
-			DXGI_ADAPTER_DESC adapter_desc;
-			if (SUCCEEDED(dxgi_device->GetAdapter(dxgi_adapter.put())) && SUCCEEDED(dxgi_adapter->GetDesc(&adapter_desc)))
-			{
-				nvidia_vendor = (adapter_desc.VendorId == 0x10DE);
-				amd_vendor = ((adapter_desc.VendorId == 0x1002) || (adapter_desc.VendorId == 0x1022));
-			}
-		}
-	}
 
 	if (!GSConfig.DisableShaderCache)
 	{
-		if (!m_shader_cache.Open(StringUtil::wxStringToUTF8String(EmuFolders::Cache.ToString()),
-				m_dev->GetFeatureLevel(), SHADER_VERSION, GSConfig.UseDebugDevice))
+		if (!m_shader_cache.Open(EmuFolders::Cache, m_dev->GetFeatureLevel(), SHADER_VERSION, GSConfig.UseDebugDevice))
 		{
 			Console.Warning("Shader cache failed to open.");
 		}
@@ -103,15 +109,12 @@ bool GSDevice11::Create(HostDisplay* display)
 		m_d3d_texsize = D3D10_REQ_TEXTURE2D_U_OR_V_DIMENSION;
 
 	{
-		// HACK: check nVIDIA
-		// Note: It can cause issues on several games such as SOTC, Fatal Frame, plus it adds border offset.
-		const bool disable_safe_features = theApp.GetConfigB("UserHacks") && theApp.GetConfigB("UserHacks_Disable_Safe_Features");
-		m_hack_topleft_offset = (GSConfig.UpscaleMultiplier != 1 && nvidia_vendor && !disable_safe_features) ? -0.01f : 0.0f;
-
 		// HACK: check AMD
 		// Broken point sampler should be enabled only on AMD.
-		m_features.broken_point_sampler = amd_vendor;
+		m_features.broken_point_sampler = (D3D::Vendor() == D3D::VendorID::AMD);
 	}
+
+	SetFeatures();
 
 	std::optional<std::string> shader = Host::ReadResourceFileToString("shaders/dx11/tfx.fx");
 	if (!shader.has_value())
@@ -129,26 +132,50 @@ bool GSDevice11::Create(HostDisplay* display)
 
 	ShaderMacro sm_model(m_shader_cache.GetFeatureLevel());
 
-	shader = Host::ReadResourceFileToString("shaders/dx11/convert.fx");
-	if (!shader.has_value())
+	std::optional<std::string> convert_hlsl = Host::ReadResourceFileToString("shaders/dx11/convert.fx");
+	if (!convert_hlsl.has_value())
 		return false;
 	if (!m_shader_cache.GetVertexShaderAndInputLayout(m_dev.get(), m_convert.vs.put(), m_convert.il.put(),
-			il_convert, std::size(il_convert), *shader, sm_model.GetPtr(), "vs_main"))
+			il_convert, std::size(il_convert), *convert_hlsl, sm_model.GetPtr(), "vs_main"))
 	{
 		return false;
 	}
 
 	ShaderMacro sm_convert(m_shader_cache.GetFeatureLevel());
-	sm_convert.AddMacro("PS_SCALE_FACTOR", std::max(1u, GSConfig.UpscaleMultiplier));
+	sm_convert.AddMacro("PS_SCALE_FACTOR", GSConfig.UpscaleMultiplier);
 
 	D3D_SHADER_MACRO* sm_convert_ptr = sm_convert.GetPtr();
 
 	for (size_t i = 0; i < std::size(m_convert.ps); i++)
 	{
-		m_convert.ps[i] = m_shader_cache.GetPixelShader(m_dev.get(), *shader, sm_convert_ptr, shaderName(static_cast<ShaderConvert>(i)));
+		m_convert.ps[i] = m_shader_cache.GetPixelShader(m_dev.get(), *convert_hlsl, sm_convert_ptr, shaderName(static_cast<ShaderConvert>(i)));
 		if (!m_convert.ps[i])
 			return false;
 	}
+
+	shader = Host::ReadResourceFileToString("shaders/dx11/present.fx");
+	if (!shader.has_value())
+		return false;
+	if (!m_shader_cache.GetVertexShaderAndInputLayout(m_dev.get(), m_present.vs.put(), m_present.il.put(),
+			il_convert, std::size(il_convert), *shader, sm_model.GetPtr(), "vs_main"))
+	{
+		return false;
+	}
+
+	for (size_t i = 0; i < std::size(m_present.ps); i++)
+	{
+		m_present.ps[i] = m_shader_cache.GetPixelShader(m_dev.get(), *shader, sm_model.GetPtr(), shaderName(static_cast<PresentShader>(i)));
+		if (!m_present.ps[i])
+			return false;
+	}
+
+	memset(&bd, 0, sizeof(bd));
+
+	bd.ByteWidth = sizeof(DisplayConstantBuffer);
+	bd.Usage = D3D11_USAGE_DEFAULT;
+	bd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+
+	m_dev->CreateBuffer(&bd, nullptr, m_present.ps_cb.put());
 
 	memset(&dsd, 0, sizeof(dsd));
 
@@ -224,15 +251,8 @@ bool GSDevice11::Create(HostDisplay* display)
 
 	// Shade Boost
 
-	ShaderMacro sm_sboost(m_shader_cache.GetFeatureLevel());
-
-	sm_sboost.AddMacro("SB_CONTRAST", std::clamp(theApp.GetConfigI("ShadeBoost_Contrast"), 0, 100));
-	sm_sboost.AddMacro("SB_BRIGHTNESS", std::clamp(theApp.GetConfigI("ShadeBoost_Brightness"), 0, 100));
-	sm_sboost.AddMacro("SB_SATURATION", std::clamp(theApp.GetConfigI("ShadeBoost_Saturation"), 0, 100));
-
 	memset(&bd, 0, sizeof(bd));
-
-	bd.ByteWidth = sizeof(ShadeBoostConstantBuffer);
+	bd.ByteWidth = sizeof(float) * 4;
 	bd.Usage = D3D11_USAGE_DEFAULT;
 	bd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
 
@@ -241,7 +261,7 @@ bool GSDevice11::Create(HostDisplay* display)
 	shader = Host::ReadResourceFileToString("shaders/dx11/shadeboost.fx");
 	if (!shader.has_value())
 		return false;
-	m_shadeboost.ps = m_shader_cache.GetPixelShader(m_dev.get(), *shader, sm_sboost.GetPtr(), "ps_main");
+	m_shadeboost.ps = m_shader_cache.GetPixelShader(m_dev.get(), *shader, sm_model.GetPtr(), "ps_main");
 	if (!m_shadeboost.ps)
 		return false;
 
@@ -321,7 +341,25 @@ bool GSDevice11::Create(HostDisplay* display)
 
 	m_dev->CreateBlendState(&blend, m_date.bs.put());
 
+	for (size_t i = 0; i < std::size(m_date.primid_init_ps); i++)
+	{
+		const std::string entry_point(StringUtil::StdStringFromFormat("ps_stencil_image_init_%d", i));
+		m_date.primid_init_ps[i] = m_shader_cache.GetPixelShader(m_dev.get(), *convert_hlsl, sm_model.GetPtr(), entry_point.c_str());
+		if (!m_date.primid_init_ps[i])
+			return false;
+	}
+
 	return true;
+}
+
+void GSDevice11::SetFeatures()
+{
+	// Check all three formats, since the feature means any can be used.
+	m_features.dxt_textures = SupportsTextureFormat(m_dev.get(), DXGI_FORMAT_BC1_UNORM) &&
+							  SupportsTextureFormat(m_dev.get(), DXGI_FORMAT_BC2_UNORM) &&
+							  SupportsTextureFormat(m_dev.get(), DXGI_FORMAT_BC3_UNORM);
+
+	m_features.bptc_textures = SupportsTextureFormat(m_dev.get(), DXGI_FORMAT_BC7_UNORM);
 }
 
 void GSDevice11::ResetAPIState()
@@ -345,11 +383,11 @@ void GSDevice11::RestoreAPIState()
 	m_ctx->PSSetShader(m_state.ps, nullptr, 0);
 	m_ctx->PSSetConstantBuffers(0, 1, &m_state.ps_cb);
 
-	const CD3D11_VIEWPORT vp(m_hack_topleft_offset, m_hack_topleft_offset,
+	const CD3D11_VIEWPORT vp(0.0f, 0.0f,
 		static_cast<float>(m_state.viewport.x), static_cast<float>(m_state.viewport.y),
 		0.0f, 1.0f);
 	m_ctx->RSSetViewports(1, &vp);
-	m_ctx->RSSetScissorRects(1, m_state.scissor);
+	m_ctx->RSSetScissorRects(1, reinterpret_cast<const D3D11_RECT*>(&m_state.scissor));
 	m_ctx->RSSetState(m_rs.get());
 
 	m_ctx->OMSetDepthStencilState(m_state.dss, m_state.sref);
@@ -432,7 +470,11 @@ GSTexture* GSDevice11::CreateSurface(GSTexture::Type type, int width, int height
 		case GSTexture::Format::UNorm8:       dxformat = DXGI_FORMAT_A8_UNORM;           break;
 		case GSTexture::Format::UInt16:       dxformat = DXGI_FORMAT_R16_UINT;           break;
 		case GSTexture::Format::UInt32:       dxformat = DXGI_FORMAT_R32_UINT;           break;
-		case GSTexture::Format::Int32:        dxformat = DXGI_FORMAT_R32_SINT;           break;
+		case GSTexture::Format::PrimID:       dxformat = DXGI_FORMAT_R32_FLOAT;          break;
+		case GSTexture::Format::BC1:          dxformat = DXGI_FORMAT_BC1_UNORM;          break;
+		case GSTexture::Format::BC2:          dxformat = DXGI_FORMAT_BC2_UNORM;          break;
+		case GSTexture::Format::BC3:          dxformat = DXGI_FORMAT_BC3_UNORM;          break;
+		case GSTexture::Format::BC7:          dxformat = DXGI_FORMAT_BC7_UNORM;          break;
 		case GSTexture::Format::Invalid:
 			ASSERT(0);
 			dxformat = DXGI_FORMAT_UNKNOWN;
@@ -457,8 +499,8 @@ GSTexture* GSDevice11::CreateSurface(GSTexture::Type type, int width, int height
 			desc.BindFlags = D3D11_BIND_DEPTH_STENCIL | D3D11_BIND_SHADER_RESOURCE;
 			break;
 		case GSTexture::Type::Texture:
-			desc.BindFlags = (levels > 1) ? (D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE) : D3D11_BIND_SHADER_RESOURCE;
-			desc.MiscFlags = (levels > 1) ? D3D11_RESOURCE_MISC_GENERATE_MIPS : 0;
+			desc.BindFlags = (levels > 1 && !GSTexture::IsCompressedFormat(format)) ? (D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE) : D3D11_BIND_SHADER_RESOURCE;
+			desc.MiscFlags = (levels > 1 && !GSTexture::IsCompressedFormat(format)) ? D3D11_RESOURCE_MISC_GENERATE_MIPS : 0;
 			break;
 		case GSTexture::Type::Offscreen:
 			desc.Usage = D3D11_USAGE_STAGING;
@@ -493,7 +535,7 @@ bool GSDevice11::DownloadTexture(GSTexture* src, const GSVector4i& rect, GSTextu
 	m_download_tex.reset(static_cast<GSTexture11*>(CreateOffscreen(rect.width(), rect.height(), src->GetFormat())));
 	if (!m_download_tex)
 		return false;
-	CopyRect(src, m_download_tex.get(), rect);
+	CopyRect(src, m_download_tex.get(), rect, 0, 0);
 	return m_download_tex->Map(out_map);
 }
 
@@ -506,22 +548,11 @@ void GSDevice11::DownloadTextureComplete()
 	}
 }
 
-void GSDevice11::CopyRect(GSTexture* sTex, GSTexture* dTex, const GSVector4i& r)
-{
-	if (!sTex || !dTex)
-	{
-		ASSERT(0);
-		return;
-	}
-
-	CopyRect(sTex, r, dTex, 0, 0);
-}
-
-void GSDevice11::CopyRect(GSTexture* sTex, const GSVector4i& sRect, GSTexture* dTex, u32 destX, u32 destY)
+void GSDevice11::CopyRect(GSTexture* sTex, GSTexture* dTex, const GSVector4i& r, u32 destX, u32 destY)
 {
 	g_perfmon.Put(GSPerfMon::TextureCopies, 1);
 
-	D3D11_BOX box = {(UINT)sRect.left, (UINT)sRect.top, 0U, (UINT)sRect.right, (UINT)sRect.bottom, 1U};
+	D3D11_BOX box = {(UINT)r.left, (UINT)r.top, 0U, (UINT)r.right, (UINT)r.bottom, 1U};
 
 	// DX api isn't happy if we pass a box for depth copy
 	// It complains that depth/multisample must be a full copy
@@ -543,17 +574,19 @@ void GSDevice11::CloneTexture(GSTexture* src, GSTexture** dest, const GSVector4i
 	{
 		// DX11 requires that you copy the entire depth buffer.
 		*dest = CreateDepthStencil(w, h, src->GetFormat(), false);
-		CopyRect(src, GSVector4i(0, 0, w, h), *dest, 0, 0);
+		CopyRect(src, *dest, GSVector4i(0, 0, w, h), 0, 0);
 	}
 	else
 	{
 		*dest = CreateRenderTarget(w, h, src->GetFormat(), false);
-		CopyRect(src, rect, *dest, rect.left, rect.top);
+		CopyRect(src, *dest, rect, rect.left, rect.top);
 	}
 }
 
 void GSDevice11::StretchRect(GSTexture* sTex, const GSVector4& sRect, GSTexture* dTex, const GSVector4& dRect, ShaderConvert shader, bool linear)
 {
+	pxAssert(dTex->IsDepthStencil() == HasDepthOutput(shader));
+	pxAssert(linear ? SupportsBilinear(shader) : SupportsNearest(shader));
 	StretchRect(sTex, sRect, dTex, dRect, m_convert.ps[static_cast<int>(shader)].get(), nullptr, linear);
 }
 
@@ -585,11 +618,7 @@ void GSDevice11::StretchRect(GSTexture* sTex, const GSVector4& sRect, GSTexture*
 {
 	ASSERT(sTex);
 
-	const bool draw_in_depth = ps == m_convert.ps[static_cast<int>(ShaderConvert::DEPTH_COPY)]
-	                        || ps == m_convert.ps[static_cast<int>(ShaderConvert::RGBA8_TO_FLOAT32)]
-	                        || ps == m_convert.ps[static_cast<int>(ShaderConvert::RGBA8_TO_FLOAT24)]
-	                        || ps == m_convert.ps[static_cast<int>(ShaderConvert::RGBA8_TO_FLOAT16)]
-	                        || ps == m_convert.ps[static_cast<int>(ShaderConvert::RGB5A1_TO_FLOAT16)];
+	const bool draw_in_depth = dTex && dTex->IsDepthStencil();
 
 	BeginScene();
 
@@ -604,7 +633,7 @@ void GSDevice11::StretchRect(GSTexture* sTex, const GSVector4& sRect, GSTexture*
 	}
 	else
 	{
-		ds = GSVector2i(m_display->GetWindowWidth(), m_display->GetWindowHeight());
+		ds = GSVector2i(g_host_display->GetWindowWidth(), g_host_display->GetWindowHeight());
 
 	}
 
@@ -666,6 +695,83 @@ void GSDevice11::StretchRect(GSTexture* sTex, const GSVector4& sRect, GSTexture*
 	PSSetShaderResources(nullptr, nullptr);
 }
 
+void GSDevice11::PresentRect(GSTexture* sTex, const GSVector4& sRect, GSTexture* dTex, const GSVector4& dRect, PresentShader shader, float shaderTime, bool linear)
+{
+	ASSERT(sTex);
+
+	BeginScene();
+
+	GSVector2i ds;
+	if (dTex)
+	{
+		ds = dTex->GetSize();
+		OMSetRenderTargets(dTex, nullptr);
+	}
+	else
+	{
+		ds = GSVector2i(g_host_display->GetWindowWidth(), g_host_display->GetWindowHeight());
+	}
+
+	DisplayConstantBuffer cb;
+	cb.SetSource(sRect, sTex->GetSize());
+	cb.SetTarget(dRect, ds);
+	cb.SetTime(shaderTime);
+	m_ctx->UpdateSubresource(m_present.ps_cb.get(), 0, nullptr, &cb, 0, 0);
+
+	// om
+	OMSetDepthStencilState(m_convert.dss.get(), 0);
+	OMSetBlendState(m_convert.bs.get(), 0);
+
+
+
+	// ia
+
+	const float left = dRect.x * 2 / ds.x - 1.0f;
+	const float top = 1.0f - dRect.y * 2 / ds.y;
+	const float right = dRect.z * 2 / ds.x - 1.0f;
+	const float bottom = 1.0f - dRect.w * 2 / ds.y;
+
+	GSVertexPT1 vertices[] =
+	{
+		{GSVector4(left, top, 0.5f, 1.0f), GSVector2(sRect.x, sRect.y)},
+		{GSVector4(right, top, 0.5f, 1.0f), GSVector2(sRect.z, sRect.y)},
+		{GSVector4(left, bottom, 0.5f, 1.0f), GSVector2(sRect.x, sRect.w)},
+		{GSVector4(right, bottom, 0.5f, 1.0f), GSVector2(sRect.z, sRect.w)},
+	};
+
+
+
+	IASetVertexBuffer(vertices, sizeof(vertices[0]), std::size(vertices));
+	IASetInputLayout(m_present.il.get());
+	IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
+
+	// vs
+
+	VSSetShader(m_present.vs.get(), nullptr);
+
+
+	// gs
+
+	GSSetShader(nullptr, nullptr);
+
+
+	// ps
+
+	PSSetShaderResources(sTex, nullptr);
+	PSSetSamplerState(linear ? m_convert.ln.get() : m_convert.pt.get(), nullptr);
+	PSSetShader(m_present.ps[static_cast<u32>(shader)].get(), m_present.ps_cb.get());
+
+	//
+
+	DrawPrimitive();
+
+	//
+
+	EndScene();
+
+	PSSetShaderResources(nullptr, nullptr);
+}
+
 void GSDevice11::DoMerge(GSTexture* sTex[3], GSVector4* sRect, GSTexture* dTex, GSVector4* dRect, const GSRegPMODE& PMODE, const GSRegEXTBUF& EXTBUF, const GSVector4& c)
 {
 	const GSVector4 full_r(0.0f, 0.0f, 1.0f, 1.0f);
@@ -681,10 +787,7 @@ void GSDevice11::DoMerge(GSTexture* sTex[3], GSVector4* sRect, GSTexture* dTex, 
 	// Upload constant to select YUV algo, but skip constant buffer update if we don't need it
 	if (feedback_write_2 || feedback_write_1 || sTex[0])
 	{
-		MergeConstantBuffer cb;
-		cb.BGColor = c;
-		cb.EMODA = EXTBUF.EMODA;
-		cb.EMODC = EXTBUF.EMODC;
+		const MergeConstantBuffer cb = {c, EXTBUF.EMODA, EXTBUF.EMODC};
 		m_ctx->UpdateSubresource(m_merge.cb.get(), 0, nullptr, &cb, 0, 0);
 	}
 
@@ -692,13 +795,13 @@ void GSDevice11::DoMerge(GSTexture* sTex[3], GSVector4* sRect, GSTexture* dTex, 
 	{
 		// 2nd output is enabled and selected. Copy it to destination so we can blend it with 1st output
 		// Note: value outside of dRect must contains the background color (c)
-		StretchRect(sTex[1], sRect[1], dTex, dRect[1], ShaderConvert::COPY);
+		StretchRect(sTex[1], sRect[1], dTex, PMODE.SLBG ? dRect[2] : dRect[1], ShaderConvert::COPY);
 	}
 
 	// Save 2nd output
 	if (feedback_write_2)
 	{
-		StretchRect(dTex, full_r, sTex[2], dRect[1], m_convert.ps[static_cast<int>(ShaderConvert::YUV)].get(),
+		StretchRect(dTex, full_r, sTex[2], dRect[2], m_convert.ps[static_cast<int>(ShaderConvert::YUV)].get(),
 			m_merge.cb.get(), nullptr, true);
 	}
 
@@ -714,7 +817,7 @@ void GSDevice11::DoMerge(GSTexture* sTex[3], GSVector4* sRect, GSTexture* dTex, 
 
 	if (feedback_write_1)
 	{
-		StretchRect(dTex, full_r, sTex[2], dRect[0], m_convert.ps[static_cast<int>(ShaderConvert::YUV)].get(),
+		StretchRect(sTex[0], full_r, sTex[2], dRect[2], m_convert.ps[static_cast<int>(ShaderConvert::YUV)].get(),
 			m_merge.cb.get(), nullptr, true);
 	}
 }
@@ -729,7 +832,6 @@ void GSDevice11::DoInterlace(GSTexture* sTex, GSTexture* dTex, int shader, bool 
 	InterlaceConstantBuffer cb;
 
 	cb.ZrH = GSVector2(0, 1.0f / s.y);
-	cb.hH = s.y / 2;
 
 	m_ctx->UpdateSubresource(m_interlace.cb.get(), 0, nullptr, &cb, 0, 0);
 
@@ -797,7 +899,7 @@ void GSDevice11::DoFXAA(GSTexture* sTex, GSTexture* dTex)
 			Console.Error("FXAA shader is missing");
 			return;
 		}
-		
+
 		ShaderMacro sm(m_shader_cache.GetFeatureLevel());
 		m_fxaa_ps = m_shader_cache.GetPixelShader(m_dev.get(), *shader, sm.GetPtr(), "ps_main");
 		if (!m_fxaa_ps)
@@ -810,19 +912,14 @@ void GSDevice11::DoFXAA(GSTexture* sTex, GSTexture* dTex)
 	//dTex->Save("c:\\temp1\\2.bmp");
 }
 
-void GSDevice11::DoShadeBoost(GSTexture* sTex, GSTexture* dTex)
+void GSDevice11::DoShadeBoost(GSTexture* sTex, GSTexture* dTex, const float params[4])
 {
 	const GSVector2i s = dTex->GetSize();
 
 	const GSVector4 sRect(0, 0, 1, 1);
 	const GSVector4 dRect(0, 0, s.x, s.y);
 
-	ShadeBoostConstantBuffer cb;
-
-	cb.rcpFrame = GSVector4(1.0f / s.x, 1.0f / s.y, 0.0f, 0.0f);
-	cb.rcpFrameOpt = GSVector4::zero();
-
-	m_ctx->UpdateSubresource(m_shadeboost.cb.get(), 0, nullptr, &cb, 0, 0);
+	m_ctx->UpdateSubresource(m_shadeboost.cb.get(), 0, nullptr, params, 0, 0);
 
 	StretchRect(sTex, sRect, dTex, dRect, m_shadeboost.ps.get(), m_shadeboost.cb.get(), true);
 }
@@ -1147,15 +1244,25 @@ void GSDevice11::OMSetRenderTargets(GSTexture* rt, GSTexture* ds, const GSVector
 	if (rt) rtv = *(GSTexture11*)rt;
 	if (ds) dsv = *(GSTexture11*)ds;
 
-	if (m_state.rt_view != rtv || m_state.dsv != dsv)
+	const bool changed = (m_state.rt_view != rtv || m_state.dsv != dsv);
+	if (m_state.rt_view != rtv)
 	{
+		if (m_state.rt_view)
+			m_state.rt_view->Release();
+		if (rtv)
+			rtv->AddRef();
 		m_state.rt_view = rtv;
-		m_state.rt_texture = static_cast<GSTexture11*>(rt);
-		m_state.dsv = dsv;
-		m_state.rt_ds = static_cast<GSTexture11*>(ds);
-
-		m_ctx->OMSetRenderTargets(1, &rtv, dsv);
 	}
+	if (m_state.dsv != dsv)
+	{
+		if (m_state.dsv)
+			m_state.dsv->Release();
+		if (dsv)
+			dsv->AddRef();
+		m_state.dsv = dsv;
+	}
+	if (changed)
+		m_ctx->OMSetRenderTargets(1, &rtv, dsv);
 
 	const GSVector2i size = rt ? rt->GetSize() : ds->GetSize();
 	if (m_state.viewport != size)
@@ -1165,8 +1272,8 @@ void GSDevice11::OMSetRenderTargets(GSTexture* rt, GSTexture* ds, const GSVector
 		D3D11_VIEWPORT vp;
 		memset(&vp, 0, sizeof(vp));
 
-		vp.TopLeftX = m_hack_topleft_offset;
-		vp.TopLeftY = m_hack_topleft_offset;
+		vp.TopLeftX = 0.0f;
+		vp.TopLeftY = 0.0f;
 		vp.Width = (float)size.x;
 		vp.Height = (float)size.y;
 		vp.MinDepth = 0.0f;
@@ -1181,7 +1288,7 @@ void GSDevice11::OMSetRenderTargets(GSTexture* rt, GSTexture* ds, const GSVector
 	{
 		m_state.scissor = r;
 
-		m_ctx->RSSetScissorRects(1, r);
+		m_ctx->RSSetScissorRects(1, reinterpret_cast<const D3D11_RECT*>(&r));
 	}
 }
 
@@ -1222,10 +1329,14 @@ static GSDevice11::OMBlendSelector convertSel(GSHWDrawConfig::ColorMaskSelector 
 {
 	GSDevice11::OMBlendSelector out;
 	out.wrgba = cm.wrgba;
-	out.abe = blend.index != 0;
-	out.blend_index = blend.index;
-	out.accu_blend = blend.is_accumulation;
-	out.blend_mix = blend.is_mixed_hw_sw;
+	if (blend.enable)
+	{
+		out.blend_enable = true;
+		out.blend_src_factor = blend.src_factor;
+		out.blend_dst_factor = blend.dst_factor;
+		out.blend_op = blend.op;
+	}
+
 	return out;
 }
 
@@ -1233,7 +1344,6 @@ static GSDevice11::OMBlendSelector convertSel(GSHWDrawConfig::ColorMaskSelector 
 /// Clears things we don't support that can be quietly disabled
 static void preprocessSel(GSDevice11::PSSelector& sel)
 {
-	ASSERT(sel.date      == 0); // In-shader destination alpha not supported and shouldn't be sent
 	ASSERT(sel.write_rg  == 0); // Not supported, shouldn't be sent
 }
 
@@ -1242,7 +1352,16 @@ void GSDevice11::RenderHW(GSHWDrawConfig& config)
 	ASSERT(!config.require_full_barrier); // We always specify no support so it shouldn't request this
 	preprocessSel(config.ps);
 
-	if (config.destination_alpha != GSHWDrawConfig::DestinationAlphaMode::Off)
+	GSVector2i rtsize = (config.rt ? config.rt : config.ds)->GetSize();
+
+	GSTexture* primid_tex = nullptr;
+	if (config.destination_alpha == GSHWDrawConfig::DestinationAlphaMode::PrimIDTracking)
+	{
+		primid_tex = CreateRenderTarget(rtsize.x, rtsize.y, GSTexture::Format::PrimID, false);
+		StretchRect(config.rt, GSVector4(config.drawarea) / GSVector4(rtsize).xyxy(),
+			primid_tex, GSVector4(config.drawarea), m_date.primid_init_ps[config.datm].get(), nullptr, false);
+	}
+	else if (config.destination_alpha != GSHWDrawConfig::DestinationAlphaMode::Off)
 	{
 		const GSVector4 src = GSVector4(config.drawarea) / GSVector4(config.ds->GetSize()).xyxy();
 		const GSVector4 dst = src * 2.0f - 1.0f;
@@ -1261,11 +1380,9 @@ void GSDevice11::RenderHW(GSHWDrawConfig& config)
 	GSTexture* hdr_rt = nullptr;
 	if (config.ps.hdr)
 	{
-		const GSVector2i size = config.rt->GetSize();
 		const GSVector4 dRect(config.drawarea);
-		const GSVector4 sRect = dRect / GSVector4(size.x, size.y).xyxy();
-		hdr_rt = CreateRenderTarget(size.x, size.y, GSTexture::Format::FloatColor);
-		hdr_rt->CommitRegion(GSVector2i(config.drawarea.z, config.drawarea.w));
+		const GSVector4 sRect = dRect / GSVector4(rtsize.x, rtsize.y).xyxy();
+		hdr_rt = CreateRenderTarget(rtsize.x, rtsize.y, GSTexture::Format::FloatColor);
 		// Warning: StretchRect must be called before BeginScene otherwise
 		// vertices will be overwritten. Trust me you don't want to do that.
 		StretchRect(config.rt, sRect, hdr_rt, dRect, ShaderConvert::COPY, false);
@@ -1280,7 +1397,7 @@ void GSDevice11::RenderHW(GSHWDrawConfig& config)
 		IAUnmapVertexBuffer();
 	}
 	IASetIndexBuffer(config.indices, config.nindices);
-	D3D11_PRIMITIVE_TOPOLOGY topology;
+	D3D11_PRIMITIVE_TOPOLOGY topology = D3D11_PRIMITIVE_TOPOLOGY_UNDEFINED;
 	switch (config.topology)
 	{
 		case GSHWDrawConfig::Topology::Point:    topology = D3D11_PRIMITIVE_TOPOLOGY_POINTLIST;    break;
@@ -1289,11 +1406,10 @@ void GSDevice11::RenderHW(GSHWDrawConfig& config)
 	}
 	IASetPrimitiveTopology(topology);
 
-	OMSetRenderTargets(hdr_rt ? hdr_rt : config.rt, config.ds, &config.scissor);
-
 	PSSetShaderResources(config.tex, config.pal);
 
 	GSTexture* rt_copy = nullptr;
+	GSTexture* ds_copy = nullptr;
 	if (config.require_one_barrier || (config.tex && config.tex == config.rt)) // Used as "bind rt" flag when texture barrier is unsupported
 	{
 		// Bind the RT.This way special effect can use it.
@@ -1314,17 +1430,51 @@ void GSDevice11::RenderHW(GSHWDrawConfig& config)
 	{
 		// mainly for ico (depth buffer used as texture)
 		// binding to 0 here is safe, because config.tex can't equal both tex and rt
-		CloneTexture(config.ds, &rt_copy, config.drawarea);
-		if (rt_copy)
-			PSSetShaderResource(0, rt_copy);
+		CloneTexture(config.ds, &ds_copy, config.drawarea);
+		if (ds_copy)
+			PSSetShaderResource(0, ds_copy);
 	}
 
-	SetupOM(config.depth, convertSel(config.colormask, config.blend), config.blend.factor);
 	SetupVS(config.vs, &config.cb_vs);
 	SetupGS(config.gs);
 	SetupPS(config.ps, &config.cb_ps, config.sampler);
 
+	if (config.destination_alpha == GSHWDrawConfig::DestinationAlphaMode::PrimIDTracking)
+	{
+		OMDepthStencilSelector dss = config.depth;
+		dss.zwe = 0;
+		OMBlendSelector blend;
+		blend.wrgba = 0;
+		blend.wr = 1;
+		blend.blend_enable = 1;
+		blend.blend_src_factor = CONST_ONE;
+		blend.blend_dst_factor = CONST_ONE;
+		blend.blend_op = 3; // MIN
+		SetupOM(dss, blend, 0);
+		OMSetRenderTargets(primid_tex, config.ds, &config.scissor);
+
+		DrawIndexedPrimitive();
+
+		config.ps.date = 3;
+		config.alpha_second_pass.ps.date = 3;
+		SetupPS(config.ps, nullptr, config.sampler);
+		PSSetShaderResource(3, primid_tex);
+	}
+
+	SetupOM(config.depth, convertSel(config.colormask, config.blend), config.blend.constant);
+	OMSetRenderTargets(hdr_rt ? hdr_rt : config.rt, config.ds, &config.scissor);
+
 	DrawIndexedPrimitive();
+
+	if (config.separate_alpha_pass)
+	{
+		GSHWDrawConfig::BlendState sap_blend = {};
+		SetHWDrawConfigForAlphaPass(&config.ps, &config.colormask, &sap_blend, &config.depth);
+		SetupOM(config.depth, convertSel(config.colormask, sap_blend), config.blend.constant);
+		SetupPS(config.ps, &config.cb_ps, config.sampler);
+
+		DrawIndexedPrimitive();
+	}
 
 	if (config.alpha_second_pass.enable)
 	{
@@ -1340,15 +1490,29 @@ void GSDevice11::RenderHW(GSHWDrawConfig& config)
 			SetupPS(config.alpha_second_pass.ps, nullptr, config.sampler);
 		}
 
-		SetupOM(config.alpha_second_pass.depth, convertSel(config.alpha_second_pass.colormask, config.blend), config.blend.factor);
+		SetupOM(config.alpha_second_pass.depth, convertSel(config.alpha_second_pass.colormask, config.blend), config.blend.constant);
 
 		DrawIndexedPrimitive();
+
+		if (config.second_separate_alpha_pass)
+		{
+			GSHWDrawConfig::BlendState sap_blend = {};
+			SetHWDrawConfigForAlphaPass(&config.alpha_second_pass.ps, &config.alpha_second_pass.colormask, &sap_blend, &config.alpha_second_pass.depth);
+			SetupOM(config.alpha_second_pass.depth, convertSel(config.alpha_second_pass.colormask, sap_blend), config.blend.constant);
+			SetupPS(config.alpha_second_pass.ps, &config.cb_ps, config.sampler);
+
+			DrawIndexedPrimitive();
+		}
 	}
 
 	EndScene();
 
 	if (rt_copy)
 		Recycle(rt_copy);
+	if (ds_copy)
+		Recycle(ds_copy);
+	if (primid_tex)
+		Recycle(primid_tex);
 
 	if (hdr_rt)
 	{
@@ -1357,32 +1521,5 @@ void GSDevice11::RenderHW(GSHWDrawConfig& config)
 		const GSVector4 sRect = dRect / GSVector4(size.x, size.y).xyxy();
 		StretchRect(hdr_rt, sRect, config.rt, dRect, ShaderConvert::MOD_256, false);
 		Recycle(hdr_rt);
-	}
-}
-
-u16 GSDevice11::ConvertBlendEnum(u16 generic)
-{
-	switch (generic)
-	{
-		case SRC_COLOR:       return D3D11_BLEND_SRC_COLOR;
-		case INV_SRC_COLOR:   return D3D11_BLEND_INV_SRC_COLOR;
-		case DST_COLOR:       return D3D11_BLEND_DEST_COLOR;
-		case INV_DST_COLOR:   return D3D11_BLEND_INV_DEST_COLOR;
-		case SRC1_COLOR:      return D3D11_BLEND_SRC1_COLOR;
-		case INV_SRC1_COLOR:  return D3D11_BLEND_INV_SRC1_COLOR;
-		case SRC_ALPHA:       return D3D11_BLEND_SRC_ALPHA;
-		case INV_SRC_ALPHA:   return D3D11_BLEND_INV_SRC_ALPHA;
-		case DST_ALPHA:       return D3D11_BLEND_DEST_ALPHA;
-		case INV_DST_ALPHA:   return D3D11_BLEND_INV_DEST_ALPHA;
-		case SRC1_ALPHA:      return D3D11_BLEND_SRC1_ALPHA;
-		case INV_SRC1_ALPHA:  return D3D11_BLEND_INV_SRC1_ALPHA;
-		case CONST_COLOR:     return D3D11_BLEND_BLEND_FACTOR;
-		case INV_CONST_COLOR: return D3D11_BLEND_INV_BLEND_FACTOR;
-		case CONST_ONE:       return D3D11_BLEND_ONE;
-		case CONST_ZERO:      return D3D11_BLEND_ZERO;
-		case OP_ADD:          return D3D11_BLEND_OP_ADD;
-		case OP_SUBTRACT:     return D3D11_BLEND_OP_SUBTRACT;
-		case OP_REV_SUBTRACT: return D3D11_BLEND_OP_REV_SUBTRACT;
-		default:              ASSERT(0); return 0;
 	}
 }

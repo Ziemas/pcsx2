@@ -23,14 +23,13 @@ namespace GLState
 	GSVector4i scissor;
 
 	bool point_size = false;
-	float line_width = 1.0f;
 
 	bool blend;
 	u16 eq_RGB;
 	u16 f_sRGB;
 	u16 f_dRGB;
 	u8 bf;
-	u32 wrgba;
+	u8 wrgba;
 
 	bool depth;
 	GLenum depth_func;

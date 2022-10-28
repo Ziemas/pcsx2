@@ -15,7 +15,9 @@
 
 
 #include "PrecompiledHeader.h"
-#include "IopCommon.h"
+#include "R3000A.h"
+#include "IopGte.h"
+#include "IopMem.h"
 
 // Note: Branch instructions of the Interpreter are defined externally because
 // the recompiler shouldn't be using them (it isn't entirely safe, due to the
@@ -379,7 +381,7 @@ void (*psxCP2[64])() = {
 	gteDPCS , gteINTPL, gteMVMVA, gteNCDS, gteCDP , psxNULL , gteNCDT , psxNULL, // 10
 	psxNULL , psxNULL , psxNULL , gteNCCS, gteCC  , psxNULL , gteNCS  , psxNULL, // 18
 	gteNCT  , psxNULL , psxNULL , psxNULL, psxNULL, psxNULL , psxNULL , psxNULL, // 20
-	gteSQR  , gteDCPL , gteDPCT , psxNULL, psxNULL, gteAVSZ3, gteAVSZ4, psxNULL, // 28 
+	gteSQR  , gteDCPL , gteDPCT , psxNULL, psxNULL, gteAVSZ3, gteAVSZ4, psxNULL, // 28
 	gteRTPT , psxNULL , psxNULL , psxNULL, psxNULL, psxNULL , psxNULL , psxNULL, // 30
 	psxNULL , psxNULL , psxNULL , psxNULL, psxNULL, gteGPF  , gteGPL  , gteNCCT  // 38
 };

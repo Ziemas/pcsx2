@@ -14,6 +14,7 @@
  */
 
 #include "common/Vulkan/Context.h"
+#include "common/Align.h"
 #include "common/Assertions.h"
 #include "common/Console.h"
 #include "common/StringUtil.h"
@@ -46,53 +47,20 @@ namespace Vulkan
 		vkGetPhysicalDeviceProperties(physical_device, &m_device_properties);
 		vkGetPhysicalDeviceMemoryProperties(physical_device, &m_device_memory_properties);
 
-		// Would any drivers be this silly? I hope not...
+		// We need this to be at least 32 byte aligned for AVX2 stores.
 		m_device_properties.limits.minUniformBufferOffsetAlignment =
-			std::max(m_device_properties.limits.minUniformBufferOffsetAlignment, static_cast<VkDeviceSize>(1));
+			std::max(m_device_properties.limits.minUniformBufferOffsetAlignment, static_cast<VkDeviceSize>(32));
 		m_device_properties.limits.minTexelBufferOffsetAlignment =
-			std::max(m_device_properties.limits.minTexelBufferOffsetAlignment, static_cast<VkDeviceSize>(1));
+			std::max(m_device_properties.limits.minTexelBufferOffsetAlignment, static_cast<VkDeviceSize>(32));
 		m_device_properties.limits.optimalBufferCopyOffsetAlignment =
-			std::max(m_device_properties.limits.optimalBufferCopyOffsetAlignment, static_cast<VkDeviceSize>(1));
+			std::max(m_device_properties.limits.optimalBufferCopyOffsetAlignment, static_cast<VkDeviceSize>(32));
 		m_device_properties.limits.optimalBufferCopyRowPitchAlignment =
-			std::max(m_device_properties.limits.optimalBufferCopyRowPitchAlignment, static_cast<VkDeviceSize>(1));
+			Common::NextPow2(std::max(m_device_properties.limits.optimalBufferCopyRowPitchAlignment, static_cast<VkDeviceSize>(32)));
+		m_device_properties.limits.bufferImageGranularity =
+			std::max(m_device_properties.limits.bufferImageGranularity, static_cast<VkDeviceSize>(32));
 	}
 
 	Context::~Context() = default;
-
-	bool Context::CheckValidationLayerAvailablility()
-	{
-		u32 extension_count = 0;
-		VkResult res = vkEnumerateInstanceExtensionProperties(nullptr, &extension_count, nullptr);
-		if (res != VK_SUCCESS)
-		{
-			LOG_VULKAN_ERROR(res, "vkEnumerateInstanceExtensionProperties failed: ");
-			return false;
-		}
-
-		std::vector<VkExtensionProperties> extension_list(extension_count);
-		res = vkEnumerateInstanceExtensionProperties(nullptr, &extension_count, extension_list.data());
-		pxAssert(res == VK_SUCCESS);
-
-		u32 layer_count = 0;
-		res = vkEnumerateInstanceLayerProperties(&layer_count, nullptr);
-		if (res != VK_SUCCESS)
-		{
-			LOG_VULKAN_ERROR(res, "vkEnumerateInstanceExtensionProperties failed: ");
-			return false;
-		}
-
-		std::vector<VkLayerProperties> layer_list(layer_count);
-		res = vkEnumerateInstanceLayerProperties(&layer_count, layer_list.data());
-		pxAssert(res == VK_SUCCESS);
-
-		// Check for both VK_EXT_debug_utils and VK_LAYER_LUNARG_standard_validation
-		return (std::find_if(extension_list.begin(), extension_list.end(),
-					[](const auto& it) { return strcmp(it.extensionName, VK_EXT_DEBUG_UTILS_EXTENSION_NAME) == 0; }) !=
-					extension_list.end() &&
-				std::find_if(layer_list.begin(), layer_list.end(), [](const auto& it) {
-					return strcmp(it.layerName, "VK_LAYER_KHRONOS_validation") == 0;
-				}) != layer_list.end());
-	}
 
 	VkInstance Context::CreateVulkanInstance(
 		const WindowInfo* wi, bool enable_debug_utils, bool enable_validation_layer)
@@ -111,7 +79,7 @@ namespace Vulkan
 		app_info.applicationVersion = VK_MAKE_VERSION(1, 7, 0);
 		app_info.pEngineName = "PCSX2";
 		app_info.engineVersion = VK_MAKE_VERSION(1, 7, 0);
-		app_info.apiVersion = VK_MAKE_VERSION(1, 1, 0);
+		app_info.apiVersion = VK_API_VERSION_1_1;
 
 		VkInstanceCreateInfo instance_create_info = {};
 		instance_create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -306,8 +274,20 @@ namespace Vulkan
 		VkInstance instance = CreateVulkanInstance(wi, enable_debug_utils, enable_validation_layer);
 		if (instance == VK_NULL_HANDLE)
 		{
-			Vulkan::UnloadVulkanLibrary();
-			return false;
+			if (enable_debug_utils || enable_validation_layer)
+			{
+				// Try again without the validation layer.
+				enable_debug_utils = false;
+				enable_validation_layer = false;
+				instance = CreateVulkanInstance(wi, enable_debug_utils, enable_validation_layer);
+				if (instance == VK_NULL_HANDLE)
+				{
+					Vulkan::UnloadVulkanLibrary();
+					return false;
+				}
+
+				Console.Error("Vulkan validation/debug layers requested but are unavailable. Creating non-debug device.");
+			}
 		}
 
 		if (!Vulkan::LoadVulkanInstanceFunctions(instance))
@@ -468,6 +448,10 @@ namespace Vulkan
 			SupportsExtension(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME, false);
 		m_optional_extensions.vk_khr_driver_properties =
 			SupportsExtension(VK_KHR_DRIVER_PROPERTIES_EXTENSION_NAME, false);
+		m_optional_extensions.vk_arm_rasterization_order_attachment_access =
+			SupportsExtension(VK_ARM_RASTERIZATION_ORDER_ATTACHMENT_ACCESS_EXTENSION_NAME, false);
+		m_optional_extensions.vk_khr_fragment_shader_barycentric =
+			SupportsExtension(VK_KHR_FRAGMENT_SHADER_BARYCENTRIC_EXTENSION_NAME, false);
 
 		return true;
 	}
@@ -486,6 +470,7 @@ namespace Vulkan
 		m_device_features.largePoints = available_features.largePoints;
 		m_device_features.wideLines = available_features.wideLines;
 		m_device_features.fragmentStoresAndAtomics = available_features.fragmentStoresAndAtomics;
+		m_device_features.textureCompressionBC = available_features.textureCompressionBC;
 
 		return true;
 	}
@@ -619,10 +604,18 @@ namespace Vulkan
 		// provoking vertex
 		VkPhysicalDeviceProvokingVertexFeaturesEXT provoking_vertex_feature = {
 			VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROVOKING_VERTEX_FEATURES_EXT};
+		VkPhysicalDeviceRasterizationOrderAttachmentAccessFeaturesARM rasterization_order_access_feature = {
+			VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RASTERIZATION_ORDER_ATTACHMENT_ACCESS_FEATURES_ARM};
+
 		if (m_optional_extensions.vk_ext_provoking_vertex)
 		{
 			provoking_vertex_feature.provokingVertexLast = VK_TRUE;
 			Util::AddPointerToChain(&device_info, &provoking_vertex_feature);
+		}
+		if (m_optional_extensions.vk_arm_rasterization_order_attachment_access)
+		{
+			rasterization_order_access_feature.rasterizationOrderColorAttachmentAccess = VK_TRUE;
+			Util::AddPointerToChain(&device_info, &rasterization_order_access_feature);
 		}
 
 		VkResult res = vkCreateDevice(m_physical_device, &device_info, nullptr, &m_device);
@@ -643,6 +636,15 @@ namespace Vulkan
 			vkGetDeviceQueue(m_device, m_present_queue_family_index, 0, &m_present_queue);
 		}
 
+		m_gpu_timing_supported = (m_device_properties.limits.timestampComputeAndGraphics != 0 &&
+								  queue_family_properties[m_graphics_queue_family_index].timestampValidBits > 0 &&
+								  m_device_properties.limits.timestampPeriod > 0);
+		DevCon.WriteLn("GPU timing is %s (TS=%u TS valid bits=%u, TS period=%f)",
+			m_gpu_timing_supported ? "supported" : "not supported",
+			static_cast<u32>(m_device_properties.limits.timestampComputeAndGraphics),
+			queue_family_properties[m_graphics_queue_family_index].timestampValidBits,
+			m_device_properties.limits.timestampPeriod);
+
 		ProcessDeviceExtensions();
 		return true;
 	}
@@ -650,45 +652,42 @@ namespace Vulkan
 	void Context::ProcessDeviceExtensions()
 	{
 		// advanced feature checks
-		if (vkGetPhysicalDeviceFeatures2)
+		VkPhysicalDeviceFeatures2 features2 = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
+		VkPhysicalDeviceProvokingVertexFeaturesEXT provoking_vertex_features = {
+			VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROVOKING_VERTEX_FEATURES_EXT};
+		VkPhysicalDeviceRasterizationOrderAttachmentAccessFeaturesARM rasterization_order_access_feature = {
+			VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RASTERIZATION_ORDER_ATTACHMENT_ACCESS_FEATURES_ARM};
+
+		// add in optional feature structs
+		if (m_optional_extensions.vk_ext_provoking_vertex)
+			Util::AddPointerToChain(&features2, &provoking_vertex_features);
+		if (m_optional_extensions.vk_arm_rasterization_order_attachment_access)
+			Util::AddPointerToChain(&features2, &rasterization_order_access_feature);
+
+		// query
+		vkGetPhysicalDeviceFeatures2(m_physical_device, &features2);
+
+		// confirm we actually support it
+		m_optional_extensions.vk_ext_provoking_vertex &= (provoking_vertex_features.provokingVertexLast == VK_TRUE);
+		m_optional_extensions.vk_arm_rasterization_order_attachment_access &= (rasterization_order_access_feature.rasterizationOrderColorAttachmentAccess == VK_TRUE);
+
+		VkPhysicalDeviceProperties2 properties2 = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
+		void** pNext = &properties2.pNext;
+
+		if (m_optional_extensions.vk_khr_driver_properties)
 		{
-			VkPhysicalDeviceFeatures2 features2 = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
-			VkPhysicalDeviceProvokingVertexFeaturesEXT provoking_vertex_features = {
-				VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROVOKING_VERTEX_FEATURES_EXT};
-			void** pNext = &features2.pNext;
-
-			// add in optional feature structs
-			if (m_optional_extensions.vk_ext_provoking_vertex)
-			{
-				*pNext = &provoking_vertex_features;
-				pNext = &provoking_vertex_features.pNext;
-			}
-
-			// query
-			vkGetPhysicalDeviceFeatures2(m_physical_device, &features2);
-
-			// confirm we actually support it
-			m_optional_extensions.vk_ext_provoking_vertex &= (provoking_vertex_features.provokingVertexLast == VK_TRUE);
+			m_device_driver_properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES;
+			*pNext = &m_device_driver_properties;
+			pNext = &m_device_driver_properties.pNext;
 		}
 
-		if (vkGetPhysicalDeviceProperties2)
-		{
-			VkPhysicalDeviceProperties2 properties2 = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
-			void** pNext = &properties2.pNext;
-
-			if (m_optional_extensions.vk_khr_driver_properties)
-			{
-				m_device_driver_properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES;
-				*pNext = &m_device_driver_properties;
-				pNext = &m_device_driver_properties.pNext;
-			}
-
-			// query
-			vkGetPhysicalDeviceProperties2(m_physical_device, &properties2);
-		}
+		// query
+		vkGetPhysicalDeviceProperties2(m_physical_device, &properties2);
 
 		Console.WriteLn("VK_EXT_provoking_vertex is %s",
 			m_optional_extensions.vk_ext_provoking_vertex ? "supported" : "NOT supported");
+		Console.WriteLn("VK_ARM_rasterization_order_attachment_access is %s",
+			m_optional_extensions.vk_arm_rasterization_order_attachment_access ? "supported" : "NOT supported");
 	}
 
 	bool Context::CreateAllocator()
@@ -845,11 +844,31 @@ namespace Vulkan
 			return false;
 		}
 		Vulkan::Util::SetObjectName(g_vulkan_context->GetDevice(), m_global_descriptor_pool, "Global Descriptor Pool");
+
+		if (m_gpu_timing_supported)
+		{
+			const VkQueryPoolCreateInfo query_create_info = {VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO, nullptr,
+				0, VK_QUERY_TYPE_TIMESTAMP, NUM_COMMAND_BUFFERS * 2, 0};
+			res = vkCreateQueryPool(m_device, &query_create_info, nullptr, &m_timestamp_query_pool);
+			if (res != VK_SUCCESS)
+			{
+				LOG_VULKAN_ERROR(res, "vkCreateQueryPool failed: ");
+				m_gpu_timing_supported = false;
+				return false;
+			}
+		}
+
 		return true;
 	}
 
 	void Context::DestroyGlobalDescriptorPool()
 	{
+		if (m_timestamp_query_pool != VK_NULL_HANDLE)
+		{
+			vkDestroyQueryPool(m_device, m_timestamp_query_pool, nullptr);
+			m_timestamp_query_pool = VK_NULL_HANDLE;
+		}
+
 		if (m_global_descriptor_pool != VK_NULL_HANDLE)
 		{
 			vkDestroyDescriptorPool(m_device, m_global_descriptor_pool, nullptr);
@@ -942,6 +961,19 @@ namespace Vulkan
 		vkDeviceWaitIdle(m_device);
 	}
 
+	float Context::GetAndResetAccumulatedGPUTime()
+	{
+		const float time = m_accumulated_gpu_time;
+		m_accumulated_gpu_time = 0.0f;
+		return time;
+	}
+
+	bool Context::SetEnableGPUTiming(bool enabled)
+	{
+		m_gpu_timing_enabled = enabled && m_gpu_timing_supported;
+		return (enabled == m_gpu_timing_enabled);
+	}
+
 	void Context::WaitForCommandBufferCompletion(u32 index)
 	{
 		// Wait for this command buffer to be completed.
@@ -988,6 +1020,11 @@ namespace Vulkan
 				LOG_VULKAN_ERROR(res, "vkEndCommandBuffer failed: ");
 				pxFailRel("Failed to end command buffer");
 			}
+		}
+
+		if (m_gpu_timing_enabled && resources.timestamp_written)
+		{
+			vkCmdWriteTimestamp(m_current_command_buffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, m_timestamp_query_pool, m_current_frame * 2 + 1);
 		}
 
 		res = vkEndCommandBuffer(resources.command_buffers[1]);
@@ -1160,10 +1197,38 @@ namespace Vulkan
 		if (res != VK_SUCCESS)
 			LOG_VULKAN_ERROR(res, "vkResetDescriptorPool failed: ");
 
-		m_current_frame = index;
-		m_current_command_buffer = resources.command_buffers[1];
+		if (m_gpu_timing_enabled)
+		{
+			if (resources.timestamp_written)
+			{
+				std::array<u64, 2> timestamps;
+				res = vkGetQueryPoolResults(m_device, m_timestamp_query_pool, index * 2, static_cast<u32>(timestamps.size()),
+					sizeof(u64) * timestamps.size(), timestamps.data(), sizeof(u64), VK_QUERY_RESULT_64_BIT);
+				if (res == VK_SUCCESS)
+				{
+					// if we didn't write the timestamp at the start of the cmdbuffer (just enabled timing), the first TS will be zero
+					if (timestamps[0] > 0)
+					{
+						const double ns_diff = (timestamps[1] - timestamps[0]) * static_cast<double>(m_device_properties.limits.timestampPeriod);
+						m_accumulated_gpu_time += ns_diff / 1000000.0;
+					}
+				}
+				else
+				{
+					LOG_VULKAN_ERROR(res, "vkGetQueryPoolResults failed: ");
+				}
+			}
+
+			vkCmdResetQueryPool(resources.command_buffers[1], m_timestamp_query_pool, index * 2, 2);
+			vkCmdWriteTimestamp(resources.command_buffers[1], VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, m_timestamp_query_pool, index * 2);
+		}
+
 		resources.fence_counter = m_next_fence_counter++;
 		resources.init_buffer_used = false;
+		resources.timestamp_written = m_gpu_timing_enabled;
+
+		m_current_frame = index;
+		m_current_command_buffer = resources.command_buffers[1];
 
 		// using the lower 32 bits of the fence index should be sufficient here, I hope...
 		vmaSetCurrentFrameIndex(m_allocator, static_cast<u32>(m_next_fence_counter));
@@ -1348,15 +1413,19 @@ namespace Vulkan
 				input_reference.layout = VK_IMAGE_LAYOUT_GENERAL;
 				input_reference_ptr = &input_reference;
 
-				subpass_dependency.srcSubpass = 0;
-				subpass_dependency.dstSubpass = 0;
-				subpass_dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-				subpass_dependency.dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-				subpass_dependency.srcAccessMask =
-					VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-				subpass_dependency.dstAccessMask = VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
-				subpass_dependency.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
-				subpass_dependency_ptr = &subpass_dependency;
+				if (!g_vulkan_context->GetOptionalExtensions().vk_arm_rasterization_order_attachment_access)
+				{
+					// don't need the framebuffer-local dependency when we have rasterization order attachment access
+					subpass_dependency.srcSubpass = 0;
+					subpass_dependency.dstSubpass = 0;
+					subpass_dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+					subpass_dependency.dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+					subpass_dependency.srcAccessMask =
+						VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+					subpass_dependency.dstAccessMask = VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
+					subpass_dependency.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+					subpass_dependency_ptr = &subpass_dependency;
+				}
 			}
 
 			num_attachments++;
@@ -1375,7 +1444,10 @@ namespace Vulkan
 			num_attachments++;
 		}
 
-		const VkSubpassDescription subpass = {0, VK_PIPELINE_BIND_POINT_GRAPHICS, input_reference_ptr ? 1u : 0u,
+		const VkSubpassDescriptionFlags subpass_flags =
+			(key.color_feedback_loop && g_vulkan_context->GetOptionalExtensions().vk_arm_rasterization_order_attachment_access)
+			? VK_SUBPASS_DESCRIPTION_RASTERIZATION_ORDER_ATTACHMENT_COLOR_ACCESS_BIT_ARM : 0;
+		const VkSubpassDescription subpass = {subpass_flags, VK_PIPELINE_BIND_POINT_GRAPHICS, input_reference_ptr ? 1u : 0u,
 			input_reference_ptr ? input_reference_ptr : nullptr, color_reference_ptr ? 1u : 0u,
 			color_reference_ptr ? color_reference_ptr : nullptr, nullptr, depth_reference_ptr, 0, nullptr};
 		const VkRenderPassCreateInfo pass_info = {VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO, nullptr, 0u,

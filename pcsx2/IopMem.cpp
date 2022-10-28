@@ -15,10 +15,13 @@
 
 
 #include "PrecompiledHeader.h"
-#include "IopCommon.h"
+#include "common/AlignedMalloc.h"
+#include "R3000A.h"
+#include "Common.h"
 #include "ps2/pgif.h" // for PSX kernel TTY in iopMemWrite32
-#include "SPU2/spu2.h"
+#include "SPU2/SPU2.h"
 #include "DEV9/DEV9.h"
+#include "IopHw.h"
 
 uptr *psxMemWLUT = NULL;
 const uptr *psxMemRLUT = NULL;
@@ -31,7 +34,7 @@ alignas(__pagesize) u8 iopHw[Ps2MemSize::IopHardware];
 //  iopMemoryReserve
 // --------------------------------------------------------------------------------------
 iopMemoryReserve::iopMemoryReserve()
-	: _parent( L"IOP Main Memory (2mb)", sizeof(*iopMem) )
+	: _parent( "IOP Main Memory (2mb)", sizeof(*iopMem) )
 {
 }
 
@@ -98,7 +101,7 @@ void iopMemoryReserve::Reset()
 		psxMemWLUT[i + 0x2000 + 0x1e00] = (uptr)&eeMem->ROM1[i << 16];
 	}
 
-	for (int i = 0; i < 0x0008; i++) 
+	for (int i = 0; i < 0x0008; i++)
 	{
 		psxMemWLUT[i + 0x2000 + 0x1e40] = (uptr)&eeMem->ROM2[i << 16];
 	}
@@ -122,7 +125,7 @@ void iopMemoryReserve::Decommit()
 }
 
 
-u8 __fastcall iopMemRead8(u32 mem)
+u8 iopMemRead8(u32 mem)
 {
 	mem &= 0x1fffffff;
 	u32 t = mem >> 16;
@@ -160,7 +163,7 @@ u8 __fastcall iopMemRead8(u32 mem)
 	}
 }
 
-u16 __fastcall iopMemRead16(u32 mem)
+u16 iopMemRead16(u32 mem)
 {
 	mem &= 0x1fffffff;
 	u32 t = mem >> 16;
@@ -211,7 +214,7 @@ u16 __fastcall iopMemRead16(u32 mem)
 		else
 		{
 			if (t == 0x1F90)
-				return SPU2read(mem);
+				return SPU::Read(mem);
 			if (t == 0x1000)
 				return DEV9read16(mem);
 			PSXMEM_LOG("err lh %8.8lx", mem);
@@ -220,7 +223,7 @@ u16 __fastcall iopMemRead16(u32 mem)
 	}
 }
 
-u32 __fastcall iopMemRead32(u32 mem)
+u32 iopMemRead32(u32 mem)
 {
 	mem &= 0x1fffffff;
 	u32 t = mem >> 16;
@@ -284,7 +287,7 @@ u32 __fastcall iopMemRead32(u32 mem)
 	}
 }
 
-void __fastcall iopMemWrite8(u32 mem, u8 value)
+void iopMemWrite8(u32 mem, u8 value)
 {
 	mem &= 0x1fffffff;
 	u32 t = mem >> 16;
@@ -331,7 +334,7 @@ void __fastcall iopMemWrite8(u32 mem, u8 value)
 	}
 }
 
-void __fastcall iopMemWrite16(u32 mem, u16 value)
+void iopMemWrite16(u32 mem, u16 value)
 {
 	mem &= 0x1fffffff;
 	u32 t = mem >> 16;
@@ -394,7 +397,7 @@ void __fastcall iopMemWrite16(u32 mem, u16 value)
 				psxSu16(mem) = value; return;
 			}
 			if (t == 0x1F90) {
-				SPU2write(mem, value); return;
+				SPU::Write(mem, value); return;
 			}
 			if (t == 0x1000) {
 				DEV9write16(mem, value); return;
@@ -404,7 +407,7 @@ void __fastcall iopMemWrite16(u32 mem, u16 value)
 	}
 }
 
-void __fastcall iopMemWrite32(u32 mem, u32 value)
+void iopMemWrite32(u32 mem, u32 value)
 {
 	mem &= 0x1fffffff;
 	u32 t = mem >> 16;

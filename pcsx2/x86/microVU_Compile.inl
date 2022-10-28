@@ -1,6 +1,6 @@
 /*  PCSX2 - PS2 Emulator for PCs
  *  Copyright (C) 2002-2010  PCSX2 Dev Team
- * 
+ *
  *  PCSX2 is free software: you can redistribute it and/or modify it under the terms
  *  of the GNU Lesser General Public License as published by the Free Software Found-
  *  ation, either version 3 of the License, or (at your option) any later version.
@@ -19,12 +19,12 @@
 // Messages Called at Execution Time...
 //------------------------------------------------------------------
 
-static inline void __fc mVUbadOp0  (u32 prog, u32 pc) { Console.Error("microVU0 Warning: Exiting... Block contains an illegal opcode. [%04x] [%03d]", pc, prog); }
-static inline void __fc mVUbadOp1  (u32 prog, u32 pc) { Console.Error("microVU1 Warning: Exiting... Block contains an illegal opcode. [%04x] [%03d]", pc, prog); }
-static inline void __fc mVUwarning0(u32 prog, u32 pc) { Console.Error("microVU0 Warning: Exiting from Possible Infinite Loop [%04x] [%03d]", pc, prog); }
-static inline void __fc mVUwarning1(u32 prog, u32 pc) { Console.Error("microVU1 Warning: Exiting from Possible Infinite Loop [%04x] [%03d]", pc, prog); }
-static inline void __fc mVUprintPC1(u32 pc) { Console.WriteLn("Block Start PC = 0x%04x", pc); }
-static inline void __fc mVUprintPC2(u32 pc) { Console.WriteLn("Block End PC   = 0x%04x", pc); }
+static inline void mVUbadOp0  (u32 prog, u32 pc) { Console.Error("microVU0 Warning: Exiting... Block contains an illegal opcode. [%04x] [%03d]", pc, prog); }
+static inline void mVUbadOp1  (u32 prog, u32 pc) { Console.Error("microVU1 Warning: Exiting... Block contains an illegal opcode. [%04x] [%03d]", pc, prog); }
+static inline void mVUwarning0(u32 prog, u32 pc) { Console.Error("microVU0 Warning: Exiting from Possible Infinite Loop [%04x] [%03d]", pc, prog); }
+static inline void mVUwarning1(u32 prog, u32 pc) { Console.Error("microVU1 Warning: Exiting from Possible Infinite Loop [%04x] [%03d]", pc, prog); }
+static inline void mVUprintPC1(u32 pc) { Console.WriteLn("Block Start PC = 0x%04x", pc); }
+static inline void mVUprintPC2(u32 pc) { Console.WriteLn("Block End PC   = 0x%04x", pc); }
 
 //------------------------------------------------------------------
 // Program Range Checking and Setting up Ranges
@@ -35,7 +35,7 @@ __fi void mVUcheckIsSame(mV)
 {
 	if (mVU.prog.isSame == -1)
 	{
-		mVU.prog.isSame = !memcmp_mmx((u8*)mVUcurProg.data, mVU.regs().Micro, mVU.microMemSize);
+		mVU.prog.isSame = !memcmp((u8*)mVUcurProg.data, mVU.regs().Micro, mVU.microMemSize);
 	}
 	if (mVU.prog.isSame == 0)
 	{
@@ -48,7 +48,12 @@ __fi void mVUcheckIsSame(mV)
 void mVUsetupRange(microVU& mVU, s32 pc, bool isStartPC)
 {
 	std::deque<microRange>*& ranges = mVUcurProg.ranges;
-	pxAssertDev(pc <= (s64)mVU.microMemSize, pxsFmt("microVU%d: PC outside of VU memory PC=0x%04x", mVU.index, pc));
+	if (pc > (s64)mVU.microMemSize)
+	{
+		Console.Error("microVU%d: PC outside of VU memory PC=0x%04x", mVU.index, pc);
+		pxFailDev("microVU: PC out of VU memory");
+	}
+
 	if (isStartPC) // Check if startPC is already within a block we've recompiled
 	{
 		std::deque<microRange>::const_iterator it(ranges->begin());
@@ -469,7 +474,7 @@ void mVUtestCycles(microVU& mVU, microFlagCycles& mFC)
 	iPC = mVUstartPC;
 
 	xMOV(eax, ptr32[&mVU.cycles]);
-	if (!EmuConfig.Gamefixes.VUKickstartHack)
+	if (EmuConfig.Gamefixes.VUSyncHack)
 		xSUB(eax, mVUcycles); // Running behind, make sure we have time to run the block
 	else
 		xSUB(eax, 1); // Running ahead, make sure cycles left are above 0
@@ -549,7 +554,10 @@ __fi void mVUinitFirstPass(microVU& mVU, uptr pState, u8* thisPtr)
 
 void mVUDoDBit(microVU& mVU, microFlagCycles* mFC)
 {
-	xTEST(ptr32[&VU0.VI[REG_FBRST].UL], (isVU1 ? 0x400 : 0x4));
+	if (mVU.index && THREAD_VU1)
+		xTEST(ptr32[&vu1Thread.vuFBRST], (isVU1 ? 0x400 : 0x4));
+	else
+		xTEST(ptr32[&VU0.VI[REG_FBRST].UL], (isVU1 ? 0x400 : 0x4));
 	xForwardJump32 eJMP(Jcc_Zero);
 	if (!isVU1 || !THREAD_VU1)
 	{
@@ -564,7 +572,10 @@ void mVUDoDBit(microVU& mVU, microFlagCycles* mFC)
 
 void mVUDoTBit(microVU& mVU, microFlagCycles* mFC)
 {
-	xTEST(ptr32[&VU0.VI[REG_FBRST].UL], (isVU1 ? 0x800 : 0x8));
+	if (mVU.index && THREAD_VU1)
+		xTEST(ptr32[&vu1Thread.vuFBRST], (isVU1 ? 0x800 : 0x8));
+	else
+		xTEST(ptr32[&VU0.VI[REG_FBRST].UL], (isVU1 ? 0x800 : 0x8));
 	xForwardJump32 eJMP(Jcc_Zero);
 	if (!isVU1 || !THREAD_VU1)
 	{
@@ -886,8 +897,8 @@ __fi void* mVUentryGet(microVU& mVU, microBlockManager* block, u32 startPC, uptr
 __fi void* mVUblockFetch(microVU& mVU, u32 startPC, uptr pState)
 {
 
-	pxAssertDev((startPC & 7) == 0,              pxsFmt("microVU%d: unaligned startPC=0x%04x", mVU.index, startPC));
-	pxAssertDev(startPC <= mVU.microMemSize - 8, pxsFmt("microVU%d: invalid startPC=0x%04x",   mVU.index, startPC));
+	pxAssert((startPC & 7) == 0);
+	pxAssert(startPC <= mVU.microMemSize - 8);
 	startPC &= mVU.microMemSize - 8;
 
 	blockCreate(startPC / 8);
@@ -895,7 +906,7 @@ __fi void* mVUblockFetch(microVU& mVU, u32 startPC, uptr pState)
 }
 
 // mVUcompileJIT() - Called By JR/JALR during execution
-_mVUt void* __fastcall mVUcompileJIT(u32 startPC, uptr ptr)
+_mVUt void* mVUcompileJIT(u32 startPC, uptr ptr)
 {
 	if (doJumpAsSameProgram) // Treat jump as part of same microProgram
 	{

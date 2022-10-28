@@ -21,14 +21,12 @@
 
 class SettingsDialog;
 
-class GameListSearchDirectoriesModel;
-
 class GameListSettingsWidget : public QWidget
 {
 	Q_OBJECT
 
 public:
-	GameListSettingsWidget(QWidget* parent, SettingsDialog* dialog);
+	GameListSettingsWidget(SettingsDialog* dialog, QWidget* parent);
 	~GameListSettingsWidget();
 
 	bool addExcludedPath(const std::string& path);

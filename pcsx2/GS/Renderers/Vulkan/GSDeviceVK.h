@@ -27,14 +27,9 @@
 class GSDeviceVK final : public GSDevice
 {
 public:
-	struct PipelineSelector
+	struct alignas(8) PipelineSelector
 	{
-		GSHWDrawConfig::VSSelector vs;
-		GSHWDrawConfig::GSSelector gs;
 		GSHWDrawConfig::PSSelector ps;
-		GSHWDrawConfig::DepthStencilSelector dss;
-		GSHWDrawConfig::BlendState bs;
-		GSHWDrawConfig::ColorMaskSelector cms;
 
 		union
 		{
@@ -50,29 +45,25 @@ public:
 			u32 key;
 		};
 
-		__fi bool operator==(const PipelineSelector& p) const
-		{
-			return vs.key == p.vs.key && gs.key == p.gs.key && ps.key == p.ps.key && dss.key == p.dss.key &&
-				   bs.key == p.bs.key && cms.key == p.cms.key && key == p.key;
-		}
-		__fi bool operator!=(const PipelineSelector& p) const
-		{
-			return vs.key != p.vs.key || gs.key != p.gs.key || ps.key != p.ps.key || dss.key != p.dss.key ||
-				   bs.key != p.bs.key || cms.key != p.cms.key || key != p.key;
-		}
+		GSHWDrawConfig::VSSelector vs;
+		GSHWDrawConfig::GSSelector gs;
+		GSHWDrawConfig::DepthStencilSelector dss;
+		GSHWDrawConfig::ColorMaskSelector cms;
+		GSHWDrawConfig::BlendState bs;
 
-		PipelineSelector()
-			: key(0)
-		{
-		}
+		__fi bool operator==(const PipelineSelector& p) const { return (memcmp(this, &p, sizeof(p)) == 0); }
+		__fi bool operator!=(const PipelineSelector& p) const { return (memcmp(this, &p, sizeof(p)) != 0); }
+
+		__fi PipelineSelector() { memset(this, 0, sizeof(*this)); }
 	};
+	static_assert(sizeof(PipelineSelector) == 24, "Pipeline selector is 24 bytes");
 
 	struct PipelineSelectorHash
 	{
 		std::size_t operator()(const PipelineSelector& e) const noexcept
 		{
 			std::size_t hash = 0;
-			HashCombine(hash, e.vs.key, e.gs.key, e.ps.key, e.dss.key, e.cms.key, e.bs.key, e.key);
+			HashCombine(hash, e.vs.key, e.gs.key, e.ps.key_hi, e.ps.key_lo, e.dss.key, e.cms.key, e.bs.key, e.key);
 			return hash;
 		}
 	};
@@ -86,7 +77,7 @@ public:
 		NUM_TFX_TEXTURES = NUM_TFX_SAMPLERS + NUM_TFX_RT_TEXTURES,
 		NUM_CONVERT_TEXTURES = 1,
 		NUM_CONVERT_SAMPLERS = 1,
-		CONVERT_PUSH_CONSTANTS_SIZE = 32,
+		CONVERT_PUSH_CONSTANTS_SIZE = 96,
 
 		VERTEX_BUFFER_SIZE = 32 * 1024 * 1024,
 		INDEX_BUFFER_SIZE = 16 * 1024 * 1024,
@@ -125,7 +116,7 @@ private:
 	std::unordered_map<u32, VkSampler> m_samplers;
 
 	std::array<VkPipeline, static_cast<int>(ShaderConvert::Count)> m_convert{};
-	std::array<VkPipeline, static_cast<int>(ShaderConvert::Count)> m_present{};
+	std::array<VkPipeline, static_cast<int>(PresentShader::Count)> m_present{};
 	std::array<VkPipeline, 16> m_color_copy{};
 	std::array<VkPipeline, 2> m_merge{};
 	std::array<VkPipeline, 4> m_interlace{};
@@ -133,10 +124,12 @@ private:
 	VkPipeline m_hdr_finish_pipelines[2][2] = {}; // [depth][feedback_loop]
 	VkRenderPass m_date_image_setup_render_passes[2][2] = {}; // [depth][clear]
 	VkPipeline m_date_image_setup_pipelines[2][2] = {}; // [depth][datm]
+	VkPipeline m_fxaa_pipeline = {};
+	VkPipeline m_shadeboost_pipeline = {};
 
 	std::unordered_map<u32, VkShaderModule> m_tfx_vertex_shaders;
 	std::unordered_map<u32, VkShaderModule> m_tfx_geometry_shaders;
-	std::unordered_map<u64, VkShaderModule> m_tfx_fragment_shaders;
+	std::unordered_map<GSHWDrawConfig::PSSelector, VkShaderModule, GSHWDrawConfig::PSSelectorHash> m_tfx_fragment_shaders;
 	std::unordered_map<PipelineSelector, VkPipeline, PipelineSelectorHash> m_tfx_pipelines;
 
 	VkRenderPass m_utility_color_render_pass_load = VK_NULL_HANDLE;
@@ -155,20 +148,22 @@ private:
 
 	std::string m_tfx_source;
 
+	VkFormat LookupNativeFormat(GSTexture::Format format) const;
+
 	GSTexture* CreateSurface(GSTexture::Type type, int width, int height, int levels, GSTexture::Format format) override;
 
 	void DoMerge(GSTexture* sTex[3], GSVector4* sRect, GSTexture* dTex, GSVector4* dRect, const GSRegPMODE& PMODE,
 		const GSRegEXTBUF& EXTBUF, const GSVector4& c) final;
 	void DoInterlace(GSTexture* sTex, GSTexture* dTex, int shader, bool linear, float yoffset = 0) final;
-
-	u16 ConvertBlendEnum(u16 generic) final;
+	void DoShadeBoost(GSTexture* sTex, GSTexture* dTex, const float params[4]) final;
+	void DoFXAA(GSTexture* sTex, GSTexture* dTex) final;
 
 	VkSampler GetSampler(GSHWDrawConfig::SamplerSelector ss);
 	void ClearSamplerCache() final;
 
 	VkShaderModule GetTFXVertexShader(GSHWDrawConfig::VSSelector sel);
 	VkShaderModule GetTFXGeometryShader(GSHWDrawConfig::GSSelector sel);
-	VkShaderModule GetTFXFragmentShader(GSHWDrawConfig::PSSelector sel);
+	VkShaderModule GetTFXFragmentShader(const GSHWDrawConfig::PSSelector& sel);
 	VkPipeline CreateTFXPipeline(const PipelineSelector& p);
 	VkPipeline GetTFXPipeline(const PipelineSelector& p);
 
@@ -182,8 +177,10 @@ private:
 	bool CreateRenderPasses();
 
 	bool CompileConvertPipelines();
+	bool CompilePresentPipelines();
 	bool CompileInterlacePipelines();
 	bool CompileMergePipelines();
+	bool CompilePostProcessingPipelines();
 
 	bool CheckStagingBufferSize(u32 required_size);
 	void DestroyStagingBuffer();
@@ -204,7 +201,7 @@ public:
 	__fi VkSampler GetPointSampler() const { return m_point_sampler; }
 	__fi VkSampler GetLinearSampler() const { return m_linear_sampler; }
 
-	bool Create(HostDisplay* display) override;
+	bool Create() override;
 	void Destroy() override;
 
 	void ResetAPIState() override;
@@ -227,16 +224,14 @@ public:
 	bool DownloadTexture(GSTexture* src, const GSVector4i& rect, GSTexture::GSMap& out_map) override;
 	void DownloadTextureComplete() override;
 
-	GSTexture* DrawForReadback(GSTexture* src, const GSVector4& sRect, int w, int h, int format = 0, int ps_shader = 0);
-	bool ReadbackTexture(GSTexture* src, const GSVector4i& rect, u32 level, GSTexture::GSMap* dst);
-
-	void CopyRect(GSTexture* sTex, GSTexture* dTex, const GSVector4i& r) override;
-	void DoCopyRect(GSTexture* sTex, GSTexture* dTex, const GSVector4i& r, const GSVector4i& dst_rc);
+	void CopyRect(GSTexture* sTex, GSTexture* dTex, const GSVector4i& r, u32 destX, u32 destY) override;
 
 	void StretchRect(GSTexture* sTex, const GSVector4& sRect, GSTexture* dTex, const GSVector4& dRect,
 		ShaderConvert shader = ShaderConvert::COPY, bool linear = true) override;
 	void StretchRect(GSTexture* sTex, const GSVector4& sRect, GSTexture* dTex, const GSVector4& dRect, bool red,
 		bool green, bool blue, bool alpha) override;
+	void PresentRect(GSTexture* sTex, const GSVector4& sRect, GSTexture* dTex, const GSVector4& dRect,
+		PresentShader shader, float shaderTime, bool linear) override;
 
 	void BeginRenderPassForStretchRect(GSTextureVK* dTex, const GSVector4i& dtex_rc, const GSVector4i& dst_rc);
 	void DoStretchRect(GSTextureVK* sTex, const GSVector4& sRect, GSTextureVK* dTex, const GSVector4& dRect,
@@ -247,7 +242,7 @@ public:
 		u32 dLevel, bool linear);
 
 	void SetupDATE(GSTexture* rt, GSTexture* ds, bool datm, const GSVector4i& bbox);
-	GSTextureVK* SetupPrimitiveTrackingDATE(GSHWDrawConfig& config, PipelineSelector& pipe);
+	GSTextureVK* SetupPrimitiveTrackingDATE(GSHWDrawConfig& config);
 
 	void IASetVertexBuffer(const void* vertex, size_t stride, size_t count);
 	bool IAMapVertexBuffer(void** vertex, size_t stride, size_t count);
@@ -264,7 +259,7 @@ public:
 	bool BindDrawPipeline(const PipelineSelector& p);
 
 	void RenderHW(GSHWDrawConfig& config) override;
-	void UpdateHWPipelineSelector(GSHWDrawConfig& config);
+	void UpdateHWPipelineSelector(GSHWDrawConfig& config, PipelineSelector& pipe);
 	void SendHWDraw(const GSHWDrawConfig& config, GSTextureVK* draw_rt);
 
 	//////////////////////////////////////////////////////////////////////////

@@ -50,6 +50,7 @@ enum FILESYSTEM_FIND_FLAGS
 
 struct FILESYSTEM_STAT_DATA
 {
+	std::time_t CreationTime; // actually inode change time on linux
 	std::time_t ModificationTime;
 	s64 Size;
 	u32 Attributes;
@@ -57,6 +58,7 @@ struct FILESYSTEM_STAT_DATA
 
 struct FILESYSTEM_FIND_DATA
 {
+	std::time_t CreationTime; // actually inode change time on linux
 	std::time_t ModificationTime;
 	std::string FileName;
 	s64 Size;
@@ -65,42 +67,10 @@ struct FILESYSTEM_FIND_DATA
 
 namespace FileSystem
 {
-
 	using FindResultsArray = std::vector<FILESYSTEM_FIND_DATA>;
-
-	/// Builds a path relative to the specified file
-	std::string BuildRelativePath(const std::string_view& filename, const std::string_view& new_filename);
-
-	/// Joins path components together, producing a new path.
-	std::string JoinPath(const std::string_view& base, const std::string_view& next);
-
-	/// Sanitizes a filename for use in a filesystem.
-	void SanitizeFileName(char* Destination, u32 cbDestination, const char* FileName, bool StripSlashes /* = true */);
-	void SanitizeFileName(std::string& Destination, bool StripSlashes = true);
-
-	/// Returns true if the specified path is an absolute path (C:\Path on Windows or /path on Unix).
-	bool IsAbsolutePath(const std::string_view& path);
-
-	/// Returns a view of the extension of a filename.
-	std::string_view GetExtension(const std::string_view& path);
-
-	/// Removes the extension of a filename.
-	std::string_view StripExtension(const std::string_view& path);
-
-	/// Replaces the extension of a filename with another.
-	std::string ReplaceExtension(const std::string_view& path, const std::string_view& new_extension);
 
 	/// Returns the display name of a filename. Usually this is the same as the path.
 	std::string GetDisplayNameFromPath(const std::string_view& path);
-
-	/// Returns the directory component of a filename.
-	std::string_view GetPathDirectory(const std::string_view& path);
-
-	/// Returns the filename component of a filename.
-	std::string_view GetFileNameFromPath(const std::string_view& path);
-
-	/// Returns the file title (less the extension and path) from a filename.
-	std::string_view GetFileTitleFromPath(const std::string_view& path);
 
 	/// Returns a list of "root directories" (i.e. root/home directories on Linux, drive letters on Windows).
 	std::vector<std::string> GetRootDirectoryList();
@@ -121,6 +91,9 @@ namespace FileSystem
 	/// Directory exists?
 	bool DirectoryExists(const char* path);
 
+	/// Directory does not contain any files?
+	bool DirectoryIsEmpty(const char* path);
+
 	/// Delete file
 	bool DeleteFilePath(const char* path);
 
@@ -137,18 +110,45 @@ namespace FileSystem
 
 	int OpenFDFile(const char* filename, int flags, int mode);
 
+	/// Sharing modes for OpenSharedCFile().
+	enum class FileShareMode
+	{
+		DenyReadWrite, /// Exclusive access.
+		DenyWrite, /// Other processes can read from this file.
+		DenyRead, /// Other processes can write to this file.
+		DenyNone, /// Other processes can read and write to this file.
+	};
+
+	/// Opens a file in shareable mode (where other processes can access it concurrently).
+	/// Only has an effect on Windows systems.
+	ManagedCFilePtr OpenManagedSharedCFile(const char* filename, const char* mode, FileShareMode share_mode);
+	std::FILE* OpenSharedCFile(const char* filename, const char* mode, FileShareMode share_mode);
+
 	std::optional<std::vector<u8>> ReadBinaryFile(const char* filename);
 	std::optional<std::vector<u8>> ReadBinaryFile(std::FILE* fp);
 	std::optional<std::string> ReadFileToString(const char* filename);
 	std::optional<std::string> ReadFileToString(std::FILE* fp);
 	bool WriteBinaryFile(const char* filename, const void* data, size_t data_length);
-	bool WriteFileToString(const char* filename, const std::string_view& sv);
+	bool WriteStringToFile(const char* filename, const std::string_view& sv);
 
 	/// creates a directory in the local filesystem
 	/// if the directory already exists, the return value will be true.
 	/// if Recursive is specified, all parent directories will be created
 	/// if they do not exist.
 	bool CreateDirectoryPath(const char* path, bool recursive);
+
+	/// Creates a directory if it doesn't already exist.
+	/// Returns false if it does not exist and creation failed.
+	bool EnsureDirectoryExists(const char* path, bool recursive);
+
+	/// Removes a directory.
+	bool DeleteDirectory(const char* path);
+
+	/// Recursively removes a directory and all subdirectories/files.
+	bool RecursiveDeleteDirectory(const char* path);
+
+	/// Copies one file to another, optionally replacing it if it already exists.
+	bool CopyFilePath(const char* source, const char* destination, bool replace);
 
 	/// Returns the path to the current executable.
 	std::string GetProgramPath();
@@ -158,5 +158,10 @@ namespace FileSystem
 
 	/// Sets the current working directory. Returns true if successful.
 	bool SetWorkingDirectory(const char* path);
+
+	/// Enables/disables NTFS compression on a file or directory.
+	/// Does not apply the compression flag recursively if called for a directory.
+	/// Does nothing and returns false on non-Windows platforms.
+	bool SetPathCompression(const char* path, bool enable);
 
 }; // namespace FileSystem

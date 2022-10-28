@@ -15,9 +15,14 @@
 
 #include "PrecompiledHeader.h"
 
+#include "common/Assertions.h"
+#include "common/FileSystem.h"
+
 #include "ATA.h"
 #include "DEV9/DEV9.h"
-#include "HddCreate.h"
+#ifndef PCSX2_CORE
+#include "HddCreateWx.h"
+#endif
 
 ATA::ATA()
 {
@@ -26,29 +31,45 @@ ATA::ATA()
 	ResetEnd(true);
 }
 
-int ATA::Open(ghc::filesystem::path hddPath)
+ATA::~ATA()
+{
+	if (hddImage)
+		std::fclose(hddImage);
+}
+
+int ATA::Open(const std::string& hddPath)
 {
 	readBufferLen = 256 * 512;
 	readBuffer = new u8[readBufferLen];
 
-	CreateHDDinfo(config.HddSize);
+	CreateHDDinfo(EmuConfig.DEV9.HddSizeSectors);
 
 	//Open File
-	if (!ghc::filesystem::exists(hddPath))
+	if (!FileSystem::FileExists(hddPath.c_str()))
 	{
-		HddCreate hddCreator;
+#ifndef PCSX2_CORE
+		HddCreateWx hddCreator;
 		hddCreator.filePath = hddPath;
-		hddCreator.neededSize = config.HddSize;
+		hddCreator.neededSize = ((u64)EmuConfig.DEV9.HddSizeSectors) * 512;
 		hddCreator.Start();
 
 		if (hddCreator.errored)
 			return -1;
+#else
+		return -1;
+#endif
 	}
-	hddImage = ghc::filesystem::fstream(hddPath, std::ios::in | std::ios::out | std::ios::binary);
+
+	hddImage = FileSystem::OpenCFile(hddPath.c_str(), "r+b");
+	const s64 size = hddImage ? FileSystem::FSize64(hddImage) : -1;
+	if (!hddImage || size < 0)
+	{
+		Console.Error("Failed to open HDD image '%s'", hddPath.c_str());
+		return -1;
+	}
 
 	//Store HddImage size for later check
-	hddImage.seekg(0, std::ios::end);
-	hddImageSize = hddImage.tellg();
+	hddImageSize = static_cast<u64>(size);
 
 	{
 		std::lock_guard ioSignallock(ioMutex);
@@ -87,8 +108,11 @@ void ATA::Close()
 	}
 
 	//Close File Handle
-	if (hddImage.is_open())
-		hddImage.close();
+	if (hddImage)
+	{
+		std::fclose(hddImage);
+		hddImage = nullptr;
+	}
 
 	delete[] readBuffer;
 	readBuffer = nullptr;
@@ -281,7 +305,7 @@ void ATA::Write16(u32 addr, u16 value)
 
 void ATA::Async(uint cycles)
 {
-	if (!hddImage.is_open())
+	if (!hddImage)
 		return;
 
 	if ((regStatus & (ATA_STAT_BUSY | ATA_STAT_DRQ)) == 0 ||
@@ -396,7 +420,7 @@ bool ATA::HDD_CanAccess(int* sectors)
 	s64 posEnd;
 	s64 maxLBA;
 
-	maxLBA = std::min<s64>((s64)config.HddSize * 1024 * 1024 / 512, hddImageSize);
+	maxLBA = std::min<s64>(EmuConfig.DEV9.HddSizeSectors, hddImageSize / 512) - 1;
 	if ((regSelect & 0x40) == 0) //CHS mode
 		maxLBA = std::min<s64>(maxLBA, curCylinders * curHeads * curSectors);
 

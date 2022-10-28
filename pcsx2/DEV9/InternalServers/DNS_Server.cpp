@@ -38,6 +38,7 @@
 #include "DEV9/PacketReader/IP/UDP/DNS/DNS_Packet.h"
 
 #include "DEV9/DEV9.h"
+#include "DEV9/AdapterUtils.h"
 
 using namespace PacketReader;
 using namespace PacketReader::IP;
@@ -101,41 +102,13 @@ namespace InternalServers
 #endif
 	{
 		localhostIP = {127, 0, 0, 1};
+
 		//Find IPv4 Address
-#ifdef _WIN32
-		PIP_ADAPTER_UNICAST_ADDRESS address = nullptr;
-		if (adapter != nullptr)
-		{
-			PIP_ADAPTER_ADDRESSES info = (PIP_ADAPTER_ADDRESSES)adapter;
-			address = info->FirstUnicastAddress;
-			while (address != nullptr && address->Address.lpSockaddr->sa_family != AF_INET)
-				address = address->Next;
-		}
-
-		if (address != nullptr)
-		{
-			sockaddr_in* sockaddr = (sockaddr_in*)address->Address.lpSockaddr;
-			localhostIP = *(IP_Address*)&sockaddr->sin_addr;
-		}
+		std::optional<IP_Address> adapterIP = AdapterUtils::GetAdapterIP(adapter);
+		if (adapterIP.has_value())
+			localhostIP = adapterIP.value();
 		else
 			Console.Error("DEV9: Failed To Get Adapter IP");
-#elif defined(__POSIX__)
-		sockaddr* address = nullptr;
-		if (adapter != nullptr)
-		{
-			ifaddrs* info = (ifaddrs*)adapter;
-			if (info->ifa_addr != nullptr && info->ifa_addr->sa_family == AF_INET)
-				address = info->ifa_addr;
-		}
-
-		if (address != nullptr)
-		{
-			sockaddr_in* sockaddr = (sockaddr_in*)address;
-			localhostIP = *(IP_Address*)&sockaddr->sin_addr;
-		}
-		else
-			Console.Error("DEV9: Failed To Get Adapter IP");
-#endif
 
 		LoadHostList();
 	}
@@ -143,12 +116,19 @@ namespace InternalServers
 	void DNS_Server::LoadHostList()
 	{
 		hosts.clear();
-		for (size_t i = 0; i < config.EthHosts.size(); i++)
+#ifndef PCSX2_CORE
+		for (const ConfigHost& entry : config.EthHosts)
 		{
-			ConfigHost entry = config.EthHosts[i];
 			if (entry.Enabled)
 				hosts.insert_or_assign(entry.Url, *(IP_Address*)entry.Address);
 		}
+#else
+		for (const Pcsx2Config::DEV9Options::HostEntry& entry : EmuConfig.DEV9.EthHosts)
+		{
+			if (entry.Enabled)
+				hosts.insert_or_assign(entry.Url, *(IP_Address*)entry.Address);
+		}
+#endif
 	}
 
 	UDP_Packet* DNS_Server::Recv()
@@ -222,7 +202,7 @@ namespace InternalServers
 	bool DNS_Server::CheckHostList(std::string url, DNS_State* state)
 	{
 		std::transform(url.begin(), url.end(), url.begin(),
-					   [](unsigned char c) { return std::tolower(c); });
+			[](unsigned char c) { return std::tolower(c); });
 
 		auto f = hosts.find(url);
 		if (f != hosts.end())

@@ -22,7 +22,7 @@
 #include "VUmicro.h"
 #include "MTVU.h"
 
-#define vifOp(vifCodeName) _vifT int __fastcall vifCodeName(int pass, const u32* data)
+#define vifOp(vifCodeName) _vifT int vifCodeName(int pass, const u32* data)
 #define pass1 if (pass == 0)
 #define pass2 if (pass == 1)
 #define pass3 if (pass == 2)
@@ -221,7 +221,7 @@ vifOp(vifCode_Flush)
 
 		if (vif1.waitforvu || vif1Regs.stat.VGW)
 			return 0;
-		
+
 		vif1.cmd = 0;
 		vif1.pass = 0;
 	}
@@ -350,7 +350,7 @@ static __fi void _vifCode_MPG(int idx, u32 addr, const u32* data, int size)
 	{
 		//The compare is pretty much a waste of time, likelyhood is that the program isnt there, thats why its copying it.
 		//Faster without.
-		//if (memcmp_mmx(VUx.Micro + addr, data, size*4)) {
+		//if (memcmp(VUx.Micro + addr, data, size*4)) {
 		// Clear VU memory before writing!
 		if (!idx)
 			CpuVU0->Clear(addr, size * 4);
@@ -474,7 +474,7 @@ vifOp(vifCode_MSCNT)
 
 		if (vifX.waitforvu)
 			return 0;
-		
+
 		vuExecMicro(idx, -1, false);
 		vifX.cmd = 0;
 		vifX.pass = 0;

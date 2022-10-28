@@ -16,6 +16,9 @@
 #include "PrecompiledHeader.h"
 
 #include "common/RedtapeWindows.h"
+#include "common/StringUtil.h"
+
+#include "fmt/core.h"
 
 #include <stdio.h>
 #include <windows.h>
@@ -28,7 +31,7 @@
 
 #include <tchar.h>
 #include "tap.h"
-#include "..\dev9.h"
+#include "DEV9/DEV9.h"
 #include <string>
 
 #include <wil/com.h>
@@ -186,9 +189,9 @@ std::vector<AdapterEntry> TAPAdapter::GetAdapters()
 				if (IsTAPDevice(enum_name))
 				{
 					AdapterEntry t;
-					t.type = NetApi::TAP;
-					t.name = std::wstring(name_data);
-					t.guid = std::wstring(enum_name);
+					t.type = Pcsx2Config::DEV9Options::NetApi::TAP;
+					t.name = StringUtil::WideStringToUTF8String(std::wstring(name_data));
+					t.guid = StringUtil::WideStringToUTF8String(std::wstring(enum_name));
 					tap_nic.push_back(t);
 				}
 			}
@@ -196,6 +199,11 @@ std::vector<AdapterEntry> TAPAdapter::GetAdapters()
 	}
 
 	return tap_nic;
+}
+
+AdapterOptions TAPAdapter::GetAdapterOptions()
+{
+	return AdapterOptions::None;
 }
 
 static int TAPGetMACAddress(HANDLE handle, u8* addr)
@@ -217,10 +225,8 @@ static int TAPSetStatus(HANDLE handle, int status)
 		&status, sizeof(status), &len, NULL);
 }
 //Open the TAP adapter and set the connection to enabled :)
-HANDLE TAPOpen(const char* device_guid)
+HANDLE TAPOpen(const std::string& device_guid)
 {
-	char device_path[256];
-
 	struct
 	{
 		unsigned long major;
@@ -229,13 +235,10 @@ HANDLE TAPOpen(const char* device_guid)
 	} version;
 	LONG version_len;
 
-	sprintf_s(device_path, "%s%s%s",
-		USERMODEDEVICEDIR,
-		device_guid,
-		TAPSUFFIX);
+	std::string device_path = USERMODEDEVICEDIR + device_guid + TAPSUFFIX;
 
 	wil::unique_hfile handle(CreateFileA(
-		device_path,
+		device_path.c_str(),
 		GENERIC_READ | GENERIC_WRITE,
 		0,
 		0,
@@ -281,7 +284,7 @@ PIP_ADAPTER_ADDRESSES FindAdapterViaIndex(PIP_ADAPTER_ADDRESSES adapterList, int
 //IP_ADAPTER_ADDRESSES is a structure that contains ptrs to data in other regions
 //of the buffer, se we need to return both so the caller can free the buffer
 //after it's finished reading the needed data from IP_ADAPTER_ADDRESSES
-bool TAPGetWin32Adapter(const char* name, PIP_ADAPTER_ADDRESSES adapter, std::unique_ptr<IP_ADAPTER_ADDRESSES[]>* buffer)
+bool TAPGetWin32Adapter(const std::string& name, PIP_ADAPTER_ADDRESSES adapter, std::unique_ptr<IP_ADAPTER_ADDRESSES[]>* buffer)
 {
 	int neededSize = 256;
 	std::unique_ptr<IP_ADAPTER_ADDRESSES[]> AdapterInfo = std::make_unique<IP_ADAPTER_ADDRESSES[]>(neededSize);
@@ -321,7 +324,7 @@ bool TAPGetWin32Adapter(const char* name, PIP_ADAPTER_ADDRESSES adapter, std::un
 
 	do
 	{
-		if (0 == strcmp(pAdapterInfo->AdapterName, name))
+		if (0 == strcmp(pAdapterInfo->AdapterName, name.c_str()))
 			break;
 
 		pAdapterInfo = pAdapterInfo->Next;
@@ -354,7 +357,7 @@ bool TAPGetWin32Adapter(const char* name, PIP_ADAPTER_ADDRESSES adapter, std::un
 
 	//We must be bridged
 	Console.WriteLn("DEV9: Current adapter is probably bridged");
-	Console.WriteLn(L"DEV9: Adapter Display name: %s", pAdapterInfo->FriendlyName);
+	Console.WriteLn(fmt::format("DEV9: Adapter Display name: {}", StringUtil::WideStringToUTF8String(pAdapterInfo->FriendlyName)));
 
 	//We will need to find the bridge adapter that out adapter is
 	//as the IP information of the tap adapter is null
@@ -368,15 +371,15 @@ bool TAPGetWin32Adapter(const char* name, PIP_ADAPTER_ADDRESSES adapter, std::un
 	 * but it doesn't tell you whether it's a bridge or an LBFO team or something more exotic.
 	 * The way to distinguish exactly which flavor of ms_implat you have is to look at which LWF driver is bound to the *virtual miniport* above the IM driver.
 	 * This is two steps then.
-	 * 
+	 *
 	 * 1. Given a physical NIC, you first want to determine which virtual NIC is layered over it.
 	 * 2. Given a virtual NIC, you want to determine whether ms_bridge is bound to it.
-	 * 
+	 *
 	 * To get the first part, look through the interface stack table (GetIfStackTable). Search the stack table for any entry where the lower is the IfIndex of the physical NIC.
 	 * For any such entry (there will probably be a few), check if that entry's upper IfIndex is the IfIndex for a virtual miniport with component ID "COMPOSITEBUS\MS_IMPLAT_MP".
 	 * If you find such a thing, that means the physical NIC is a member of a bridge/LBFO/something-else-fancy.
 	 * If you don't find it, then you know the NIC isn't part of the bridge that comes with Windows 8 / Windows 10.
-	 * 
+	 *
 	 * To get the second part, just use the same INetCfg code above on the *virtual* NIC's component. If the ms_bridge component is bound to the virtual NIC,
 	 * then that virtual NIC is doing bridging. Otherwise, it's doing something else (like LBFO).
 	 */
@@ -406,7 +409,7 @@ bool TAPGetWin32Adapter(const char* name, PIP_ADAPTER_ADDRESSES adapter, std::un
 				PIP_ADAPTER_ADDRESSES potentialAdapter = FindAdapterViaIndex(AdapterInfoReduced.get(), row.HigherLayerInterfaceIndex);
 				if (potentialAdapter != nullptr)
 				{
-					Console.WriteLn(L"DEV9: %s is possible bridge (Check 1 passed)", potentialAdapter->Description);
+					Console.WriteLn(fmt::format("DEV9: {} is possible bridge (Check 1 passed)", StringUtil::WideStringToUTF8String(potentialAdapter->Description)));
 					potentialBridges.push_back(row.HigherLayerInterfaceIndex);
 				}
 				else
@@ -421,7 +424,9 @@ bool TAPGetWin32Adapter(const char* name, PIP_ADAPTER_ADDRESSES adapter, std::un
 
 	//Step 2
 	//Init COM
-	const HRESULT cohr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+	HRESULT cohr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+	if (cohr == RPC_E_CHANGED_MODE)
+		cohr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 	if (!SUCCEEDED(cohr))
 		return false;
 
@@ -488,7 +493,7 @@ bool TAPGetWin32Adapter(const char* name, PIP_ADAPTER_ADDRESSES adapter, std::un
 									wil::unique_cotaskmem_string dispName;
 									hr = component->GetDisplayName(dispName.put());
 									if (SUCCEEDED(hr))
-										Console.WriteLn(L"DEV9: %s is possible bridge (Check 2 passed)", dispName);
+										Console.WriteLn(fmt::format("DEV9: {} is possible bridge (Check 2 passed)", StringUtil::WideStringToUTF8String(dispName.get())));
 
 									//Check if adapter has the ms_bridge component bound to it.
 									auto bindings = bridge.try_query<INetCfgComponentBindings>();
@@ -501,7 +506,7 @@ bool TAPGetWin32Adapter(const char* name, PIP_ADAPTER_ADDRESSES adapter, std::un
 
 									hr = component->GetDisplayName(dispName.put());
 									if (SUCCEEDED(hr))
-										Console.WriteLn(L"DEV9: %s is bridge (Check 3 passed)", dispName);
+										Console.WriteLn(fmt::format("DEV9: {} is bridge (Check 3 passed)", StringUtil::WideStringToUTF8String(dispName.get())));
 
 									bridgeAdapter = cAdapterInfo;
 									break;
@@ -518,8 +523,7 @@ bool TAPGetWin32Adapter(const char* name, PIP_ADAPTER_ADDRESSES adapter, std::un
 		}
 	}
 
-	if (cohr == S_OK)
-		CoUninitialize();
+	CoUninitialize();
 
 	if (bridgeAdapter != nullptr)
 	{
@@ -534,9 +538,9 @@ bool TAPGetWin32Adapter(const char* name, PIP_ADAPTER_ADDRESSES adapter, std::un
 TAPAdapter::TAPAdapter()
 	: NetAdapter()
 {
-	if (config.ethEnable == 0)
+	if (!EmuConfig.DEV9.EthEnable)
 		return;
-	htap = TAPOpen(config.Eth);
+	htap = TAPOpen(EmuConfig.DEV9.EthDevice);
 
 	read.Offset = 0;
 	read.OffsetHigh = 0;
@@ -562,7 +566,7 @@ TAPAdapter::TAPAdapter()
 
 	IP_ADAPTER_ADDRESSES adapter;
 	std::unique_ptr<IP_ADAPTER_ADDRESSES[]> buffer;
-	if (TAPGetWin32Adapter(config.Eth, &adapter, &buffer))
+	if (TAPGetWin32Adapter(EmuConfig.DEV9.EthDevice, &adapter, &buffer))
 		InitInternalServer(&adapter);
 	else
 	{
@@ -657,7 +661,7 @@ void TAPAdapter::reloadSettings()
 {
 	IP_ADAPTER_ADDRESSES adapter;
 	std::unique_ptr<IP_ADAPTER_ADDRESSES[]> buffer;
-	if (TAPGetWin32Adapter(config.Eth, &adapter, &buffer))
+	if (TAPGetWin32Adapter(EmuConfig.DEV9.EthDevice, &adapter, &buffer))
 		ReloadInternalServer(&adapter);
 	else
 		ReloadInternalServer(nullptr);

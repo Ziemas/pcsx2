@@ -18,7 +18,7 @@
 #include "AppForwardDefs.h"
 #include "Config.h"
 #include "PathDefs.h"
-#include "CDVD/CDVDaccess.h"
+#include "CDVD/CDVDcommon.h"
 #include "common/General.h"
 #include "common/Path.h"
 
@@ -34,7 +34,7 @@ enum DocsModeType
 	// friendly to modern computing security requirements; as it isolates all file modification
 	// to a zone of the hard drive that has granted write permissions to the user.
 	DocsFolder_User,
-	
+
 	// uses a custom location for program data. Typically the custom folder is either the
 	// absolute or relative location of the program -- absolute is preferred because it is
 	// considered more secure by MSW standards, due to DLL search rules.
@@ -57,7 +57,7 @@ namespace PathDefs
 	extern wxDirName GetDocuments( DocsModeType mode );
 }
 
-extern DocsModeType		DocsFolderMode;				// 
+extern DocsModeType		DocsFolderMode;				//
 extern bool				UseDefaultSettingsFolder;	// when TRUE, pcsx2 derives the settings folder from the DocsFolderMode
 
 extern wxDirName		CustomDocumentsFolder;		// allows the specification of a custom home folder for PCSX2 documents files.
@@ -88,8 +88,10 @@ bool IsPortable();
 
 extern InstallationModeType	InstallationMode;
 
+extern const wxChar* CDVD_SourceLabels[];
+
 // =====================================================================================================
-//  Pcsx2 Application Configuration. 
+//  Pcsx2 Application Configuration.
 // =====================================================================================================
 
 class AppConfig
@@ -128,7 +130,8 @@ public:
 				UseDefaultLangs:1,
 				UseDefaultCheats:1,
 				UseDefaultCheatsWS:1,
-				UseDefaultCache:1;
+				UseDefaultCache:1,
+				UseDefaultTextures:1;
 		BITFIELD_END
 
 		wxDirName
@@ -141,7 +144,8 @@ public:
 			Cheats,
 			CheatsWS,
 			Resources,
-			Cache;
+			Cache,
+			Textures;
 
 		wxDirName RunIso; // last used location for Iso loading.
 		wxDirName RunELF; // last used location for ELF loading.
@@ -184,7 +188,6 @@ public:
 		void SanityCheck();
 	};
 
-#ifndef DISABLE_RECORDING
 	struct InputRecordingOptions
 	{
 		wxPoint VirtualPadPosition;
@@ -193,7 +196,6 @@ public:
 		InputRecordingOptions();
 		void loadSave(IniInterface& conf);
 	};
-#endif
 
 	struct UiTemplateOptions {
 		UiTemplateOptions();
@@ -209,9 +211,7 @@ public:
 		wxString OutputInterlaced;
 		wxString Paused;
 		wxString TitleTemplate;
-#ifndef DISABLE_RECORDING
 		wxString RecordingTemplate;
-#endif
 	};
 
 	struct CaptureOptions
@@ -283,12 +283,10 @@ public:
 	ConsoleLogOptions		ProgLogBox;
 	FolderOptions			Folders;
 	GSWindowOptions			GSWindow;
-#ifndef DISABLE_RECORDING
 	InputRecordingOptions   inputRecording;
-#endif
 	UiTemplateOptions		Templates;
 	CaptureOptions			AudioCapture;
-	
+
 	// PCSX2-core emulation options, which are passed to the emu core prior to initiating
 	// an emulation session.  Note these are the options saved into the GUI ini file and
 	// which are shown as options in the gui preferences, but *not* necessarily the options
@@ -297,18 +295,18 @@ public:
 
 public:
 	AppConfig();
-	wxString FullpathToSaveState(wxString serialName, wxString CRCvalue) const;
+	std::string FullpathToSaveState(const std::string& serialName, const std::string& CRCvalue) const;
 	void LoadSave(IniInterface& ini, SettingsWrapper& wrap);
 	void LoadSaveRootItems(IniInterface& ini);
 
 	static int  GetMaxPresetIndex();
     static bool isOkGetPresetTextAndColor(int n, wxString& label, wxColor& c);
-	
+
 	bool        IsOkApplyPreset(int n, bool ignoreMTVU);
 
 
 	//The next 2 flags are used with ApplyConfigToGui which the presets system use:
-	
+
 	//Indicates that the scope is only for preset-related items.
 	static const int APPLY_FLAG_FROM_PRESET			= 0x01;
 
@@ -337,3 +335,5 @@ extern void AppConfig_OnChangedSettingsFolder( bool overwrite =  false );
 extern wxConfigBase* GetAppConfig();
 
 extern std::unique_ptr<AppConfig> g_Conf;
+
+extern bool isValidNewFilename(wxString filenameStringToTest, wxDirName atBasePath, wxString& out_errorMessage, uint minNumCharacters = 5);

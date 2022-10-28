@@ -22,52 +22,61 @@ const char* shaderName(ShaderConvert value)
 {
 	switch (value)
 	{
-		case ShaderConvert::COPY:                return "ps_copy";
-		case ShaderConvert::RGBA8_TO_16_BITS:    return "ps_convert_rgba8_16bits";
-		case ShaderConvert::DATM_1:              return "ps_datm1";
-		case ShaderConvert::DATM_0:              return "ps_datm0";
-		case ShaderConvert::MOD_256:             return "ps_mod256";
-		case ShaderConvert::SCANLINE:            return "ps_filter_scanlines";
-		case ShaderConvert::DIAGONAL_FILTER:     return "ps_filter_diagonal";
-		case ShaderConvert::TRANSPARENCY_FILTER: return "ps_filter_transparency";
-		case ShaderConvert::TRIANGULAR_FILTER:   return "ps_filter_triangular";
-		case ShaderConvert::COMPLEX_FILTER:      return "ps_filter_complex";
-		case ShaderConvert::FLOAT32_TO_16_BITS:  return "ps_convert_float32_32bits";
-		case ShaderConvert::FLOAT32_TO_32_BITS:  return "ps_convert_float32_32bits";
-		case ShaderConvert::FLOAT32_TO_RGBA8:    return "ps_convert_float32_rgba8";
-		case ShaderConvert::FLOAT16_TO_RGB5A1:   return "ps_convert_float16_rgb5a1";
-		case ShaderConvert::RGBA8_TO_FLOAT32:    return "ps_convert_rgba8_float32";
-		case ShaderConvert::RGBA8_TO_FLOAT24:    return "ps_convert_rgba8_float24";
-		case ShaderConvert::RGBA8_TO_FLOAT16:    return "ps_convert_rgba8_float16";
-		case ShaderConvert::RGB5A1_TO_FLOAT16:   return "ps_convert_rgb5a1_float16";
-		case ShaderConvert::DEPTH_COPY:          return "ps_depth_copy";
-		case ShaderConvert::RGBA_TO_8I:          return "ps_convert_rgba_8i";
-		case ShaderConvert::YUV:                 return "ps_yuv";
+			// clang-format off
+		case ShaderConvert::COPY:                   return "ps_copy";
+		case ShaderConvert::RGBA8_TO_16_BITS:       return "ps_convert_rgba8_16bits";
+		case ShaderConvert::DATM_1:                 return "ps_datm1";
+		case ShaderConvert::DATM_0:                 return "ps_datm0";
+		case ShaderConvert::MOD_256:                return "ps_mod256";
+		case ShaderConvert::TRANSPARENCY_FILTER:    return "ps_filter_transparency";
+		case ShaderConvert::FLOAT32_TO_16_BITS:     return "ps_convert_float32_32bits";
+		case ShaderConvert::FLOAT32_TO_32_BITS:     return "ps_convert_float32_32bits";
+		case ShaderConvert::FLOAT32_TO_RGBA8:       return "ps_convert_float32_rgba8";
+		case ShaderConvert::FLOAT16_TO_RGB5A1:      return "ps_convert_float16_rgb5a1";
+		case ShaderConvert::RGBA8_TO_FLOAT32:       return "ps_convert_rgba8_float32";
+		case ShaderConvert::RGBA8_TO_FLOAT24:       return "ps_convert_rgba8_float24";
+		case ShaderConvert::RGBA8_TO_FLOAT16:       return "ps_convert_rgba8_float16";
+		case ShaderConvert::RGB5A1_TO_FLOAT16:      return "ps_convert_rgb5a1_float16";
+		case ShaderConvert::RGBA8_TO_FLOAT32_BILN:  return "ps_convert_rgba8_float32_biln";
+		case ShaderConvert::RGBA8_TO_FLOAT24_BILN:  return "ps_convert_rgba8_float24_biln";
+		case ShaderConvert::RGBA8_TO_FLOAT16_BILN:  return "ps_convert_rgba8_float16_biln";
+		case ShaderConvert::RGB5A1_TO_FLOAT16_BILN: return "ps_convert_rgb5a1_float16_biln";
+		case ShaderConvert::DEPTH_COPY:             return "ps_depth_copy";
+		case ShaderConvert::RGBA_TO_8I:             return "ps_convert_rgba_8i";
+		case ShaderConvert::YUV:                    return "ps_yuv";
+			// clang-format on
 		default:
 			ASSERT(0);
 			return "ShaderConvertUnknownShader";
 	}
 }
 
-static const int MipmapLevelsForSize(int width, int height)
+const char* shaderName(PresentShader value)
+{
+	switch (value)
+	{
+			// clang-format off
+		case PresentShader::COPY:              return "ps_copy";
+		case PresentShader::SCANLINE:          return "ps_filter_scanlines";
+		case PresentShader::DIAGONAL_FILTER:   return "ps_filter_diagonal";
+		case PresentShader::TRIANGULAR_FILTER: return "ps_filter_triangular";
+		case PresentShader::COMPLEX_FILTER:    return "ps_filter_complex";
+		case PresentShader::LOTTES_FILTER:     return "ps_filter_lottes";
+			// clang-format on
+		default:
+			ASSERT(0);
+			return "DisplayShaderUnknownShader";
+	}
+}
+
+static int MipmapLevelsForSize(int width, int height)
 {
 	return std::min(static_cast<int>(std::log2(std::max(width, height))) + 1, MAXIMUM_TEXTURE_MIPMAP_LEVELS);
 }
 
 std::unique_ptr<GSDevice> g_gs_device;
 
-GSDevice::GSDevice()
-	: m_merge(NULL)
-	, m_weavebob(NULL)
-	, m_blend(NULL)
-	, m_target_tmp(NULL)
-	, m_current(NULL)
-	, m_frame(0)
-	, m_rbswapped(false)
-{
-	memset(&m_vertex, 0, sizeof(m_vertex));
-	memset(&m_index, 0, sizeof(m_index));
-}
+GSDevice::GSDevice() = default;
 
 GSDevice::~GSDevice()
 {
@@ -79,9 +88,8 @@ GSDevice::~GSDevice()
 	delete m_target_tmp;
 }
 
-bool GSDevice::Create(HostDisplay* display)
+bool GSDevice::Create()
 {
-	m_display = display;
 	return true;
 }
 
@@ -156,12 +164,10 @@ GSTexture* GSDevice::FetchSurface(GSTexture::Type type, int width, int height, i
 	}
 
 	t->SetScale(GSVector2(1, 1)); // Things seem to assume that all textures come out of here with scale 1...
-	t->Commit(); // Clear won't be done if the texture isn't committed.
 
 	switch (type)
 	{
 	case GSTexture::Type::RenderTarget:
-	case GSTexture::Type::SparseRenderTarget:
 		{
 			if (clear)
 				ClearRenderTarget(t, 0);
@@ -170,7 +176,6 @@ GSTexture* GSDevice::FetchSurface(GSTexture::Type type, int width, int height, i
 		}
 		break;
 	case GSTexture::Type::DepthStencil:
-	case GSTexture::Type::SparseDepthStencil:
 		{
 			if (clear)
 				ClearDepth(t);
@@ -210,12 +215,6 @@ void GSDevice::Recycle(GSTexture* t)
 {
 	if (t)
 	{
-#ifdef _DEBUG
-		// Uncommit saves memory but it means a futur allocation when we want to reuse the texture.
-		// Which is slow and defeat the purpose of the m_pool cache.
-		// However, it can help to spot part of texture that we forgot to commit
-		t->Uncommit();
-#endif
 		t->last_frame_used = m_frame;
 
 		m_pool.push_front(t);
@@ -254,16 +253,6 @@ void GSDevice::ClearSamplerCache()
 {
 }
 
-GSTexture* GSDevice::CreateSparseRenderTarget(int w, int h, GSTexture::Format format, bool clear)
-{
-	return FetchSurface(HasColorSparse() ? GSTexture::Type::SparseRenderTarget : GSTexture::Type::RenderTarget, w, h, 1, format, clear, true);
-}
-
-GSTexture* GSDevice::CreateSparseDepthStencil(int w, int h, GSTexture::Format format, bool clear)
-{
-	return FetchSurface(HasDepthSparse() ? GSTexture::Type::SparseDepthStencil : GSTexture::Type::DepthStencil, w, h, 1, format, clear, true);
-}
-
 GSTexture* GSDevice::CreateRenderTarget(int w, int h, GSTexture::Format format, bool clear)
 {
 	return FetchSurface(GSTexture::Type::RenderTarget, w, h, 1, format, clear, true);
@@ -287,7 +276,7 @@ GSTexture* GSDevice::CreateOffscreen(int w, int h, GSTexture::Format format)
 
 GSTexture::Format GSDevice::GetDefaultTextureFormat(GSTexture::Type type)
 {
-	if (type == GSTexture::Type::DepthStencil || type == GSTexture::Type::SparseDepthStencil)
+	if (type == GSTexture::Type::DepthStencil)
 		return GSTexture::Format::DepthStencil;
 	else
 		return GSTexture::Format::Color;
@@ -313,6 +302,21 @@ bool GSDevice::DownloadTextureConvert(GSTexture* src, const GSVector4& sRect, co
 void GSDevice::StretchRect(GSTexture* sTex, GSTexture* dTex, const GSVector4& dRect, ShaderConvert shader, bool linear)
 {
 	StretchRect(sTex, GSVector4(0, 0, 1, 1), dTex, dRect, shader, linear);
+}
+
+void GSDevice::ClearCurrent()
+{
+	m_current = nullptr;
+
+	delete m_merge;
+	delete m_weavebob;
+	delete m_blend;
+	delete m_target_tmp;
+
+	m_merge = nullptr;
+	m_weavebob = nullptr;
+	m_blend = nullptr;
+	m_target_tmp = nullptr;
 }
 
 void GSDevice::Merge(GSTexture* sTex[3], GSVector4* sRect, GSVector4* dRect, const GSVector2i& fs, const GSRegPMODE& PMODE, const GSRegEXTBUF& EXTBUF, const GSVector4& c)
@@ -358,8 +362,9 @@ void GSDevice::Interlace(const GSVector2i& ds, int field, int mode, float yoffse
 	if (mode == 0 || mode == 2) // weave or blend
 	{
 		// weave first
+		const float offset = yoffset * static_cast<float>(field);
 
-		DoInterlace(m_merge, m_weavebob, field, false, 0);
+		DoInterlace(m_merge, m_weavebob, field, false, GSConfig.DisableInterlaceOffset ? 0.0f : offset);
 
 		if (mode == 2)
 		{
@@ -378,7 +383,8 @@ void GSDevice::Interlace(const GSVector2i& ds, int field, int mode, float yoffse
 	}
 	else if (mode == 1) // bob
 	{
-		DoInterlace(m_merge, m_weavebob, 3, true, yoffset * field);
+		// Field is reversed here as we are countering the bounce.
+		DoInterlace(m_merge, m_weavebob, 3, true, yoffset * (1-field));
 
 		m_current = m_weavebob;
 	}
@@ -425,8 +431,15 @@ void GSDevice::ShadeBoost()
 		const GSVector4 sRect(0, 0, 1, 1);
 		const GSVector4 dRect(0, 0, s.x, s.y);
 
+		// predivide to avoid the divide (multiply) in the shader
+		const float params[4] = {
+			static_cast<float>(GSConfig.ShadeBoost_Brightness) * (1.0f / 50.0f),
+			static_cast<float>(GSConfig.ShadeBoost_Contrast) * (1.0f / 50.0f),
+			static_cast<float>(GSConfig.ShadeBoost_Saturation) * (1.0f / 50.0f),
+		};
+
 		StretchRect(m_current, sRect, m_target_tmp, dRect, ShaderConvert::COPY, false);
-		DoShadeBoost(m_target_tmp, m_current);
+		DoShadeBoost(m_target_tmp, m_current, params);
 	}
 }
 
@@ -470,6 +483,33 @@ bool GSDevice::ResizeTarget(GSTexture** t)
 	return ResizeTexture(t, GSTexture::Type::RenderTarget, s.x, s.y);
 }
 
+void GSDevice::SetHWDrawConfigForAlphaPass(GSHWDrawConfig::PSSelector* ps,
+	GSHWDrawConfig::ColorMaskSelector* cms,
+	GSHWDrawConfig::BlendState* bs,
+	GSHWDrawConfig::DepthStencilSelector* dss)
+{
+	// only need to compute the alpha component (allow the shader to optimize better)
+	ps->no_ablend = false;
+	ps->only_alpha = true;
+
+	// definitely don't need to compute software blend (this may get rid of some barriers)
+	ps->blend_a = ps->blend_b = ps->blend_c = ps->blend_d = 0;
+
+	// only write alpha (RGB=0,A=1)
+	cms->wrgba = (1 << 3);
+
+	// no need for hardware blending, since we're not writing RGB
+	bs->enable = false;
+
+	// if depth writes are on, we can optimize to an EQUAL test, otherwise we leave the tests alone
+	// since the alpha channel isn't blended, the last fragment wins and this'll be okay
+	if (dss->zwe)
+	{
+		dss->zwe = false;
+		dss->ztst = ZTST_GEQUAL;
+	}
+}
+
 GSAdapter::operator std::string() const
 {
 	char buf[sizeof "12345678:12345678:12345678:12345678"];
@@ -498,20 +538,29 @@ GSAdapter::GSAdapter(const DXGI_ADAPTER_DESC1& desc_dxgi)
 // TODO
 #endif
 
-HWBlend GSDevice::GetBlend(size_t index)
-{
-	HWBlend blend = m_blendMap[index];
-	blend.op  = ConvertBlendEnum(blend.op);
-	blend.src = ConvertBlendEnum(blend.src);
-	blend.dst = ConvertBlendEnum(blend.dst);
-	return blend;
-}
-
-u16 GSDevice::GetBlendFlags(size_t index) { return m_blendMap[index].flags; }
-
 // clang-format off
 
-std::array<HWBlend, 3*3*3*3 + 1> GSDevice::m_blendMap =
+const std::array<u8, 16> GSDevice::m_replaceDualSrcBlendMap =
+{{
+	SRC_COLOR,        // SRC_COLOR
+	INV_SRC_COLOR,    // INV_SRC_COLOR
+	DST_COLOR,        // DST_COLOR
+	INV_DST_COLOR,    // INV_DST_COLOR
+	SRC_COLOR,        // SRC1_COLOR
+	INV_SRC_COLOR,    // INV_SRC1_COLOR
+	SRC_ALPHA,        // SRC_ALPHA
+	INV_SRC_ALPHA,    // INV_SRC_ALPHA
+	DST_ALPHA,        // DST_ALPHA
+	INV_DST_ALPHA,    // INV_DST_ALPHA
+	SRC_ALPHA,        // SRC1_ALPHA
+	INV_SRC_ALPHA,    // INV_SRC1_ALPHA
+	CONST_COLOR,      // CONST_COLOR
+	INV_CONST_COLOR,  // INV_CONST_COLOR
+	CONST_ONE,        // CONST_ONE
+	CONST_ZERO        // CONST_ZERO
+}};
+
+const std::array<HWBlend, 3*3*3*3> GSDevice::m_blendMap =
 {{
 	{ BLEND_NO_REC               , OP_ADD          , CONST_ONE       , CONST_ZERO}      , // 0000: (Cs - Cs)*As + Cs ==> Cs
 	{ BLEND_CD                   , OP_ADD          , CONST_ZERO      , CONST_ONE}       , // 0001: (Cs - Cs)*As + Cd ==> Cd
@@ -594,5 +643,4 @@ std::array<HWBlend, 3*3*3*3 + 1> GSDevice::m_blendMap =
 	{ BLEND_NO_REC               , OP_ADD          , CONST_ONE       , CONST_ZERO}      , // 2220: (0  -  0)*F  + Cs ==> Cs
 	{ BLEND_CD                   , OP_ADD          , CONST_ZERO      , CONST_ONE}       , // 2221: (0  -  0)*F  + Cd ==> Cd
 	{ BLEND_NO_REC               , OP_ADD          , CONST_ZERO      , CONST_ZERO}      , // 2222: (0  -  0)*F  +  0 ==> 0
-	{ 0                          , OP_ADD          , SRC_ALPHA       , INV_SRC_ALPHA}   , // extra for merge operation
 }};

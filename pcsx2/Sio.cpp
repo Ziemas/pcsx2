@@ -14,16 +14,18 @@
  */
 
 #include "PrecompiledHeader.h"
-#include "IopCommon.h"
+#include "R3000A.h"
+#include "IopHw.h"
+#include "IopDma.h"
 
 #include "Common.h"
 #include "Sio.h"
 #include "sio_internal.h"
 #include "PAD/Gamepad.h"
 
-#ifndef DISABLE_RECORDING
-#	include "Recording/InputRecording.h"
-#endif
+#include "common/Timer.h"
+#include "Recording/InputRecording.h"
+
 
 _sio sio;
 _mcd mcds[2][4];
@@ -50,14 +52,7 @@ static const u8 memcard_psx[] = {0x5A, 0x5D, 0x5C, 0x5D, 0x04, 0x00, 0x00, 0x80}
 //(A 'try' in this context is the game accessing SIO)
 static const int   FORCED_MCD_EJECTION_MIN_TRIES =2;
 static const int   FORCED_MCD_EJECTION_MAX_TRIES =128;
-static const float FORCED_MCD_EJECTION_MAX_MS_AFTER_MIN_TRIES =2800; 
-
-wxString GetTimeMsStr(){
-	wxDateTime unow=wxDateTime::UNow();
-	wxString res;
-	res.Printf(L"%s.%03d", WX_STR(unow.Format(L"%H:%M:%S")), (int)unow.GetMillisecond() );
-	return res;
-}
+static const float FORCED_MCD_EJECTION_MAX_MS_AFTER_MIN_TRIES =2800;
 
 //allow timeout also for the mcd manager panel
 void SetForceMcdEjectTimeoutNow( uint port, uint slot )
@@ -100,7 +95,7 @@ void sioInit()
 
 	sio.bufSize = 4;
 	siomode = SIO_START;
-	
+
 	for(int i = 0; i < 2; i++)
 	{
 		for(int j = 0; j < 4; j++)
@@ -160,7 +155,7 @@ SIO_WRITE sioWriteStart(u8 data)
 
 	//if(size1 != size2)
 	//	DevCon.Warning("SIO: Bad command length [%02X] (%02X|%02X)", data, size1, size2);
-	
+
 	// On mismatch, sio2.cmdlength (size1) is smaller than what it should (Persona 3)
 	// while size2 is the proper length. -KrossX
 	sio.bufSize = size2; //std::max(size1, size2);
@@ -210,16 +205,14 @@ SIO_WRITE sioWriteController(u8 data)
 
 	default:
 		sio.buf[sio.bufCount] = PADpoll(data);
-#ifndef DISABLE_RECORDING
-		if (g_Conf->EmuOptions.EnableRecordingTools)
+		if (EmuConfig.EnableRecordingTools)
 		{
 			// Only examine controllers 1 / 2
-			if (sio.slot[sio.port] == 0)
+			if (sio.slot[sio.port] == 0 || sio.slot[sio.port] == 1)
 			{
 				g_InputRecording.ControllerInterrupt(data, sio.port, sio.bufCount, sio.buf);
 			}
 		}
-#endif
 		break;
 	}
 	//Console.WriteLn( "SIO: sent = %02X  From pad data =  %02X  bufCnt %08X ", data, sio.buf[sio.bufCount], sio.bufCount);
@@ -332,7 +325,7 @@ SIO_WRITE memcardAuth(u8 data)
 	{
 		switch(data)
 		{
-		case 0x01: case 0x02: case 0x04: 
+		case 0x01: case 0x02: case 0x04:
 		case 0x0F: case 0x11: case 0x13:
 			doXorCheck = true;
 			xorResult = 0;
@@ -365,7 +358,7 @@ SIO_WRITE memcardErase(u8 data)
 		if(data != 0x81) sio.bufCount = -1;
 		break;
 
-	case 1: 
+	case 1:
 		{
 			u8 header[] = {0xFF, 0xFF, 0xFF, 0x2B, mcd->term};
 
@@ -414,7 +407,7 @@ SIO_WRITE memcardWrite(u8 data)
 		if(data != 0x81) sio.bufCount = -1;
 		break;
 
-	case 1: 
+	case 1:
 		{
 			u8 header[] = {0xFF, 0xFF, 0xFF, 0x2B, mcd->term};
 
@@ -471,7 +464,7 @@ SIO_WRITE memcardWrite(u8 data)
 		else if(sio.bufCount == checksum_pos)
 		{
 			u8 xor_check = mcd->DoXor(&sio.buf[4], checksum_pos - 4);
-				
+
 			if(xor_check != sio.buf[sio.bufCount])
 				Console.Warning("MemWrite: Checksum invalid! XOR: %02X, IN: %02X\n", xor_check, sio.buf[sio.bufCount]);
 
@@ -505,7 +498,7 @@ SIO_WRITE memcardRead(u8 data)
 		if(data != 0x81) sio.bufCount = -1;
 		break;
 
-	case 1: 
+	case 1:
 		{
 			u8 header[] = {0xFF, 0xFF, 0xFF, 0x2B, mcd->term};
 
@@ -570,7 +563,7 @@ SIO_WRITE memcardRead(u8 data)
 SIO_WRITE memcardSector(u8 data)
 {
 	static u8 xor_check = 0;
-	
+
 	switch(sio.bufCount)
 	{
 		case 2: mcd->sectorAddr  = data <<  0; xor_check  = data; break;
@@ -605,31 +598,30 @@ SIO_WRITE memcardInit()
 	if(mcd->ForceEjection_Timeout)
 	{
 		if(mcd->ForceEjection_Timeout == FORCED_MCD_EJECTION_MAX_TRIES && mcd->IsPresent())
-			Console.WriteLn( Color_Green,  L"[%s] Auto-ejecting memcard [port:%d, slot:%d]", WX_STR(GetTimeMsStr()), sio.GetPort(), sio.GetSlot());
+			Console.WriteLn( Color_Green,  "Auto-ejecting memcard [port:%d, slot:%d]", sio.GetPort(), sio.GetSlot());
 
 		mcd->ForceEjection_Timeout--;
 		forceEject = true;
 
 		u32 numTimesAccessed = FORCED_MCD_EJECTION_MAX_TRIES - mcd->ForceEjection_Timeout;
-		
+
 		//minimum tries reached. start counting millisec timeout.
 		if(numTimesAccessed == FORCED_MCD_EJECTION_MIN_TRIES)
-			mcd->ForceEjection_Timestamp = wxDateTime::UNow();
+			mcd->ForceEjection_Timestamp = Common::Timer::GetCurrentValue();
 
 		if(numTimesAccessed > FORCED_MCD_EJECTION_MIN_TRIES)
 		{
-			wxTimeSpan delta = wxDateTime::UNow().Subtract(mcd->ForceEjection_Timestamp);
-			if(delta.GetMilliseconds() >= FORCED_MCD_EJECTION_MAX_MS_AFTER_MIN_TRIES)
+			if(Common::Timer::ConvertValueToMilliseconds(Common::Timer::GetCurrentValue() - mcd->ForceEjection_Timestamp) >= FORCED_MCD_EJECTION_MAX_MS_AFTER_MIN_TRIES)
 			{
-				DevCon.Warning( L"[%s] Auto-eject: Timeout reached after mcd was accessed %d times [port:%d, slot:%d]", WX_STR(GetTimeMsStr()), numTimesAccessed, sio.GetPort(), sio.GetSlot());
+				DevCon.Warning( "Auto-eject: Timeout reached after mcd was accessed %d times [port:%d, slot:%d]", numTimesAccessed, sio.GetPort(), sio.GetSlot());
 				mcd->ForceEjection_Timeout = 0;	//Done. on next sio access the card will be seen as inserted.
 			}
 		}
 
 		if(mcd->ForceEjection_Timeout == 0 && mcd->IsPresent())
-			Console.WriteLn( Color_Green,  L"[%s] Re-inserting auto-ejected memcard [port:%d, slot:%d]", WX_STR(GetTimeMsStr()), sio.GetPort(), sio.GetSlot());
+			Console.WriteLn( Color_Green,  "Re-inserting auto-ejected memcard [port:%d, slot:%d]", sio.GetPort(), sio.GetSlot());
 	}
-			
+
 	if(!forceEject && mcd->IsPresent())
 	{
 		DEVICE_PLUGGED();
@@ -641,7 +633,7 @@ SIO_WRITE memcardInit()
 		siomode = SIO_DUMMY;
 	}
 
-	
+
 }
 
 SIO_WRITE sioWriteMemcard(u8 data)
@@ -1011,7 +1003,7 @@ void sioNextFrame() {
 	}
 }
 
-void sioSetGameSerial( const wxString& serial ) {
+void sioSetGameSerial( const std::string& serial ) {
 	for ( uint port = 0; port < 2; ++port ) {
 		for ( uint slot = 0; slot < 4; ++slot ) {
 			if ( mcds[port][slot].ReIndex( serial ) ) {
@@ -1062,4 +1054,34 @@ void SaveStateBase::sioFreeze()
 				mcds[port][slot].ForceEjection_Timeout = FORCED_MCD_EJECTION_MAX_TRIES;
 		}
 	}
+}
+
+std::tuple<u32, u32> sioConvertPadToPortAndSlot(u32 index)
+{
+	if (index > 4) // [5,6,7]
+		return std::make_tuple(1, index - 4); // 2B,2C,2D
+	else if (index > 1) // [2,3,4]
+		return std::make_tuple(0, index - 1); // 1B,1C,1D
+	else // [0,1]
+		return std::make_tuple(index, 0); // 1A,2A
+}
+
+u32 sioConvertPortAndSlotToPad(u32 port, u32 slot)
+{
+	if (slot == 0)
+		return port;
+	else if (port == 0) // slot=[0,1]
+		return slot + 1; // 2,3,4
+	else
+		return slot + 4; // 5,6,7
+}
+
+bool sioPadIsMultitapSlot(u32 index)
+{
+	return (index >= 2);
+}
+
+bool sioPortAndSlotIsMultitap(u32 port, u32 slot)
+{
+	return (slot != 0);
 }

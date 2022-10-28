@@ -17,7 +17,12 @@ set(PCSX2_DEFS "")
 #-------------------------------------------------------------------------------
 option(DISABLE_BUILD_DATE "Disable including the binary compile date")
 option(ENABLE_TESTS "Enables building the unit tests" ON)
-option(USE_SYSTEM_YAML "Uses a system version of yaml, if found")
+set(USE_SYSTEM_LIBS "AUTO" CACHE STRING "Use system libraries instead of bundled libraries.  ON - Always use system and fail if unavailable, OFF - Always use bundled, AUTO - Use system if available, otherwise use bundled.  Default is AUTO")
+optional_system_library(fmt)
+optional_system_library(ryml)
+optional_system_library(zstd)
+optional_system_library(libzip)
+optional_system_library(SDL2)
 option(LTO_PCSX2_CORE "Enable LTO/IPO/LTCG on the subset of pcsx2 that benefits most from it but not anything else")
 
 if(WIN32)
@@ -38,6 +43,7 @@ option(USE_VTUNE "Plug VTUNE to profile GS JIT.")
 # Graphical option
 #-------------------------------------------------------------------------------
 option(BUILD_REPLAY_LOADERS "Build GS replayer to ease testing (developer option)")
+option(USE_OPENGL "Enable OpenGL GS renderer" ON)
 option(USE_VULKAN "Enable Vulkan GS renderer" ON)
 
 #-------------------------------------------------------------------------------
@@ -140,44 +146,13 @@ endif()
 # Architecture bitness detection
 include(TargetArch)
 target_architecture(PCSX2_TARGET_ARCHITECTURES)
-if(${PCSX2_TARGET_ARCHITECTURES} MATCHES "x86_64" OR ${PCSX2_TARGET_ARCHITECTURES} MATCHES "i386")
+if(${PCSX2_TARGET_ARCHITECTURES} MATCHES "x86_64")
 	message(STATUS "Compiling a ${PCSX2_TARGET_ARCHITECTURES} build on a ${CMAKE_HOST_SYSTEM_PROCESSOR} host.")
 else()
 	message(FATAL_ERROR "Unsupported architecture: ${PCSX2_TARGET_ARCHITECTURES}")
 endif()
 
-if(${PCSX2_TARGET_ARCHITECTURES} MATCHES "i386")
-	# * -fPIC option was removed for multiple reasons.
-	#     - Code only supports the x86 architecture.
-	#     - code uses the ebx register so it's not compliant with PIC.
-	#     - Impacts the performance too much.
-	#     - Only plugins. No package will link to them.
-	set(CMAKE_POSITION_INDEPENDENT_CODE OFF)
-
-	if(NOT DEFINED ARCH_FLAG)
-		if (MSVC)
-			set(ARCH_FLAG /arch:SSE2)
-		else()
-			if (DISABLE_ADVANCE_SIMD)
-				if (USE_ICC)
-					set(ARCH_FLAG "-msse2 -msse4.1")
-				else()
-					set(ARCH_FLAG "-msse -msse2 -msse4.1 -mfxsr -march=i686")
-				endif()
-			else()
-				# AVX requires some fix of the ABI (mangling) (default 2)
-				# Note: V6 requires GCC 4.7
-				#set(ARCH_FLAG "-march=native -fabi-version=6")
-				set(ARCH_FLAG "-mfxsr -march=native")
-			endif()
-		endif()
-	endif()
-
-	list(APPEND PCSX2_DEFS _ARCH_32=1 _M_X86=1 _M_X86_32=1)
-	set(_ARCH_32 1)
-	set(_M_X86 1)
-	set(_M_X86_32 1)
-elseif(${PCSX2_TARGET_ARCHITECTURES} MATCHES "x86_64")
+if(${PCSX2_TARGET_ARCHITECTURES} MATCHES "x86_64")
 	# x86_64 requires -fPIC
 	set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
@@ -193,10 +168,9 @@ elseif(${PCSX2_TARGET_ARCHITECTURES} MATCHES "x86_64")
 			set(ARCH_FLAG "-march=native")
 		endif()
 	endif()
-	list(APPEND PCSX2_DEFS _ARCH_64=1 _M_X86=1 _M_X86_64=1 __M_X86_64=1)
+	list(APPEND PCSX2_DEFS _ARCH_64=1 _M_X86=1)
 	set(_ARCH_64 1)
 	set(_M_X86 1)
-	set(_M_X86_64 1)
 else()
 	# All but i386 requires -fPIC
 	set(CMAKE_POSITION_INDEPENDENT_CODE ON)
@@ -223,19 +197,36 @@ else()
 	add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fno-operator-names>)
 endif()
 
+set(CONFIG_REL_NO_DEB $<OR:$<CONFIG:Release>,$<CONFIG:MinSizeRel>>)
+set(CONFIG_ANY_REL $<OR:$<CONFIG:Release>,$<CONFIG:MinSizeRel>,$<CONFIG:RelWithDebInfo>>)
+
 if(WIN32)
 	add_compile_definitions(
 		$<$<CONFIG:Debug>:_ITERATOR_DEBUG_LEVEL=2>
 		$<$<CONFIG:Devel>:_ITERATOR_DEBUG_LEVEL=1>
-		$<$<CONFIG:RelWithDebInfo>:_ITERATOR_DEBUG_LEVEL=0>
-		$<$<CONFIG:MinSizeRel>:_ITERATOR_DEBUG_LEVEL=0>
-		$<$<CONFIG:Release>:_ITERATOR_DEBUG_LEVEL=0>
+		$<${CONFIG_ANY_REL}:_ITERATOR_DEBUG_LEVEL=0>
 	)
 	list(APPEND PCSX2_DEFS TIXML_USE_STL _SCL_SECURE_NO_WARNINGS _UNICODE UNICODE)
 endif()
 
+if(MSVC)
+	# Enable PDB generation in release builds
+	add_compile_options(
+		$<${CONFIG_REL_NO_DEB}:/Zi>
+	)
+	add_link_options(
+		$<${CONFIG_REL_NO_DEB}:/DEBUG>
+		$<${CONFIG_REL_NO_DEB}:/OPT:REF>
+		$<${CONFIG_REL_NO_DEB}:/OPT:ICF>
+	)
+endif()
+
 if(USE_VTUNE)
 	list(APPEND PCSX2_DEFS ENABLE_VTUNE)
+endif()
+
+if(USE_OPENGL)
+	list(APPEND PCSX2_DEFS ENABLE_OPENGL)
 endif()
 
 if(USE_VULKAN)
@@ -337,9 +328,18 @@ endif()
 # MacOS-specific things
 #-------------------------------------------------------------------------------
 
-set(CMAKE_OSX_DEPLOYMENT_TARGET 10.13)
+if(NOT CMAKE_GENERATOR MATCHES "Xcode")
+	# Assume Xcode builds aren't being used for distribution
+	# Helpful because Xcode builds don't build multiple metallibs for different macOS versions
+	# Also helpful because Xcode's interactive shader debugger requires apps be built for the latest macOS
+	if (QT_BUILD)
+		set(CMAKE_OSX_DEPLOYMENT_TARGET 10.14)
+	else()
+		set(CMAKE_OSX_DEPLOYMENT_TARGET 10.13)
+	endif()
+endif()
 
-if (APPLE AND ${CMAKE_OSX_DEPLOYMENT_TARGET} VERSION_LESS 10.14 AND NOT ${CMAKE_CXX_COMPILER_VERSION} VERSION_LESS 9)
+if (APPLE AND CMAKE_OSX_DEPLOYMENT_TARGET AND "${CMAKE_OSX_DEPLOYMENT_TARGET}" VERSION_LESS 10.14 AND NOT ${CMAKE_CXX_COMPILER_VERSION} VERSION_LESS 9)
 	# Older versions of the macOS stdlib don't have operator new(size_t, align_val_t)
 	# Disable use of them with this flag
 	# Not great, but also no worse that what we were getting before we turned on C++17

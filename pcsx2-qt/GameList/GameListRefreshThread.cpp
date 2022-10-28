@@ -23,9 +23,6 @@
 
 #include <QtWidgets/QMessageBox>
 
-// Limit UI update times to 4 per second, so we don't spend longer redrawing the UI than scanning
-static constexpr float UI_UPDATE_INTERVAL = 0.25f;
-
 AsyncRefreshProgressCallback::AsyncRefreshProgressCallback(GameListRefreshThread* parent)
 	: m_parent(parent)
 {
@@ -125,6 +122,6 @@ void GameListRefreshThread::cancel()
 
 void GameListRefreshThread::run()
 {
-	GameList::Refresh(m_invalidate_cache, &m_progress);
+	GameList::Refresh(m_invalidate_cache, false, &m_progress);
 	emit refreshComplete();
 }

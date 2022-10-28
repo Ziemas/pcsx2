@@ -15,7 +15,7 @@
 
 #include "PrecompiledHeader.h"
 #include "App.h"
-#include "common/IniInterface.h"
+#include "IniInterface.h"
 #include "common/EventSource.inl"
 
 template class EventSource< IEventListener_CoreThread >;
@@ -48,7 +48,7 @@ void IEventListener_CoreThread::DispatchEvent( const CoreThreadStatus& status )
 		case CoreThread_Suspended:	CoreThread_OnSuspended();		break;
 		case CoreThread_Reset:		CoreThread_OnReset();			break;
 		case CoreThread_Stopped:	CoreThread_OnStopped();			break;
-		
+
 		jNO_DEFAULT;
 	}
 }

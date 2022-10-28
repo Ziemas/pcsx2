@@ -220,16 +220,13 @@ struct microMapXMM
 	int  xyzw;     // xyzw to write back (0 = Don't write back anything AND cached vfReg has all vectors valid)
 	int  count;    // Count of when last used
 	bool isNeeded; // Is needed for current instruction
+	bool isZero;   // Register was loaded from VF00 and doesn't need clamping
 };
 
 class microRegAlloc
 {
 protected:
-#ifdef __M_X86_64
 	static const int xmmTotal = 15; // PQ register is reserved
-#else
-	static const int xmmTotal = 7; // PQ register is reserved
-#endif
 	microMapXMM xmmMap[xmmTotal];
 	int         counter; // Current allocation count
 	int         index;   // VU0 or VU1
@@ -334,6 +331,14 @@ public:
 		}
 	}
 
+	bool checkVFClamp(int regId)
+	{
+		if ((xmmMap[regId].VFreg == 33 && !EmuConfig.Gamefixes.IbitHack) || xmmMap[regId].isZero)
+			return false;
+		else
+			return true;
+	}
+
 	bool checkCachedReg(int regId)
 	{
 		if (regId < xmmTotal)
@@ -350,6 +355,7 @@ public:
 		clear.count    =  0;
 		clear.xyzw     =  0;
 		clear.isNeeded =  0;
+		clear.isZero   =  0;
 	}
 
 	void clearRegVF(int VFreg)
@@ -517,6 +523,7 @@ public:
 						}
 						xmmMap[z].VFreg = vfWriteReg;
 						xmmMap[z].xyzw = xyzw;
+						xmmMap[z].isZero = (vfLoadReg == 0);
 					}
 					xmmMap[z].count = counter;
 					xmmMap[z].isNeeded = true;
@@ -554,6 +561,7 @@ public:
 			xmmMap[x].VFreg = vfLoadReg;
 			xmmMap[x].xyzw  = 0;
 		}
+		xmmMap[x].isZero = (vfLoadReg == 0);
 		xmmMap[x].count    = counter;
 		xmmMap[x].isNeeded = true;
 		return xmmX;

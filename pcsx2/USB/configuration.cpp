@@ -19,6 +19,9 @@
 #include "shared/inifile_usb.h"
 #include "platcompat.h"
 #include "Config.h"
+#include "common/Path.h"
+#include "common/StringUtil.h"
+#include "gui/StringHelpers.h"
 #include <map>
 #include <vector>
 
@@ -35,11 +38,7 @@ void USBsetSettingsDir()
 {
 	if(!USBpathSet)
 	{
-#ifdef _WIN32
-		IniPath = EmuFolders::Settings.Combine( iniFileUSB ).GetFullPath(); // default path, just in case
-#else
-		IniPath = std::string(EmuFolders::Settings.Combine( iniFileUSB ).GetFullPath()); // default path, just in case
-#endif
+		IniPath = StringUtil::UTF8StringToWxString(Path::Combine(EmuFolders::Settings, "USB.ini")); // default path, just in case
 		USBpathSet = true;
 	}
 }
@@ -55,7 +54,7 @@ void USBsetLogDir(const char* dir)
 
 std::string GetSelectedAPI(const std::pair<int, std::string>& pair)
 {
-	USBsetSettingsDir();	
+	USBsetSettingsDir();
 	auto it = changedAPIs.find(pair);
 	if (it != changedAPIs.end())
 		return it->second;
@@ -72,7 +71,7 @@ int GetSelectedSubtype(const std::pair<int, std::string>& pair)
 
 bool LoadSettingValue(const TSTDSTRING& ini, const TSTDSTRING& section, const TCHAR* param, TSTDSTRING& value)
 {
-	USBsetSettingsDir();	
+	USBsetSettingsDir();
 	CIniKey* key;
 #ifdef _WIN32
 	auto sect = ciniFile.GetSection(section);
@@ -94,7 +93,7 @@ bool LoadSettingValue(const TSTDSTRING& ini, const TSTDSTRING& section, const TC
 
 bool LoadSettingValue(const TSTDSTRING& ini, const TSTDSTRING& section, const TCHAR* param, int32_t& value)
 {
-	USBsetSettingsDir();	
+	USBsetSettingsDir();
 	CIniKey* key;
 #ifdef _WIN32
 	auto sect = ciniFile.GetSection(section);
@@ -125,7 +124,7 @@ bool LoadSettingValue(const TSTDSTRING& ini, const TSTDSTRING& section, const TC
 
 bool SaveSettingValue(const TSTDSTRING& ini, const TSTDSTRING& section, const TCHAR* param, const TSTDSTRING& value)
 {
-	USBsetSettingsDir();	
+	USBsetSettingsDir();
 #ifdef _WIN32
 	ciniFile.SetKeyValue(section, param, value);
 #else
@@ -136,7 +135,7 @@ bool SaveSettingValue(const TSTDSTRING& ini, const TSTDSTRING& section, const TC
 
 bool SaveSettingValue(const TSTDSTRING& ini, const TSTDSTRING& section, const TCHAR* param, int32_t value)
 {
-	USBsetSettingsDir();	
+	USBsetSettingsDir();
 #ifdef _WIN32
 	ciniFile.SetKeyValue(section, param, TSTDTOSTRING(value));
 #else
@@ -147,7 +146,7 @@ bool SaveSettingValue(const TSTDSTRING& ini, const TSTDSTRING& section, const TC
 
 void SaveConfig()
 {
-	USBsetSettingsDir();	
+	USBsetSettingsDir();
 #ifdef _WIN32
 	SaveSetting(L"MAIN", L"log", conf.Log);
 #else
@@ -261,7 +260,7 @@ void ClearSection(const TCHAR* section)
 
 void RemoveSection(const char* dev_type, int port, const std::string& key)
 {
-	USBsetSettingsDir();	
+	USBsetSettingsDir();
 	TSTDSTRING tkey;
 	tkey.assign(key.begin(), key.end());
 

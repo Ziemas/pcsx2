@@ -5,7 +5,7 @@ set(CMAKE_AUTOUIC ON)
 add_executable(pcsx2-qt)
 
 if (PACKAGE_MODE)
-	install(TARGETS pcsx2-qt DESTINATION ${CMAKE_INSTALL_BINDIR})
+	message(FATAL_ERROR "Package mode is not supported for Qt builds.")
 else()
 	install(TARGETS pcsx2-qt DESTINATION ${CMAKE_SOURCE_DIR}/bin)
 endif()
@@ -14,11 +14,15 @@ target_sources(pcsx2-qt PRIVATE
 	AboutDialog.cpp
 	AboutDialog.h
 	AboutDialog.ui
+	AutoUpdaterDialog.cpp
+	AutoUpdaterDialog.h
+	AutoUpdaterDialog.ui
+	CoverDownloadDialog.cpp
+	CoverDownloadDialog.h
+	CoverDownloadDialog.ui
 	DisplayWidget.cpp
 	DisplayWidget.h
-	EmuThread.cpp
-	EmuThread.h
-	Main.cpp
+	EarlyHardwareCheck.cpp
 	MainWindow.cpp
 	MainWindow.h
 	MainWindow.ui
@@ -27,9 +31,12 @@ target_sources(pcsx2-qt PRIVATE
 	QtHost.cpp
 	QtHost.h
 	QtKeyCodes.cpp
+	QtProgressCallback.cpp
+	QtProgressCallback.h
 	QtUtils.cpp
 	QtUtils.h
 	SettingWidgetBinder.h
+	GameList/EmptyGameListWidget.ui
 	GameList/GameListModel.cpp
 	GameList/GameListModel.h
 	GameList/GameListRefreshThread.cpp
@@ -39,6 +46,9 @@ target_sources(pcsx2-qt PRIVATE
 	Settings/AdvancedSystemSettingsWidget.cpp
 	Settings/AdvancedSystemSettingsWidget.h
 	Settings/AdvancedSystemSettingsWidget.ui
+	Settings/AudioSettingsWidget.cpp
+	Settings/AudioSettingsWidget.h
+	Settings/AudioSettingsWidget.ui
 	Settings/BIOSSettingsWidget.cpp
 	Settings/BIOSSettingsWidget.h
 	Settings/BIOSSettingsWidget.ui
@@ -49,18 +59,30 @@ target_sources(pcsx2-qt PRIVATE
 	Settings/ControllerGlobalSettingsWidget.cpp
 	Settings/ControllerGlobalSettingsWidget.h
 	Settings/ControllerGlobalSettingsWidget.ui
+	Settings/ControllerMacroEditWidget.ui
+	Settings/ControllerMacroWidget.ui
 	Settings/ControllerSettingsDialog.cpp
 	Settings/ControllerSettingsDialog.h
 	Settings/ControllerSettingsDialog.ui
+	Settings/ControllerSettingWidgetBinder.h
+	Settings/CreateMemoryCardDialog.cpp
+	Settings/CreateMemoryCardDialog.h
+	Settings/CreateMemoryCardDialog.ui
 	Settings/EmulationSettingsWidget.cpp
 	Settings/EmulationSettingsWidget.h
 	Settings/EmulationSettingsWidget.ui
+	Settings/FolderSettingsWidget.cpp
+	Settings/FolderSettingsWidget.h
+	Settings/FolderSettingsWidget.ui
 	Settings/GameFixSettingsWidget.cpp
 	Settings/GameFixSettingsWidget.h
 	Settings/GameFixSettingsWidget.ui
 	Settings/GameListSettingsWidget.cpp
 	Settings/GameListSettingsWidget.h
 	Settings/GameListSettingsWidget.ui
+	Settings/GameSummaryWidget.cpp
+	Settings/GameSummaryWidget.h
+	Settings/GameSummaryWidget.ui
 	Settings/GraphicsSettingsWidget.cpp
 	Settings/GraphicsSettingsWidget.h
 	Settings/GraphicsSettingsWidget.ui
@@ -74,12 +96,28 @@ target_sources(pcsx2-qt PRIVATE
 	Settings/InterfaceSettingsWidget.cpp
 	Settings/InterfaceSettingsWidget.h
 	Settings/InterfaceSettingsWidget.ui
+	Settings/MemoryCardSettingsWidget.cpp
+	Settings/MemoryCardSettingsWidget.h
+	Settings/MemoryCardSettingsWidget.ui
+	Settings/DEV9DnsHostDialog.cpp
+	Settings/DEV9DnsHostDialog.h
+	Settings/DEV9DnsHostDialog.ui
+	Settings/DEV9SettingsWidget.cpp
+	Settings/DEV9SettingsWidget.h
+	Settings/DEV9SettingsWidget.ui
+	Settings/DEV9UiCommon.cpp
+	Settings/DEV9UiCommon.h
+	Settings/HddCreateQt.cpp
+	Settings/HddCreateQt.h
 	Settings/SettingsDialog.cpp
 	Settings/SettingsDialog.h
 	Settings/SettingsDialog.ui
 	Settings/SystemSettingsWidget.cpp
 	Settings/SystemSettingsWidget.h
 	Settings/SystemSettingsWidget.ui
+	Tools/InputRecording/NewInputRecordingDlg.cpp
+	Tools/InputRecording/NewInputRecordingDlg.h
+	Tools/InputRecording/NewInputRecordingDlg.ui
 	resources/resources.qrc
 )
 
@@ -100,3 +138,12 @@ target_link_libraries(pcsx2-qt PRIVATE
 	Qt6::Widgets
 	Qt6::Network
 )
+
+# Currently, 7z is only needed for the Windows updater.
+if(WIN32)
+	target_link_libraries(pcsx2-qt PRIVATE
+		LZMA::LZMA
+	)
+endif()
+
+setup_main_executable(pcsx2-qt)

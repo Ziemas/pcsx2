@@ -51,12 +51,11 @@ namespace Vulkan
 			bool vk_ext_provoking_vertex : 1;
 			bool vk_ext_memory_budget : 1;
 			bool vk_khr_driver_properties : 1;
+			bool vk_arm_rasterization_order_attachment_access : 1;
+			bool vk_khr_fragment_shader_barycentric : 1;
 		};
 
 		~Context();
-
-		// Determines if the Vulkan validation layer is available on the system.
-		static bool CheckValidationLayerAvailablility();
 
 		// Helper method to create a Vulkan instance.
 		static VkInstance CreateVulkanInstance(
@@ -101,23 +100,34 @@ namespace Vulkan
 		__fi const OptionalExtensions& GetOptionalExtensions() const { return m_optional_extensions; }
 
 		// Helpers for getting constants
-		__fi VkDeviceSize GetUniformBufferAlignment() const
+		__fi u32 GetUniformBufferAlignment() const
 		{
-			return m_device_properties.limits.minUniformBufferOffsetAlignment;
+			return static_cast<u32>(m_device_properties.limits.minUniformBufferOffsetAlignment);
 		}
-		__fi VkDeviceSize GetTexelBufferAlignment() const
+		__fi u32 GetTexelBufferAlignment() const
 		{
-			return m_device_properties.limits.minTexelBufferOffsetAlignment;
+			return static_cast<u32>(m_device_properties.limits.minTexelBufferOffsetAlignment);
 		}
-		__fi VkDeviceSize GetStorageBufferAlignment() const
+		__fi u32 GetStorageBufferAlignment() const
 		{
-			return m_device_properties.limits.minStorageBufferOffsetAlignment;
+			return static_cast<u32>(m_device_properties.limits.minStorageBufferOffsetAlignment);
 		}
-		__fi VkDeviceSize GetBufferImageGranularity() const
+		__fi u32 GetBufferImageGranularity() const
 		{
-			return m_device_properties.limits.bufferImageGranularity;
+			return static_cast<u32>(m_device_properties.limits.bufferImageGranularity);
 		}
-		__fi VkDeviceSize GetMaxImageDimension2D() const { return m_device_properties.limits.maxImageDimension2D; }
+		__fi u32 GetBufferCopyOffsetAlignment() const
+		{
+			return static_cast<u32>(m_device_properties.limits.optimalBufferCopyOffsetAlignment);
+		}
+		__fi u32 GetBufferCopyRowPitchAlignment() const
+		{
+			return static_cast<u32>(m_device_properties.limits.optimalBufferCopyRowPitchAlignment);
+		}
+		__fi u32 GetMaxImageDimension2D() const
+		{
+			return m_device_properties.limits.maxImageDimension2D;
+		}
 
 		// Creates a simple render pass.
 		__ri VkRenderPass GetRenderPass(VkFormat color_format, VkFormat depth_format,
@@ -211,6 +221,9 @@ namespace Vulkan
 
 		void WaitForGPUIdle();
 
+		float GetAndResetAccumulatedGPUTime();
+		bool SetEnableGPUTiming(bool enabled);
+
 	private:
 		Context(VkInstance instance, VkPhysicalDevice physical_device);
 
@@ -273,6 +286,7 @@ namespace Vulkan
 			u64 fence_counter = 0;
 			bool init_buffer_used = false;
 			bool needs_fence_wait = false;
+			bool timestamp_written = false;
 
 			std::vector<std::function<void()>> cleanup_resources;
 		};
@@ -287,14 +301,19 @@ namespace Vulkan
 		VkDescriptorPool m_global_descriptor_pool = VK_NULL_HANDLE;
 
 		VkQueue m_graphics_queue = VK_NULL_HANDLE;
-		u32 m_graphics_queue_family_index = 0;
 		VkQueue m_present_queue = VK_NULL_HANDLE;
+		u32 m_graphics_queue_family_index = 0;
 		u32 m_present_queue_family_index = 0;
+
+		VkQueryPool m_timestamp_query_pool = VK_NULL_HANDLE;
+		float m_accumulated_gpu_time = 0.0f;
+		bool m_gpu_timing_enabled = false;
+		bool m_gpu_timing_supported = false;
 
 		std::array<FrameResources, NUM_COMMAND_BUFFERS> m_frame_resources;
 		u64 m_next_fence_counter = 1;
 		u64 m_completed_fence_counter = 0;
-		u32 m_current_frame;
+		u32 m_current_frame = 0;
 
 		StreamBuffer m_texture_upload_buffer;
 

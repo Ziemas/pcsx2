@@ -18,7 +18,6 @@
 
 bool s_nativeres;
 static CRCHackLevel s_crc_hack_level = CRCHackLevel::Full;
-
 // hacks
 #define CRC_Partial (s_crc_hack_level >= CRCHackLevel::Partial)
 #define CRC_Full (s_crc_hack_level >= CRCHackLevel::Full)
@@ -27,8 +26,7 @@ static CRCHackLevel s_crc_hack_level = CRCHackLevel::Full;
 CRC::Region g_crc_region = CRC::NoRegion;
 
 ////////////////////////////////////////////////////////////////////////////////
-// Broken on both DirectX and OpenGL
-// (note: could potentially work with latest OpenGL)
+// Partial level, broken on all renderers.
 ////////////////////////////////////////////////////////////////////////////////
 
 bool GSC_BigMuthaTruckers(const GSFrameInfo& fi, int& skip)
@@ -109,26 +107,6 @@ bool GSC_GiTS(const GSFrameInfo& fi, int& skip)
 	return true;
 }
 
-bool GSC_GodOfWar2(const GSFrameInfo& fi, int& skip)
-{
-	if (skip == 0)
-	{
-		if (CRC_Aggressive && fi.TME && fi.TPSM == PSM_PSMCT24 && fi.FBP == 0x1300 && (fi.TBP0 == 0x0F00 || fi.TBP0 == 0x1300 || fi.TBP0 == 0x2b00)) // || fi.FBP == 0x0100
-		{
-			// Ghosting when upscaling, HPO helps but isn't perfect.
-			skip = 1; // global haze/halo
-		}
-		else if ((CRC_Aggressive || !s_nativeres) && fi.TME && fi.TPSM == PSM_PSMCT24 && (fi.FBP == 0x0100 || fi.FBP == 0x2100) && (fi.TBP0 == 0x2b00 || fi.TBP0 == 0x2e80 || fi.TBP0 == 0x3100)) // 480P 2e80, interlaced 3100
-		{
-			// Upscaling issue.
-			// Don't enable hack on native res if crc is below aggressive.
-			skip = 1; // water effect and water vertical lines
-		}
-	}
-
-	return true;
-}
-
 // Channel effect not properly supported yet
 bool GSC_Manhunt2(const GSFrameInfo& fi, int& skip)
 {
@@ -163,6 +141,7 @@ bool GSC_Manhunt2(const GSFrameInfo& fi, int& skip)
 
 bool GSC_CrashBandicootWoC(const GSFrameInfo& fi, int& skip)
 {
+	// Channel effect not properly supported - Removes fog to fix the fog wall issue on Direct3D at any resolution, and while upscaling on every Hardware renderer.
 	if (skip == 0)
 	{
 		if (fi.TME && (fi.FBP == 0x00000 || fi.FBP == 0x008c0 || fi.FBP == 0x00a00) && (fi.TBP0 == 0x00000 || fi.TBP0 == 0x008c0 || fi.TBP0 == 0x00a00) && fi.FBP == fi.TBP0 && fi.FPSM == PSM_PSMCT32 && fi.FPSM == fi.TPSM)
@@ -232,21 +211,6 @@ bool GSC_IkkiTousen(const GSFrameInfo& fi, int& skip)
 			// Might not be needed if any of the upscaling hacks fix the issues, needs to be further tested.
 			// Don't enable hack on native res if crc is below aggressive.
 			skip = 11; // Upscaling blur/ghosting
-		}
-	}
-
-	return true;
-}
-
-bool GSC_EvangelionJo(const GSFrameInfo& fi, int& skip)
-{
-	if (skip == 0)
-	{
-		if ((CRC_Aggressive || !s_nativeres) && fi.TME && fi.TBP0 == 0x2BC0 || (fi.FBP == 0 || fi.FBP == 0x1180) && (fi.FPSM | fi.TPSM) == 0)
-		{
-			// Don't enable hack on native res if crc is below aggressive.
-			// Removes blur/glow. Fixes ghosting when resolution is upscaled.
-			skip = 1;
 		}
 	}
 
@@ -347,11 +311,11 @@ bool GSC_Tekken5(const GSFrameInfo& fi, int& skip)
 		{
 			// Don't enable hack on native res if crc is below aggressive.
 			// Fixes/removes ghosting/blur effect and white lines appearing in stages: Moonfit Wilderness, Acid Rain - caused by upscaling.
-			// Downside is it also removes the channel effect which is fixed on OpenGL.
+			// Downside is it also removes the channel effect which is fixed.
 			// Let's enable this hack for Aggressive only since it's an upscaling issue for both renders.
 			skip = 95;
 		}
-		else if (fi.TME && (fi.FBP == 0x02bc0 || fi.FBP == 0x02be0 || fi.FBP == 0x02d00 || fi.FBP == 0x03480 || fi.FBP == 0x034a0) && fi.FPSM == fi.TPSM && fi.TBP0 == 0x00000 && fi.TPSM == PSM_PSMCT32)
+		else if (fi.TZTST == 1 && fi.TME && (fi.FBP == 0x02bc0 || fi.FBP == 0x02be0 || fi.FBP == 0x02d00 || fi.FBP == 0x03480 || fi.FBP == 0x034a0) && fi.FPSM == fi.TPSM && fi.TBP0 == 0x00000 && fi.TPSM == PSM_PSMCT32)
 		{
 			// The moving display effect(flames) is not emulated properly in the entire screen so let's remove the effect in the stage: Burning Temple. Related to half screen bottom issue.
 			// Fixes black lines in the stage: Burning Temple - caused by upscaling. Note the black lines can also be fixed with Merge Sprite hack.
@@ -419,7 +383,7 @@ bool GSC_BurnoutGames(const GSFrameInfo& fi, int& skip)
 			// 0x01dc0 01c00(MP) ntsc, 0x01f00 0x01d40(MP) ntsc progressive, 0x02200(MP) pal.
 			// Yellow stripes.
 			// Multiplayer tested only on Takedown.
-			skip = 4;
+			skip = GSConfig.UserHacks_AutoFlush ? 2 : 4;
 		}
 	}
 
@@ -510,8 +474,7 @@ bool GSC_ZettaiZetsumeiToshi2(const GSFrameInfo& fi, int& skip)
 		}
 		else if ((fi.FBP | fi.TBP0) && fi.FPSM == fi.TPSM && fi.TPSM == PSM_PSMCT16 && fi.FBMSK == 0x3FFF)
 		{
-			// Note start of the effect (texture shuffle) is fixed in openGL but maybe not the extra draw
-			// call....
+			// Note start of the effect (texture shuffle) is fixed but maybe not the extra draw call
 			skip = 1000;
 		}
 	}
@@ -655,7 +618,7 @@ bool GSC_Simple2000Vol114(const GSFrameInfo& fi, int& skip)
 		}
 		if (fi.TME && (fi.FBP == 0x0e00) && (fi.TBP0 == 0x1000) && (fi.FBMSK == 0x0000))
 		{
-			// Depth shadows, they don't work properly on OpenGL as well.
+			// Depth shadows.
 			skip = 1;
 		}
 	}
@@ -670,19 +633,6 @@ bool GSC_UrbanReign(const GSFrameInfo& fi, int& skip)
 		if (fi.TME && fi.FBP == 0x0000 && fi.TBP0 == 0x3980 && fi.FPSM == fi.TPSM && fi.TPSM == PSM_PSMCT32 && fi.FBMSK == 0x0)
 		{
 			skip = 1; // Black shadow
-		}
-	}
-
-	return true;
-}
-
-bool GSC_SkyGunner(const GSFrameInfo& fi, int& skip)
-{
-	if (skip == 0)
-	{
-		if (!fi.TME && !(fi.FBP == 0x0 || fi.FBP == 0x00800 || fi.FBP == 0x008c0 || fi.FBP == 0x03e00) && fi.FPSM == PSM_PSMCT32 && (fi.TBP0 == 0x0 || fi.TBP0 == 0x01800) && fi.TPSM == PSM_PSMCT32)
-		{
-			skip = 1; // Huge Vram usage
 		}
 	}
 
@@ -731,7 +681,7 @@ bool GSC_YakuzaGames(const GSFrameInfo& fi, int& skip)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Correctly emulated on OpenGL but can be used as potential speed hack
+// Full level, correctly emulated on OpenGL/Vulkan but can be used as potential speed hack
 ////////////////////////////////////////////////////////////////////////////////
 
 bool GSC_GetawayGames(const GSFrameInfo& fi, int& skip)
@@ -741,41 +691,6 @@ bool GSC_GetawayGames(const GSFrameInfo& fi, int& skip)
 		if ((fi.FBP == 0 || fi.FBP == 0x1180 || fi.FBP == 0x1400) && fi.TPSM == PSM_PSMT8H && fi.FBMSK == 0)
 		{
 			skip = 1; // Removes fog wall.
-		}
-	}
-
-	return true;
-}
-
-bool GSC_TriAceGames(const GSFrameInfo& fi, int& skip)
-{
-	// Tri Ace Games: ValkyrieProfile2, RadiataStories, StarOcean3
-	//
-	// The games emulate a stencil buffer with the alpha channel of the RT
-	// The operation of the stencil is selected with the palette
-	// For example -1 wrap will be [240, 16, 32, 48 ....]
-	// i.e. p[A>>4] = (A - 16) % 256
-	//
-	// The fastest and accurate solution will be to replace this pseudo stencil
-	// by a dedicated GPU draw call
-	// 1/ Use future GPU capabilities to do a "kind" of SW blending
-	// 2/ Use a real stencil/atomic image, and then compute the RT alpha value
-	//
-	// Both of those solutions will increase code complexity (and only avoid upscaling
-	// glitches)
-
-	if (skip == 0)
-	{
-		if (fi.TME && fi.FBP == fi.TBP0 && fi.FPSM == PSM_PSMCT32 && fi.TPSM == PSM_PSMT4HH)
-		{
-			skip = 1000;
-		}
-	}
-	else
-	{
-		if (!(fi.TME && fi.FBP == fi.TBP0 && fi.FPSM == PSM_PSMCT32 && fi.TPSM == PSM_PSMT4HH))
-		{
-			skip = 0;
 		}
 	}
 
@@ -798,33 +713,6 @@ bool GSC_AceCombat4(const GSFrameInfo& fi, int& skip)
 		if (fi.TME && fi.FBP == 0x02a00 && fi.FPSM == PSM_PSMZ24 && fi.TBP0 == 0x01600 && fi.TPSM == PSM_PSMZ24)
 		{
 			skip = 71; // clouds (z, 16-bit)
-		}
-	}
-
-	return true;
-}
-
-bool GSC_GodOfWar(const GSFrameInfo& fi, int& skip)
-{
-	if (skip == 0)
-	{
-		if (fi.TME && fi.FBP == 0x00000 && fi.FPSM == PSM_PSMCT16 && fi.TBP0 == 0x00000 && fi.TPSM == PSM_PSMCT16 && fi.FBMSK == 0x03FFF)
-		{
-			// Can be used as a speed hack.
-			// Removes shadows.
-			skip = 1000;
-		}
-		else if (fi.TME && fi.FBP == 0x00000 && fi.FPSM == PSM_PSMCT32 && fi.TBP0 == 0x00000 && fi.TPSM == PSM_PSMCT32 && fi.FBMSK == 0xff000000)
-		{
-			// Upscaling hack maybe ? Needs to be verified, move it to Aggressive state just in case.
-			skip = 1; // blur
-		}
-	}
-	else
-	{
-		if (fi.TME && fi.FBP == 0x00000 && fi.FPSM == PSM_PSMCT16)
-		{
-			skip = 3;
 		}
 	}
 
@@ -977,7 +865,6 @@ void GSState::SetupCrcHack()
 		// Channel Effect
 		lut[CRC::CrashBandicootWoC] = GSC_CrashBandicootWoC;
 		lut[CRC::GiTS] = GSC_GiTS;
-		lut[CRC::SkyGunner] = GSC_SkyGunner; // Maybe not a channel effect
 		lut[CRC::Spartan] = GSC_Spartan;
 		lut[CRC::SteambotChronicles] = GSC_SteambotChronicles;
 
@@ -993,25 +880,18 @@ void GSState::SetupCrcHack()
 
 		// Upscaling hacks
 		lut[CRC::DBZBT3] = GSC_DBZBT3;
-		lut[CRC::EvangelionJo] = GSC_EvangelionJo;
 		lut[CRC::FightingBeautyWulong] = GSC_FightingBeautyWulong;
-		lut[CRC::GodOfWar2] = GSC_GodOfWar2;
 		lut[CRC::IkkiTousen] = GSC_IkkiTousen;
 		lut[CRC::Oneechanbara2Special] = GSC_Oneechanbara2Special;
 		lut[CRC::UltramanFightingEvolution] = GSC_UltramanFightingEvolution;
 		lut[CRC::YakuzaGames] = GSC_YakuzaGames;
 	}
 
-	// Hacks that were fixed on OpenGL
+	// CRC FULL is for Direct3D, they are fixed on OpenGL/Vulkan
 	if (CRC_Full)
 	{
 		// Accurate Blending
 		lut[CRC::GetawayGames] = GSC_GetawayGames; // Blending High
-
-		// These games emulate a stencil buffer with the alpha channel of the RT (too slow to move to CRC_Aggressive)
-		// Needs at least Basic Blending,
-		// see https://github.com/PCSX2/pcsx2/pull/2921
-		lut[CRC::TriAceGames] = GSC_TriAceGames;
 	}
 
 	if (CRC_Aggressive)
@@ -1025,7 +905,6 @@ void GSState::SetupCrcHack()
 		lut[CRC::XenosagaE3] = GSC_XenosagaE3;
 
 		// Upscaling issues
-		lut[CRC::GodOfWar] = GSC_GodOfWar;
 		lut[CRC::Okami] = GSC_Okami;
 	}
 
@@ -1054,7 +933,7 @@ bool GSState::IsBadFrame()
 		return false;
 	}
 
-	if (m_skip == 0 && GSConfig.UserHacks && (GSConfig.SkipDraw > 0))
+	if (m_skip == 0 && GSConfig.SkipDrawEnd > 0)
 	{
 		if (fi.TME)
 		{
@@ -1062,8 +941,8 @@ bool GSState::IsBadFrame()
 			// General, often problematic post processing
 			if (GSLocalMemory::m_psm[fi.TPSM].depth || GSUtil::HasSharedBits(fi.FBP, fi.FPSM, fi.TBP0, fi.TPSM))
 			{
-				m_skip_offset = GSConfig.SkipDrawOffset;
-				m_skip = std::max(GSConfig.SkipDraw, m_skip_offset);
+				m_skip_offset = GSConfig.SkipDrawStart;
+				m_skip = GSConfig.SkipDrawEnd;
 			}
 		}
 	}

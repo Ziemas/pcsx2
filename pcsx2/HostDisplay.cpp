@@ -26,14 +26,28 @@
 #include <thread>
 #include <vector>
 
+std::unique_ptr<HostDisplay> g_host_display;
+
 HostDisplayTexture::~HostDisplayTexture() = default;
 
 HostDisplay::~HostDisplay() = default;
 
 const char* HostDisplay::RenderAPIToString(RenderAPI api)
 {
-	static const char* names[] = {"None", "D3D11", "Vulkan", "OpenGL", "OpenGLES"};
-	return (static_cast<u32>(api) >= std::size(names)) ? names[0] : names[static_cast<u32>(api)];
+	switch (api)
+	{
+#define CASE(x) case RenderAPI::x: return #x
+		CASE(None);
+		CASE(D3D11);
+		CASE(D3D12);
+		CASE(Metal);
+		CASE(Vulkan);
+		CASE(OpenGL);
+		CASE(OpenGLES);
+#undef CASE
+		default:
+			return "Unknown";
+	}
 }
 
 bool HostDisplay::UsesLowerLeftOrigin() const
@@ -51,6 +65,16 @@ bool HostDisplay::GetHostRefreshRate(float* refresh_rate)
 	}
 
 	return WindowInfo::QueryRefreshRateForWindow(m_window_info, refresh_rate);
+}
+
+bool HostDisplay::SetGPUTimingEnabled(bool enabled)
+{
+	return false;
+}
+
+float HostDisplay::GetAndResetAccumulatedGPUTime()
+{
+	return 0.0f;
 }
 
 bool HostDisplay::ParseFullscreenMode(const std::string_view& mode, u32* width, u32* height, float* refresh_rate)
@@ -104,7 +128,9 @@ std::string HostDisplay::GetFullscreenModeString(u32 width, u32 height, float re
 	return StringUtil::StdStringFromFormat("%u x %u @ %f hz", width, height, refresh_rate);
 }
 
+#ifdef ENABLE_OPENGL
 #include "Frontend/OpenGLHostDisplay.h"
+#endif
 
 #ifdef ENABLE_VULKAN
 #include "Frontend/VulkanHostDisplay.h"
@@ -112,7 +138,9 @@ std::string HostDisplay::GetFullscreenModeString(u32 width, u32 height, float re
 
 #ifdef _WIN32
 #include "Frontend/D3D11HostDisplay.h"
+#include "Frontend/D3D12HostDisplay.h"
 #endif
+#include "GS/Renderers/Metal/GSMetalCPPAccessible.h"
 
 std::unique_ptr<HostDisplay> HostDisplay::CreateDisplayForAPI(RenderAPI api)
 {
@@ -121,11 +149,19 @@ std::unique_ptr<HostDisplay> HostDisplay::CreateDisplayForAPI(RenderAPI api)
 #ifdef _WIN32
 		case RenderAPI::D3D11:
 			return std::make_unique<D3D11HostDisplay>();
+		case RenderAPI::D3D12:
+			return std::make_unique<D3D12HostDisplay>();
+#endif
+#ifdef __APPLE__
+		case HostDisplay::RenderAPI::Metal:
+			return std::unique_ptr<HostDisplay>(MakeMetalHostDisplay());
 #endif
 
+#ifdef ENABLE_OPENGL
 		case RenderAPI::OpenGL:
 		case RenderAPI::OpenGLES:
 			return std::make_unique<OpenGLHostDisplay>();
+#endif
 
 #ifdef ENABLE_VULKAN
 		case RenderAPI::Vulkan:

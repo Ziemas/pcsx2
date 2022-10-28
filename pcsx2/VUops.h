@@ -25,8 +25,6 @@
 #define int12_to_float(x)	(float)((float)x * 0.000244140625f)
 #define int15_to_float(x)	(float)((float)x * 0.000030517578125)
 
-#define	MAC_Reset( VU ) VU->VI[REG_MAC_FLAG].UL = VU->VI[REG_MAC_FLAG].UL & (~0xFFFF)
-
 struct _VURegsNum {
 	u8 pipe; // if 0xff, COP2
 	u8 VFwrite;
@@ -40,8 +38,7 @@ struct _VURegsNum {
 	int cycles;
 };
 
-#define __vuRegsCall __fastcall
-typedef void __vuRegsCall FnType_VuRegsN(_VURegsNum *VUregsn);
+typedef void FnType_VuRegsN(_VURegsNum *VUregsn);
 typedef FnType_VuRegsN* Fnptr_VuRegsN;
 
 alignas(16) extern const Fnptr_Void VU0_LOWER_OPCODE[128];

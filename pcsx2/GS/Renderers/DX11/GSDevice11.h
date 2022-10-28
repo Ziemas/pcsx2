@@ -51,10 +51,10 @@ public:
 				u32 wb : 1;
 				u32 wa : 1;
 				// Alpha blending
-				u32 blend_index : 7;
-				u32 abe : 1;
-				u32 accu_blend : 1;
-				u32 blend_mix : 1;
+				u32 blend_enable : 1;
+				u32 blend_op : 2;
+				u32 blend_src_factor : 4;
+				u32 blend_dst_factor : 4;
 			};
 
 			struct
@@ -66,7 +66,7 @@ public:
 			u32 key;
 		};
 
-		operator u32() { return key & 0x3fff; }
+		operator u32() { return key & 0x7fff; }
 
 		OMBlendSelector()
 			: key(0)
@@ -111,21 +111,20 @@ private:
 	// Increment this constant whenever shaders change, to invalidate user's shader cache.
 	static constexpr u32 SHADER_VERSION = 1;
 
-	static constexpr u32 MAX_TEXTURES = 3;
+	static constexpr u32 MAX_TEXTURES = 4;
 	static constexpr u32 MAX_SAMPLERS = 2;
 
-	float m_hack_topleft_offset;
 	int m_d3d_texsize;
+
+	void SetFeatures();
 
 	GSTexture* CreateSurface(GSTexture::Type type, int width, int height, int levels, GSTexture::Format format) final;
 
 	void DoMerge(GSTexture* sTex[3], GSVector4* sRect, GSTexture* dTex, GSVector4* dRect, const GSRegPMODE& PMODE, const GSRegEXTBUF& EXTBUF, const GSVector4& c) final;
 	void DoInterlace(GSTexture* sTex, GSTexture* dTex, int shader, bool linear, float yoffset = 0) final;
 	void DoFXAA(GSTexture* sTex, GSTexture* dTex) final;
-	void DoShadeBoost(GSTexture* sTex, GSTexture* dTex) final;
+	void DoShadeBoost(GSTexture* sTex, GSTexture* dTex, const float params[4]) final;
 	void DoExternalFX(GSTexture* sTex, GSTexture* dTex) final;
-
-	u16 ConvertBlendEnum(u16 generic) final;
 
 	wil::com_ptr_nothrow<ID3D11Device> m_dev;
 	wil::com_ptr_nothrow<ID3D11DeviceContext> m_ctx;
@@ -155,8 +154,6 @@ private:
 		ID3D11BlendState* bs;
 		float bf;
 		ID3D11RenderTargetView* rt_view;
-		GSTexture11* rt_texture;
-		GSTexture11* rt_ds;
 		ID3D11DepthStencilView* dsv;
 	} m_state;
 
@@ -172,6 +169,14 @@ private:
 		wil::com_ptr_nothrow<ID3D11DepthStencilState> dss_write;
 		wil::com_ptr_nothrow<ID3D11BlendState> bs;
 	} m_convert;
+
+	struct
+	{
+		wil::com_ptr_nothrow<ID3D11InputLayout> il;
+		wil::com_ptr_nothrow<ID3D11VertexShader> vs;
+		wil::com_ptr_nothrow<ID3D11PixelShader> ps[static_cast<int>(PresentShader::Count)];
+		wil::com_ptr_nothrow<ID3D11Buffer> ps_cb;
+	} m_present;
 
 	struct
 	{
@@ -204,6 +209,7 @@ private:
 	{
 		wil::com_ptr_nothrow<ID3D11DepthStencilState> dss;
 		wil::com_ptr_nothrow<ID3D11BlendState> bs;
+		wil::com_ptr_nothrow<ID3D11PixelShader> primid_init_ps[2];
 	} m_date;
 
 	// Shaders...
@@ -211,7 +217,7 @@ private:
 	std::unordered_map<u32, GSVertexShader11> m_vs;
 	wil::com_ptr_nothrow<ID3D11Buffer> m_vs_cb;
 	std::unordered_map<u32, wil::com_ptr_nothrow<ID3D11GeometryShader>> m_gs;
-	std::unordered_map<u64, wil::com_ptr_nothrow<ID3D11PixelShader>> m_ps;
+	std::unordered_map<PSSelector, wil::com_ptr_nothrow<ID3D11PixelShader>, GSHWDrawConfig::PSSelectorHash> m_ps;
 	wil::com_ptr_nothrow<ID3D11Buffer> m_ps_cb;
 	std::unordered_map<u32, wil::com_ptr_nothrow<ID3D11SamplerState>> m_ps_ss;
 	wil::com_ptr_nothrow<ID3D11SamplerState> m_palette_ss;
@@ -229,13 +235,13 @@ private:
 
 public:
 	GSDevice11();
-	virtual ~GSDevice11() {}
+	~GSDevice11() override;
 
 	__fi static GSDevice11* GetInstance() { return static_cast<GSDevice11*>(g_gs_device.get()); }
 	__fi ID3D11Device* GetD3DDevice() const { return m_dev.get(); }
 	__fi ID3D11DeviceContext* GetD3DContext() const { return m_ctx.get(); }
 
-	bool Create(HostDisplay* display);
+	bool Create() override;
 
 	void ResetAPIState() override;
 	void RestoreAPIState() override;
@@ -254,13 +260,13 @@ public:
 
 	void CloneTexture(GSTexture* src, GSTexture** dest, const GSVector4i& rect);
 
-	void CopyRect(GSTexture* sTex, GSTexture* dTex, const GSVector4i& r);
-	void CopyRect(GSTexture* sTex, const GSVector4i& sRect, GSTexture* dTex, u32 destX, u32 destY);
+	void CopyRect(GSTexture* sTex, GSTexture* dTex, const GSVector4i& r, u32 destX, u32 destY) override;
 
 	void StretchRect(GSTexture* sTex, const GSVector4& sRect, GSTexture* dTex, const GSVector4& dRect, ShaderConvert shader = ShaderConvert::COPY, bool linear = true) final;
 	void StretchRect(GSTexture* sTex, const GSVector4& sRect, GSTexture* dTex, const GSVector4& dRect, ID3D11PixelShader* ps, ID3D11Buffer* ps_cb, bool linear = true);
 	void StretchRect(GSTexture* sTex, const GSVector4& sRect, GSTexture* dTex, const GSVector4& dRect, bool red, bool green, bool blue, bool alpha);
 	void StretchRect(GSTexture* sTex, const GSVector4& sRect, GSTexture* dTex, const GSVector4& dRect, ID3D11PixelShader* ps, ID3D11Buffer* ps_cb, ID3D11BlendState* bs, bool linear = true);
+	void PresentRect(GSTexture* sTex, const GSVector4& sRect, GSTexture* dTex, const GSVector4& dRect, PresentShader shader, float shaderTime, bool linear) override;
 
 	void SetupDATE(GSTexture* rt, GSTexture* ds, const GSVertexPT1* vertices, bool datm);
 
@@ -289,7 +295,7 @@ public:
 	bool CreateTextureFX();
 	void SetupVS(VSSelector sel, const GSHWDrawConfig::VSConstantBuffer* cb);
 	void SetupGS(GSSelector sel);
-	void SetupPS(PSSelector sel, const GSHWDrawConfig::PSConstantBuffer* cb, PSSamplerSelector ssel);
+	void SetupPS(const PSSelector& sel, const GSHWDrawConfig::PSConstantBuffer* cb, PSSamplerSelector ssel);
 	void SetupOM(OMDepthStencilSelector dssel, OMBlendSelector bsel, u8 afix);
 
 	void RenderHW(GSHWDrawConfig& config) final;

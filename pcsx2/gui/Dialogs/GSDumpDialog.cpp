@@ -21,16 +21,18 @@
 #include "gui/Dialogs/ModalPopups.h"
 
 
-#include "common/EmbeddedImage.h"
+#include "gui/EmbeddedImage.h"
+#include "common/FileSystem.h"
+#include "common/StringUtil.h"
 #include "gui/Resources/NoIcon.h"
-#include "GS.h"
 #include "HostDisplay.h"
 
-#include "PathDefs.h"
+#include "gui/PathDefs.h"
 #include "gui/AppConfig.h"
 #include "gui/GSFrame.h"
 #include "Counters.h"
 #include "PerformanceMetrics.h"
+#include "GameDatabase.h"
 
 #include <wx/mstream.h>
 #include <wx/listctrl.h>
@@ -45,125 +47,35 @@
 #include <wx/wfstream.h>
 #include <array>
 #include <functional>
+#include <optional>
 
-template <typename Output, typename Input, typename std::enable_if<sizeof(Input) == sizeof(Output), bool>::type = true>
-static constexpr Output BitCast(Input input)
-{
-	Output output;
-	memcpy(&output, &input, sizeof(input));
-	return output;
-}
-template <typename Output = u32>
-static constexpr Output GetBits(u64 value, u32 shift, u32 numbits)
-{
-	return static_cast<Output>((value >> shift) & ((1ull << numbits) - 1));
-}
+using namespace GSDumpTypes;
 
-template <typename Output = u32>
-static constexpr Output GetBits(u128 value, u32 shift, u32 numbits)
+static std::optional<wxImage> GetPreviewImageFromDump(const std::string& filename)
 {
-	u64 outval = 0;
-	if (shift == 0)
-		outval = value.lo;
-	else if (shift < 64)
-		outval = (value.lo >> shift) | (value.hi << (64 - shift));
-	else
-		outval = value.hi >> (shift - 64);
-	return static_cast<Output>(outval & ((1ull << numbits) - 1));
-}
-static constexpr const char* GetNameOneBit(u8 value, const char* zero, const char* one)
-{
-	switch (value)
-	{
-		case 0: return zero;
-		case 1: return one;
-		default: return "UNKNOWN";
-	}
-}
-static constexpr const char* GetNameBool(bool value)
-{
-	return value ? "True" : "False";
-}
+	std::vector<u32> pixels;
+	u32 width, height;
+	if (!GSDumpFile::GetPreviewImageFromDump(filename.c_str(), &width, &height, &pixels))
+		return std::nullopt;
 
-static constexpr const char* GetNamePRIMPRIM(u8 prim)
-{
-	switch (prim)
+	// strip alpha bytes because wx is dumb and stores on a separate plane
+	// apparently this isn't aligned? stupidity...
+	const u32 pitch = width * 3;
+	u8* wxpixels = static_cast<u8*>(std::malloc(pitch * height));
+	for (u32 y = 0; y < height; y++)
 	{
-		case 0: return "Point";
-		case 1: return "Line";
-		case 2: return "Line Strip";
-		case 3: return "Triangle";
-		case 4: return "Triangle Strip";
-		case 5: return "Triangle Fan";
-		case 6: return "Sprite";
-		case 7: return "Invalid";
-		default: return "UNKNOWN";
+		const u8* in = reinterpret_cast<const u8*>(pixels.data() + y * width);
+		u8* out = wxpixels + y * pitch;
+		for (u32 x = 0; x < width; x++)
+		{
+			*(out++) = in[0];
+			*(out++) = in[1];
+			*(out++) = in[2];
+			in += sizeof(u32);
+		}
 	}
-}
-static constexpr const char* GetNamePRIMIIP(u8 iip)
-{
-	return GetNameOneBit(iip, "Flat Shading", "Gouraud Shading");
-}
-static constexpr const char* GetNamePRIMFST(u8 fst)
-{
-	return GetNameOneBit(fst, "STQ Value", "UV Value");
-}
-static constexpr const char* GetNamePRIMCTXT(u8 ctxt)
-{
-	return GetNameOneBit(ctxt, "Context 1", "Context 2");
-}
-static constexpr const char* GetNamePRIMFIX(u8 fix)
-{
-	return GetNameOneBit(fix, "Unfixed", "Fixed");
-}
-static constexpr const char* GetNameTEXTCC(u8 tcc)
-{
-	return GetNameOneBit(tcc, "RGB", "RGBA");
-}
-static constexpr const char* GetNameTEXTFX(u8 tfx)
-{
-	switch (tfx)
-	{
-		case 0: return "Modulate";
-		case 1: return "Decal";
-		case 2: return "Highlight";
-		case 3: return "Highlight2";
-		default: return "UNKNOWN";
-	}
-}
-static constexpr const char* GetNameTEXCSM(u8 csm)
-{
-	return GetNameOneBit(csm, "CSM1", "CSM2");
-}
-static constexpr const char* GetNameTEXPSM(u8 psm)
-{
-	switch (psm)
-	{
-		case 000: return "PSMCT32";
-		case 001: return "PSMCT24";
-		case 002: return "PSMCT16";
-		case 012: return "PSMCT16S";
-		case 023: return "PSMT8";
-		case 024: return "PSMT4";
-		case 033: return "PSMT8H";
-		case 044: return "PSMT4HL";
-		case 054: return "PSMT4HH";
-		case 060: return "PSMZ32";
-		case 061: return "PSMZ24";
-		case 062: return "PSMZ16";
-		case 072: return "PSMZ16S";
-		default: return "UNKNOWN";
-	}
-}
-static constexpr const char* GetNameTEXCPSM(u8 psm)
-{
-	switch (psm)
-	{
-		case 000: return "PSMCT32";
-		case 002: return "PSMCT16";
-		case 012: return "PSMCT16S";
-		default: return "UNKNOWN";
-	}
+
+	return wxImage(wxSize(width, height), wxpixels);
 }
 
 namespace GSDump
@@ -178,6 +90,22 @@ using namespace pxSizerFlags;
 // --------------------------------------------------------------------------------------
 //  GSDumpDialog  Implementation
 // --------------------------------------------------------------------------------------
+
+static GSRendererType s_renderer_overrides[] = {
+	GSRendererType::SW,
+#ifdef ENABLE_OPENGL
+	GSRendererType::OGL,
+#endif
+#ifdef ENABLE_VULKAN
+	GSRendererType::VK,
+#endif
+#if defined(_WIN32)
+	GSRendererType::DX11,
+	GSRendererType::DX12,
+#elif defined(__APPLE__)
+	GSRendererType::Metal,
+#endif
+};
 
 Dialogs::GSDumpDialog::GSDumpDialog(wxWindow* parent)
 	: wxDialogWithHelpers(parent, _("GS Debugger"), pxDialogFlags().SetMinimize().SetResize())
@@ -210,14 +138,8 @@ Dialogs::GSDumpDialog::GSDumpDialog(wxWindow* parent)
 	m_run->SetDefault();
 	wxArrayString rdoverrides;
 	rdoverrides.Add("None");
-	rdoverrides.Add(Pcsx2Config::GSOptions::GetRendererName(GSRendererType::SW));
-	rdoverrides.Add(Pcsx2Config::GSOptions::GetRendererName(GSRendererType::OGL));
-#ifdef ENABLE_VULKAN
-	rdoverrides.Add(Pcsx2Config::GSOptions::GetRendererName(GSRendererType::VK));
-#endif
-#if defined(_WIN32)
-	rdoverrides.Add(Pcsx2Config::GSOptions::GetRendererName(GSRendererType::DX11));
-#endif
+	for (GSRendererType over : s_renderer_overrides)
+		rdoverrides.Add(Pcsx2Config::GSOptions::GetRendererName(over));
 	m_renderer_overrides->Create(this, wxID_ANY, "Renderer overrides", wxDefaultPosition, wxDefaultSize, rdoverrides, 1);
 
 	dbg_tree->Add(new wxStaticText(this, wxID_ANY, _("GIF Packets")));
@@ -300,6 +222,8 @@ void Dialogs::GSDumpDialog::GetDumpsList()
 			dumps.push_back(filename.substr(0, filename.length() - 3));
 		else if (filename.EndsWith(".gs.xz"))
 			dumps.push_back(filename.substr(0, filename.length() - 6));
+		else if (filename.EndsWith(".gs.zst"))
+			dumps.push_back(filename.substr(0, filename.length() - 7));
 		cont = snaps.GetNext(&filename);
 	}
 	std::sort(dumps.begin(), dumps.end(), [](const wxString& a, const wxString& b) { return a.CmpNoCase(b) < 0; });
@@ -327,14 +251,25 @@ void Dialogs::GSDumpDialog::SelectedDump(wxListEvent& evt)
 	wxString filename = g_Conf->Folders.Snapshots.ToAscii() + ("/" + evt.GetText()) + ".gs";
 	if (!wxFileExists(filename))
 		filename.append(".xz");
+	if (!wxFileExists(filename))
+		filename = filename.RemoveLast(3).append(".zst");
 	if (wxFileExists(filename_preview))
 	{
 		auto img = wxImage(filename_preview);
 		img.Rescale(400,250, wxIMAGE_QUALITY_HIGH);
 		m_preview_image->SetBitmap(wxBitmap(img));
 	}
+	else if (std::optional<wxImage> img = GetPreviewImageFromDump(StringUtil::wxStringToUTF8String(filename)); img.has_value())
+	{
+		// try embedded dump
+		img->Rescale(400, 250, wxIMAGE_QUALITY_HIGH);
+		m_preview_image->SetBitmap(img.value());
+	}
 	else
+	{
 		m_preview_image->SetBitmap(EmbeddedImage<res_NoIcon>().Get());
+	}
+
 	m_selected_dump = wxString(filename);
 }
 
@@ -368,18 +303,16 @@ void Dialogs::GSDumpDialog::RunDump(wxCommandEvent& event)
 {
 	if (!m_run->IsEnabled())
 		return;
-	FILE* dumpfile = wxFopen(m_selected_dump, L"rb");
-	if (!dumpfile)
+
+	m_thread->m_dump_file = GSDumpFile::OpenGSDump(m_selected_dump.ToUTF8());
+	if (!m_thread->m_dump_file)
 	{
 		wxString s;
 		s.Printf(_("Failed to load the dump %s !"), m_selected_dump);
 		wxMessageBox(s, _("GS Debugger"), wxICON_ERROR);
 		return;
 	}
-	if (m_selected_dump.EndsWith(".xz"))
-		m_thread->m_dump_file = std::make_unique<GSDumpLzma>(dumpfile, nullptr);
-	else
-		m_thread->m_dump_file = std::make_unique<GSDumpRaw >(dumpfile, nullptr);
+
 	m_run->Disable();
 	m_settings->Disable();
 	m_debug_mode->Enable();
@@ -483,11 +416,11 @@ void Dialogs::GSDumpDialog::GenPacketList()
 	m_gif_items.clear();
 	wxTreeItemId mainrootId = m_gif_list->AddRoot("root");
 	wxTreeItemId rootId = m_gif_list->AppendItem(mainrootId, "0 - VSync");
-	for (auto& element : m_dump_packets)
+	for (auto& element : m_thread->m_dump_file->GetPackets())
 	{
 		wxString s, t;
-		element.id == GSType::Transfer ? t.Printf(" - %s", GetName(element.path)) : t.Printf("");
-		s.Printf("%d - %s%s - %d byte", i, GetName(element.id), t, element.length);
+		element.id == GSType::Transfer ? t.Printf(" - %s", GSDumpTypes::GetName(element.path)) : t.Printf("");
+		s.Printf("%d - %s%s - %d byte", i, GSDumpTypes::GetName(element.id), t, element.length);
 		if (element.id == GSType::VSync)
 		{
 			m_gif_list->SetItemText(rootId, s);
@@ -506,7 +439,7 @@ void Dialogs::GSDumpDialog::GenPacketList()
 	m_gif_list->SelectItem(m_gif_items[0]);
 }
 
-void Dialogs::GSDumpDialog::GenPacketInfo(GSData& dump)
+void Dialogs::GSDumpDialog::GenPacketInfo(const GSDumpFile::GSData& dump)
 {
 	m_gif_packet->DeleteAllItems();
 	wxTreeItemId rootId = m_gif_packet->AddRoot("root");
@@ -514,12 +447,12 @@ void Dialogs::GSDumpDialog::GenPacketInfo(GSData& dump)
 	{
 		case GSType::Transfer:
 		{
-			char* data = dump.data.get();
+			const u8* data = dump.data;
 			u32 remaining = dump.length;
 			int idx = 0;
 			while (remaining >= 16)
 			{
-				wxTreeItemId trootId = m_gif_packet->AppendItem(rootId, wxString::Format("Transfer Path %s Packet %u", GetName(dump.path), idx));
+				wxTreeItemId trootId = m_gif_packet->AppendItem(rootId, wxString::Format("Transfer Path %s Packet %u", GSDumpTypes::GetName(dump.path), idx));
 				ParseTransfer(trootId, data);
 				m_gif_packet->Expand(trootId);
 				u32 size = ReadPacketSize(data);
@@ -532,7 +465,7 @@ void Dialogs::GSDumpDialog::GenPacketInfo(GSData& dump)
 		case GSType::VSync:
 		{
 			wxString s;
-			s.Printf("Field = %u", *(u8*)(dump.data.get()));
+			s.Printf("Field = %u", dump.data[0]);
 			m_gif_packet->AppendItem(rootId, s);
 			break;
 		}
@@ -549,7 +482,7 @@ void Dialogs::GSDumpDialog::GenPacketInfo(GSData& dump)
 	}
 }
 
-void Dialogs::GSDumpDialog::ParseTransfer(wxTreeItemId& trootId, char* data)
+void Dialogs::GSDumpDialog::ParseTransfer(wxTreeItemId& trootId, const u8* data)
 {
 	u64 tag  = *(u64*)data;
 	u64 regs = *(u64*)(data + 8);
@@ -567,7 +500,7 @@ void Dialogs::GSDumpDialog::ParseTransfer(wxTreeItemId& trootId, char* data)
 
 	m_gif_packet->AppendItem(trootId, wxString::Format("nloop = %u", nloop));
 	m_gif_packet->AppendItem(trootId, wxString::Format("eop = %u", eop));
-	m_gif_packet->AppendItem(trootId, wxString::Format("flg = %s", GetName(flg)));
+	m_gif_packet->AppendItem(trootId, wxString::Format("flg = %s", GSDumpTypes::GetName(flg)));
 	m_gif_packet->AppendItem(trootId, wxString::Format("pre = %u", pre));
 	if (pre)
 	{
@@ -619,12 +552,12 @@ void Dialogs::GSDumpDialog::ParseTransfer(wxTreeItemId& trootId, char* data)
 
 void Dialogs::GSDumpDialog::ParsePacket(wxTreeEvent& event)
 {
-	GenPacketInfo(m_dump_packets[wxAtoi(m_gif_list->GetItemText(event.GetItem()).BeforeFirst('-'))]);
+	GenPacketInfo(m_thread->m_dump_file->GetPackets()[wxAtoi(m_gif_list->GetItemText(event.GetItem()).BeforeFirst('-'))]);
 }
 
 void Dialogs::GSDumpDialog::ParseTreeReg(wxTreeItemId& id, GIFReg reg, u128 data, bool packed)
 {
-	wxTreeItemId rootId = m_gif_packet->AppendItem(id, wxString(GetName(reg)));
+	wxTreeItemId rootId = m_gif_packet->AppendItem(id, wxString(GSDumpTypes::GetName(reg)));
 	switch (reg)
 	{
 		case GIFReg::PRIM:
@@ -652,7 +585,7 @@ void Dialogs::GSDumpDialog::ParseTreeReg(wxTreeItemId& id, GIFReg reg, u128 data
 				q = BitCast<float>(data._u32[1]);
 			}
 
-			m_gif_packet->SetItemText(rootId, wxString::Format("%s - #%02x%02x%02x%02x, %g", GetName(reg), r, g, b, a, q));
+			m_gif_packet->SetItemText(rootId, wxString::Format("%s - #%02x%02x%02x%02x, %g", GSDumpTypes::GetName(reg), r, g, b, a, q));
 			m_gif_packet->AppendItem(rootId, wxString::Format("R = %u", r));
 			m_gif_packet->AppendItem(rootId, wxString::Format("G = %u", g));
 			m_gif_packet->AppendItem(rootId, wxString::Format("B = %u", b));
@@ -670,11 +603,11 @@ void Dialogs::GSDumpDialog::ParseTreeReg(wxTreeItemId& id, GIFReg reg, u128 data
 			{
 				m_stored_q = BitCast<float>(data._u32[2]);
 				m_gif_packet->AppendItem(rootId, wxString::Format("Q = %g", m_stored_q));
-				m_gif_packet->SetItemText(rootId, wxString::Format("%s - (%g, %g, %g)", GetName(reg), s, t, m_stored_q));
+				m_gif_packet->SetItemText(rootId, wxString::Format("%s - (%g, %g, %g)", GSDumpTypes::GetName(reg), s, t, m_stored_q));
 			}
 			else
 			{
-				m_gif_packet->SetItemText(rootId, wxString::Format("%s - (%g, %g)", GetName(reg), s, t));
+				m_gif_packet->SetItemText(rootId, wxString::Format("%s - (%g, %g)", GSDumpTypes::GetName(reg), s, t));
 			}
 			break;
 		}
@@ -684,15 +617,15 @@ void Dialogs::GSDumpDialog::ParseTreeReg(wxTreeItemId& id, GIFReg reg, u128 data
 			float v = static_cast<float>(GetBits(data, packed ? 32 : 16, 14)) / 16.f;
 			m_gif_packet->AppendItem(rootId, wxString::Format("U = %g", u));
 			m_gif_packet->AppendItem(rootId, wxString::Format("V = %g", v));
-			m_gif_packet->SetItemText(rootId, wxString::Format("%s - (%g, %g)", GetName(reg), u, v));
+			m_gif_packet->SetItemText(rootId, wxString::Format("%s - (%g, %g)", GSDumpTypes::GetName(reg), u, v));
 			break;
 		}
 		case GIFReg::XYZF2:
 		case GIFReg::XYZF3:
 		{
-			const char* name = GetName(reg);
+			const char* name = GSDumpTypes::GetName(reg);
 			if (packed && (reg == GIFReg::XYZF2) && GetBits(data, 111, 1))
-				name = GetName(GIFReg::XYZF3);
+				name = GSDumpTypes::GetName(GIFReg::XYZF3);
 
 			float x, y;
 			u32 z, f;
@@ -722,9 +655,9 @@ void Dialogs::GSDumpDialog::ParseTreeReg(wxTreeItemId& id, GIFReg reg, u128 data
 		case GIFReg::XYZ2:
 		case GIFReg::XYZ3:
 		{
-			const char* name = GetName(reg);
+			const char* name = GSDumpTypes::GetName(reg);
 			if (packed && (reg == GIFReg::XYZ2) && GetBits(data, 111, 1))
-				name = GetName(GIFReg::XYZ3);
+				name = GSDumpTypes::GetName(GIFReg::XYZ3);
 
 			float x, y;
 			u32 z;
@@ -755,7 +688,7 @@ void Dialogs::GSDumpDialog::ParseTreeReg(wxTreeItemId& id, GIFReg reg, u128 data
 			u32 tw = GetBits(data, 26, 4);
 			u32 th = GetBits(data, 30, 4);
 
-			m_gif_packet->SetItemText(rootId, wxString::Format("%s - %ux%u %s", GetName(reg), 1 << tw, 1 << th, GetNameTEXPSM(psm)));
+			m_gif_packet->SetItemText(rootId, wxString::Format("%s - %ux%u %s", GSDumpTypes::GetName(reg), 1 << tw, 1 << th, GetNameTEXPSM(psm)));
 			m_gif_packet->AppendItem(rootId, wxString::Format("TBP0 = %u", GetBits(data, 0, 14)));
 			m_gif_packet->AppendItem(rootId, wxString::Format("TBW = %u",  GetBits(data, 14, 6)));
 			m_gif_packet->AppendItem(rootId, wxString::Format("PSM = %s",  GetNameTEXPSM(psm)));
@@ -774,7 +707,7 @@ void Dialogs::GSDumpDialog::ParseTreeReg(wxTreeItemId& id, GIFReg reg, u128 data
 		{
 			u32 f = GetBits(data, packed ? 100 : 56, 8);
 			m_gif_packet->AppendItem(rootId, wxString::Format("F = %u", f));
-			m_gif_packet->SetItemText(rootId, wxString::Format("%s - %u", GetName(reg), f));
+			m_gif_packet->SetItemText(rootId, wxString::Format("%s - %u", GSDumpTypes::GetName(reg), f));
 			break;
 		}
 		case GIFReg::AD:
@@ -815,7 +748,7 @@ void Dialogs::GSDumpDialog::ParseTreePrim(wxTreeItemId& id, u32 prim)
 	m_gif_packet->Expand(id);
 }
 
-void Dialogs::GSDumpDialog::ProcessDumpEvent(const GSData& event, char* regs)
+void Dialogs::GSDumpDialog::ProcessDumpEvent(const GSDumpFile::GSData& event, u8* regs)
 {
 	switch (event.id)
 	{
@@ -827,18 +760,18 @@ void Dialogs::GSDumpDialog::ProcessDumpEvent(const GSData& event, char* regs)
 				{
 					std::unique_ptr<char[]> data(new char[16384]);
 					int addr = 16384 - event.length;
-					memcpy(data.get(), event.data.get() + addr, event.length);
+					memcpy(data.get(), event.data + addr, event.length);
 					GSgifTransfer1((u8*)data.get(), addr);
 					break;
 				}
 				case GSTransferPath::Path1New:
-					GSgifTransfer((u8*)event.data.get(), event.length / 16);
+					GSgifTransfer((u8*)event.data, event.length / 16);
 					break;
 				case GSTransferPath::Path2:
-					GSgifTransfer2((u8*)event.data.get(), event.length / 16);
+					GSgifTransfer2((u8*)event.data, event.length / 16);
 					break;
 				case GSTransferPath::Path3:
-					GSgifTransfer3((u8*)event.data.get(), event.length / 16);
+					GSgifTransfer3((u8*)event.data, event.length / 16);
 					break;
 				default:
 					break;
@@ -847,18 +780,18 @@ void Dialogs::GSDumpDialog::ProcessDumpEvent(const GSData& event, char* regs)
 		}
 		case GSType::VSync:
 		{
-			GSvsync((*((int*)(regs + 4096)) & 0x2000) > 0 ? (u8)1 : (u8)0, false);
+			GSvsync((*((int*)(regs + 4096)) & 0x2000) > 0 ? (u8)0 : (u8)1, false);
 			g_FrameCount++;
 			break;
 		}
 		case GSType::ReadFIFO2:
 		{
-			std::unique_ptr<char[]> arr(new char[*((int*)event.data.get())]);
-			GSreadFIFO2((u8*)arr.get(), *((int*)event.data.get()));
+			std::unique_ptr<u8[]> arr(new u8[*((int*)event.data) * 16]);
+			GSInitAndReadFIFO(arr.get(), *((int*)event.data));
 			break;
 		}
 		case GSType::Registers:
-			memcpy(regs, event.data.get(), 8192);
+			memcpy(regs, event.data, 8192);
 			break;
 	}
 }
@@ -893,73 +826,15 @@ void Dialogs::GSDumpDialog::GSThread::OnStop()
 
 void Dialogs::GSDumpDialog::GSThread::ExecuteTaskInThread()
 {
-	GSDump::isRunning = true;
-	u32 crc = 0, ss = 0;
+	if (!m_dump_file->ReadFile())
+	{
+		OnStop();
+		return;
+	}
+
 	GSRendererType renderer = g_Conf->EmuOptions.GS.Renderer;
-	switch (m_renderer)
-	{
-		// Software
-		case 1:
-			renderer = GSRendererType::SW;
-			break;
-		// OpenGL
-		case 2:
-			renderer = GSRendererType::OGL;
-			break;
-#ifdef ENABLE_VULKAN
-		// Vulkan
-		case 3:
-			renderer = GSRendererType::VK;
-			break;
-#endif
-#ifdef _WIN32
-		// D3D11
-		case 4:		// WIN32 implies WITH_VULKAN so this is okay
-			renderer = GSRendererType::DX11;
-			break;
-#endif
-		default:
-			break;
-	}
-	char regs[8192];
-
-	m_dump_file->Read(&crc, 4);
-	m_dump_file->Read(&ss, 4);
-
-
-	std::unique_ptr<char[]> state_data(new char[ss]);
-	m_dump_file->Read(state_data.get(), ss);
-	m_dump_file->Read(&regs, 8192);
-
-	freezeData fd = {(int)ss, (u8*)state_data.get()};
-	m_root_window->m_dump_packets.clear();
-
-	while (!m_dump_file->IsEof())
-	{
-		GSType id;
-		GSTransferPath id_transfer = GSTransferPath::Dummy;
-		m_dump_file->Read(&id, 1);
-		s32 size = 0;
-		switch (id)
-		{
-			case GSType::Transfer:
-				m_dump_file->Read(&id_transfer, 1);
-				m_dump_file->Read(&size, 4);
-				break;
-			case GSType::VSync:
-				size = 1;
-				break;
-			case GSType::ReadFIFO2:
-				size = 4;
-				break;
-			case GSType::Registers:
-				size = 8192;
-				break;
-		}
-		std::unique_ptr<char[]> data(new char[size]);
-		m_dump_file->Read(data.get(), size);
-		m_root_window->m_dump_packets.push_back({id, std::move(data), size, id_transfer});
-	}
+	if (m_renderer > 0 && static_cast<size_t>(m_renderer) <= std::size(s_renderer_overrides))
+		renderer = s_renderer_overrides[m_renderer - 1];
 
 	GSinit();
 	sApp.OpenGsPanel();
@@ -974,24 +849,47 @@ void Dialogs::GSDumpDialog::GSThread::ExecuteTaskInThread()
 		g_FrameCount = 0;
 	}
 
-	if (!GSopen(g_Conf->EmuOptions.GS, renderer, (u8*)regs))
+	Pcsx2Config::GSOptions config(g_Conf->EmuOptions.GS);
+	config.MaskUserHacks();
+	config.MaskUpscalingHacks();
+	if (!m_dump_file->GetSerial().empty())
+	{
+		if (const GameDatabaseSchema::GameEntry* entry = GameDatabase::findGame(m_dump_file->GetSerial()); entry)
+		{
+			// apply hardware fixes to config before opening (e.g. tex in rt)
+			entry->applyGSHardwareFixes(config);
+		}
+	}
+
+	u8 regs[8192] = {};
+	if (!m_dump_file->GetRegsData().empty())
+		std::memcpy(regs, m_dump_file->GetRegsData().data(), std::min(m_dump_file->GetRegsData().size(), sizeof(regs)));
+
+	if (!GSopen(config, renderer, regs))
 	{
 		OnStop();
 		return;
 	}
 
-	GSsetGameCRC((int)crc, 0);
+	GSsetGameCRC((int)m_dump_file->GetCRC(), 0);
 
+	freezeData fd = {static_cast<int>(m_dump_file->GetStateData().size()),
+		const_cast<u8*>(m_dump_file->GetStateData().data())};
 	if (GSfreeze(FreezeAction::Load, &fd))
-		GSDump::isRunning = false;
+	{
+		OnStop();
+		return;
+	}
+
 	GSvsync(1, false);
-	GSreset();
+	GSreset(false);
 	GSfreeze(FreezeAction::Load, &fd);
 
 	size_t i = 0;
 	m_debug_index = 0;
 	size_t debug_idx = 0;
 
+	GSDump::isRunning = true;
 	while (GSDump::isRunning)
 	{
 		if (m_debug)
@@ -1001,7 +899,7 @@ void Dialogs::GSDumpDialog::GSThread::ExecuteTaskInThread()
 				switch (m_root_window->m_button_events[0].btn)
 				{
 					case Step:
-						if (debug_idx >= m_root_window->m_dump_packets.size())
+						if (debug_idx >= m_dump_file->GetPackets().size())
 							debug_idx = 0;
 						m_debug_index = debug_idx;
 						break;
@@ -1011,13 +909,13 @@ void Dialogs::GSDumpDialog::GSThread::ExecuteTaskInThread()
 							debug_idx = 0;
 						break;
 					case RunVSync:
-						if (debug_idx >= m_root_window->m_dump_packets.size())
+						if (debug_idx >= m_dump_file->GetPackets().size())
 							debug_idx = 1;
-						if ((debug_idx + 1) < m_root_window->m_dump_packets.size())
+						if ((debug_idx + 1) < m_dump_file->GetPackets().size())
 						{
-							auto it = std::find_if(m_root_window->m_dump_packets.begin() + debug_idx + 1, m_root_window->m_dump_packets.end(), [](const GSData& gs) { return gs.id == GSType::Registers; });
-							if (it != std::end(m_root_window->m_dump_packets))
-								m_debug_index = std::distance(m_root_window->m_dump_packets.begin(), it);
+							auto it = std::find_if(m_dump_file->GetPackets().begin() + debug_idx + 1, m_dump_file->GetPackets().end(), [](const GSDumpFile::GSData& gs) { return gs.id == GSType::Registers; });
+							if (it != std::end(m_dump_file->GetPackets()))
+								m_debug_index = std::distance(m_dump_file->GetPackets().begin(), it);
 						}
 						break;
 				}
@@ -1027,12 +925,12 @@ void Dialogs::GSDumpDialog::GSThread::ExecuteTaskInThread()
 				{
 					while (debug_idx <= m_debug_index)
 					{
-						m_root_window->ProcessDumpEvent(m_root_window->m_dump_packets[debug_idx++], regs);
+						m_root_window->ProcessDumpEvent(m_dump_file->GetPackets()[debug_idx++], regs);
 					}
-					if ((debug_idx + 1) < m_root_window->m_dump_packets.size())
+					if ((debug_idx + 1) < m_dump_file->GetPackets().size())
 					{
-						auto it = std::find_if(m_root_window->m_dump_packets.begin() + debug_idx + 1, m_root_window->m_dump_packets.end(), [](const GSData& gs) { return gs.id == GSType::Registers; });
-						if (it != std::end(m_root_window->m_dump_packets))
+						auto it = std::find_if(m_dump_file->GetPackets().begin() + debug_idx + 1, m_dump_file->GetPackets().end(), [](const GSDumpFile::GSData& gs) { return gs.id == GSType::Registers; });
+						if (it != std::end(m_dump_file->GetPackets()))
 							m_root_window->ProcessDumpEvent(*it, regs);
 					}
 				}
@@ -1041,11 +939,11 @@ void Dialogs::GSDumpDialog::GSThread::ExecuteTaskInThread()
 				m_root_window->ProcessDumpEvent({GSType::VSync, 0, 0, GSTransferPath::Dummy}, regs);
 			}
 		}
-		else if (m_root_window->m_dump_packets.size())
+		else if (m_dump_file->GetPackets().size())
 		{
-			while (i < m_root_window->m_dump_packets.size())
+			while (i < m_dump_file->GetPackets().size())
 			{
-				GSData& packet = m_root_window->m_dump_packets[i++];
+				const GSDumpFile::GSData& packet = m_dump_file->GetPackets()[i++];
 				m_root_window->ProcessDumpEvent(packet, regs);
 				if (packet.id == GSType::VSync)
 				{
@@ -1065,7 +963,7 @@ void Dialogs::GSDumpDialog::GSThread::ExecuteTaskInThread()
 				}
 			}
 
-			if (i >= m_root_window->m_dump_packets.size())
+			if (i >= m_dump_file->GetPackets().size())
 				i = 0;
 		}
 		if (window)

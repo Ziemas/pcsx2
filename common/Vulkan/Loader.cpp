@@ -30,6 +30,8 @@
 #include <mach-o/dyld.h>
 #endif
 
+extern "C" {
+
 #define VULKAN_MODULE_ENTRY_POINT(name, required) PFN_##name pcsx2_##name;
 #define VULKAN_INSTANCE_ENTRY_POINT(name, required) PFN_##name pcsx2_##name;
 #define VULKAN_DEVICE_ENTRY_POINT(name, required) PFN_##name pcsx2_##name;
@@ -37,6 +39,8 @@
 #undef VULKAN_DEVICE_ENTRY_POINT
 #undef VULKAN_INSTANCE_ENTRY_POINT
 #undef VULKAN_MODULE_ENTRY_POINT
+
+}
 
 namespace Vulkan
 {
@@ -65,11 +69,7 @@ namespace Vulkan
 			return true;
 		}
 
-#if WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP | WINAPI_PARTITION_SYSTEM | WINAPI_PARTITION_GAMES)
 		vulkan_module = LoadLibraryA("vulkan-1.dll");
-#else
-		vulkan_module = NULL;
-#endif
 		if (!vulkan_module)
 		{
 			std::fprintf(stderr, "Failed to load vulkan-1.dll\n");

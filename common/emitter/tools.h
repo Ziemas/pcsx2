@@ -15,7 +15,7 @@
 
 #pragma once
 
-#include "common/Dependencies.h"
+#include "common/Pcsx2Defs.h"
 
 enum x86VendorType
 {
@@ -114,7 +114,7 @@ public:
 
 	void Identify();
 	void CountCores();
-	wxString GetTypeName() const;
+	const char* GetTypeName() const;
 
 	static u32 CachedMHz();
 	u32 CalculateMHz() const;
@@ -184,6 +184,9 @@ union SSE_MXCSR
 			RoundingControl : 2,
 			FlushToZero : 1;
 	};
+
+	static SSE_MXCSR GetCurrent();
+	static void SetCurrent(const SSE_MXCSR& value);
 
 	SSE_RoundMode GetRoundMode() const;
 	SSE_MXCSR& SetRoundMode(SSE_RoundMode mode);

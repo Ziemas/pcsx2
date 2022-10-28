@@ -15,12 +15,18 @@
 
 
 #include "PrecompiledHeader.h"
-#include "IopCommon.h"
+#include "R3000A.h"
+#include "Common.h"
 #include "Config.h"
-#include "System/SysThreads.h"
 
 #include "R5900OpcodeTables.h"
 #include "DebugTools/Breakpoints.h"
+#include "IopBios.h"
+#include "IopHw.h"
+
+#ifndef PCSX2_CORE
+#include "gui/SysThreads.h"
+#endif
 
 using namespace R3000A;
 
@@ -181,7 +187,7 @@ void psxCheckMemcheck()
 	int needed = psxIsMemcheckNeeded(pc);
 	if (needed == 0)
 		return;
-	
+
 	u32 op = iopMemRead32(needed == 2 ? pc + 4 : pc);
 	// Yeah, we use the R5900 opcode table for the R3000
 	const R5900::OPCODE& opcode = R5900::GetInstruction(op);
@@ -270,24 +276,29 @@ static void intReset() {
 	intAlloc();
 }
 
-static void intExecute() {
-	for (;;) execI();
-}
-
 static s32 intExecuteBlock( s32 eeCycles )
 {
 	iopBreak = 0;
 	iopCycleEE = eeCycles;
 
-	while (iopCycleEE > 0){
-		if ((psxHu32(HW_ICFG) & 8) && ((psxRegs.pc & 0x1fffffffU) == 0xa0 || (psxRegs.pc & 0x1fffffffU) == 0xb0 || (psxRegs.pc & 0x1fffffffU) == 0xc0))
-			psxBiosCall();
+	try
+	{
+		while (iopCycleEE > 0) {
+			if ((psxHu32(HW_ICFG) & 8) && ((psxRegs.pc & 0x1fffffffU) == 0xa0 || (psxRegs.pc & 0x1fffffffU) == 0xb0 || (psxRegs.pc & 0x1fffffffU) == 0xc0))
+				psxBiosCall();
 
-		branch2 = 0;
-		while (!branch2) {
-			execI();
-        }
+			branch2 = 0;
+			while (!branch2) {
+				execI();
+			}
+		}
 	}
+	catch (Exception::ExitCpuExecute&)
+	{
+		// Get out of the EE too, regardless of whether it's int or rec.
+		Cpu->ExitExecution();
+	}
+
 	return iopBreak + iopCycleEE;
 }
 
@@ -309,7 +320,6 @@ static uint intGetCacheReserve()
 R3000Acpu psxInt = {
 	intReserve,
 	intReset,
-	intExecute,
 	intExecuteBlock,
 	intClear,
 	intShutdown,

@@ -128,9 +128,9 @@
        </widget>
       </item>
       <item>
-       <widget class="QCheckBox" name="VUKickstartHack">
+       <widget class="QCheckBox" name="VUSyncHack">
         <property name="text">
-         <string>VU Kickstart Hack (Run Ahead)</string>
+         <string>VU Sync (Run Behind, M-Bit games)</string>
         </property>
        </widget>
       </item>
@@ -138,6 +138,13 @@
        <widget class="QCheckBox" name="XgKickHack">
         <property name="text">
          <string>VU XGKick Sync (Correct But Slower)</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QCheckBox" name="BlitInternalFPSHack">
+        <property name="text">
+         <string>Force Blit Internal FPS Detection (When auto-detection fails)</string>
         </property>
        </widget>
       </item>

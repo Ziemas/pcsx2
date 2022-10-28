@@ -106,7 +106,6 @@ namespace GSSettingsDialog
 		GSUIElementHolder m_ui;
 		wxChoice* m_internal_resolution;
 		bool m_is_hardware = false;
-		bool m_is_native_res = false;
 
 		RendererTab(wxWindow* parent);
 		void Load() { m_ui.Load(); }
@@ -133,6 +132,7 @@ namespace GSSettingsDialog
 	public:
 		GSUIElementHolder m_ui;
 		bool m_is_ogl_hw = false;
+		bool m_is_vk_hw = false;
 
 		DebugTab(wxWindow* parent);
 		void Load() { m_ui.Load(); }

@@ -21,6 +21,7 @@
 #include "Host.h"
 #include "AppSaveStates.h"
 #include "AppAccelerators.h"
+#include "IniInterface.h"
 #include "PAD/Gamepad.h"
 
 #include "ps2/BiosTools.h"
@@ -31,15 +32,12 @@
 
 #include "Debugger/DisassemblyDialog.h"
 
-#ifndef DISABLE_RECORDING
-#	include "Recording/InputRecordingControls.h"
-#	include "Recording/InputRecording.h"
-#endif
+#include "Recording/InputRecordingControls.h"
+#include "Recording/InputRecording.h"
 
-#include "common/IniInterface.h"
 #include "common/FileSystem.h"
 #include "common/StringUtil.h"
-#include "common/AppTrait.h"
+#include "AppTrait.h"
 
 #include <wx/stdpaths.h>
 
@@ -130,18 +128,18 @@ public:
 	{
 		m_Method = method;
 	}
-	
+
 	Pcsx2AppMethodEvent( const Pcsx2AppMethodEvent& src )
 		: pxActionEvent( src )
 	{
 		m_Method = src.m_Method;
 	}
-		
+
 	void SetMethod( FnPtr_Pcsx2App method )
 	{
 		m_Method = method;
 	}
-	
+
 protected:
 	void InvokeEvent()
 	{
@@ -153,9 +151,11 @@ protected:
 wxIMPLEMENT_DYNAMIC_CLASS( Pcsx2AppMethodEvent, pxActionEvent );
 
 #ifdef __WXMSW__
-extern int TranslateVKToWXK( u32 keysym );
-#elif defined( __WXGTK__ )
-extern int TranslateGDKtoWXK( u32 keysym );
+extern int TranslateVKToWXK(u32 keysym);
+#elif defined(__WXGTK__)
+extern int TranslateGDKtoWXK(u32 keysym);
+#elif defined(__APPLE__)
+extern int TranslateOSXtoWXK(u32 keysym);
 #endif
 
 void Pcsx2App::PadKeyDispatch(const HostKeyEvent& ev)
@@ -166,9 +166,9 @@ void Pcsx2App::PadKeyDispatch(const HostKeyEvent& ev)
 #ifdef __WXMSW__
 	const int vkey = TranslateVKToWXK(ev.key);
 #elif defined( __WXMAC__ )
-	const int vkey = wxCharCodeWXToOSX( (wxKeyCode) ev.key );
+	const int vkey = TranslateOSXtoWXK(ev.key);
 #elif defined( __WXGTK__ )
-	const int vkey = TranslateGDKtoWXK( ev.key );
+	const int vkey = TranslateGDKtoWXK(ev.key);
 #else
 #	error Unsupported Target Platform.
 #endif
@@ -191,7 +191,7 @@ void Pcsx2App::PadKeyDispatch(const HostKeyEvent& ev)
 		if (strFromCode.EndsWith(L"\\"))
 			strFromCode += L"\\"; // If copied into PCSX2_keys.ini, \ needs escaping
 
-		Console.WriteLn(wxString(L"> Key: %s (Code: %ld)"),	WX_STR(strFromCode), m_kevt.m_keyCode);
+		Console.WriteLn(StringUtil::wxStringToUTF8String(wxString::Format("> Key: %s (Code: %ld)",	WX_STR(strFromCode), m_kevt.m_keyCode)));
 	}
 
 	if( m_kevt.GetEventType() == wxEVT_KEY_DOWN )
@@ -301,7 +301,7 @@ class Pcsx2StandardPaths : public wxStandardPaths
 public:
 	wxString GetResourcesDir() const
 	{
-		return Path::Combine( GetDataDir(), L"Langs" );
+		return Path::CombineWx( GetDataDir(), L"Langs" );
 	}
 
 #ifdef __POSIX__
@@ -315,18 +315,18 @@ public:
 		// Note: GetUserLocalDataDir() on linux return $HOME/.pcsx2 unfortunately it does not follow the XDG standard
 		// So we re-implement it, to follow the standard.
 		wxDirName user_local_dir;
-		wxDirName default_config_dir = (wxDirName)Path::Combine( L".config", pxGetAppName() );
+		wxDirName default_config_dir = (wxDirName)Path::CombineWx( L".config", pxGetAppName() );
 		wxString xdg_home_value;
 		if( wxGetEnv(L"XDG_CONFIG_HOME", &xdg_home_value) ) {
 			if ( xdg_home_value.IsEmpty() ) {
 				// variable exist but it is empty. So use the default value
-				user_local_dir = (wxDirName)Path::Combine( GetUserConfigDir() , default_config_dir);
+				user_local_dir = (wxDirName)Path::CombineWx( GetUserConfigDir() , default_config_dir);
 			} else {
-				user_local_dir = (wxDirName)Path::Combine( xdg_home_value, pxGetAppName());
+				user_local_dir = (wxDirName)Path::CombineWx( xdg_home_value, pxGetAppName());
 			}
 		} else {
 			// variable do not exist
-			user_local_dir = (wxDirName)Path::Combine( GetUserConfigDir() , default_config_dir);
+			user_local_dir = (wxDirName)Path::CombineWx( GetUserConfigDir() , default_config_dir);
 		}
 
 		cache_dir = user_local_dir.ToString();
@@ -359,7 +359,7 @@ wxAppTraits* Pcsx2App::CreateTraits()
 // ----------------------------------------------------------------------------
 
 // LogicalVsync - Event received from the AppCoreThread (EEcore) for each vsync,
-// roughly 50/60 times a second when frame limiting is enabled, and up to 10,000 
+// roughly 50/60 times a second when frame limiting is enabled, and up to 10,000
 // times a second if not (ok, not quite, but you get the idea... I hope.)
 void Pcsx2App::LogicalVsync()
 {
@@ -374,7 +374,7 @@ void Pcsx2App::LogicalVsync()
 	{
 		if( ev->key == 0 ) break;
 
-		// in the past, in the plugin api, all plugins would have a first chance at treating the 
+		// in the past, in the plugin api, all plugins would have a first chance at treating the
 		// input here, with the ui eventually dealing with it otherwise. Obviously this solution
 		// sucked and we had multiple components battling for input processing. I managed to make
 		// most of them go away during the plugin merge but GS still needs to process the inputs,
@@ -413,7 +413,6 @@ void Pcsx2App::HandleEvent(wxEvtHandler* handler, wxEventFunction func, wxEvent&
 {
 	try
 	{
-#ifndef DISABLE_RECORDING
 		if (g_Conf->EmuOptions.EnableRecordingTools)
 		{
 			if (g_InputRecordingControls.IsPaused())
@@ -431,7 +430,6 @@ void Pcsx2App::HandleEvent(wxEvtHandler* handler, wxEventFunction func, wxEvent&
 			}
 			g_InputRecordingControls.ResumeCoreThreadIfStarted();
 		}
-#endif
 		(handler->*func)(event);
 	}
 	// ----------------------------------------------------------------------------
@@ -446,10 +444,8 @@ void Pcsx2App::HandleEvent(wxEvtHandler* handler, wxEventFunction func, wxEvent&
 		// Saved state load failed prior to the system getting corrupted (ie, file not found
 		// or some zipfile error) -- so log it and resume emulation.
 		Console.Warning( ex.FormatDiagnosticMessage() );
-#ifndef DISABLE_RECORDING
 		if (g_InputRecording.IsInitialLoad())
 			g_InputRecording.FailedSavestate();
-#endif
 
 		CoreThread.Resume();
 	}
@@ -460,17 +456,17 @@ void Pcsx2App::HandleEvent(wxEvtHandler* handler, wxEventFunction func, wxEvent&
 		// [TODO]  Bind a listener to the CoreThread status, and automatically close the dialog
 		// if the thread starts responding while we're waiting (not hard in fact, but I'm getting
 		// a little tired, so maybe later!)  --air
-	
+
 		Console.Warning( ex.FormatDiagnosticMessage() );
 		wxDialogWithHelpers dialog( NULL, _("PCSX2 Unresponsive Thread"), wxVERTICAL );
-		
+
 		dialog += dialog.Heading( ex.FormatDisplayMessage() + L"\n\n" +
 			pxE( L"'Ignore' to continue waiting for the thread to respond.\n'Cancel' to attempt to cancel the thread.\n'Terminate' to quit PCSX2 immediately.\n"
 			)
 		);
 
 		int result = pxIssueConfirmation( dialog, MsgButtons().Ignore().Cancel().Custom( _("Terminate") ) );
-		
+
 		if( result == pxID_CUSTOM )
 		{
 			// fastest way to kill the process! (works in Linux and win32, thanks to windows having very
@@ -506,7 +502,7 @@ void Pcsx2App::HandleEvent(wxEvtHandler* handler, wxEventFunction func, wxEvent&
 		Console.Error( ex.FormatDiagnosticMessage() );
 		// I should probably figure out how to have the error message as well.
 		if (wxGetApp().HasGUI())
-			Msgbox::Alert( ex.FormatDisplayMessage() );
+			Msgbox::Alert(StringUtil::UTF8StringToWxString(ex.FormatDisplayMessage()));
 	}
 }
 
@@ -569,7 +565,7 @@ void Pcsx2App::enterDebugMode()
 	if (dlg)
 		dlg->setDebugMode(true,false);
 }
-	
+
 void Pcsx2App::leaveDebugMode()
 {
 	DisassemblyDialog* dlg = GetDisassemblyPtr();
@@ -600,6 +596,7 @@ void AppApplySettings( const AppConfig* oldconf )
 	g_Conf->Folders.Snapshots.Mkdir();
 	g_Conf->Folders.Cheats.Mkdir();
 	g_Conf->Folders.CheatsWS.Mkdir();
+	g_Conf->Folders.Textures.Mkdir();
 
 	RelocateLogfile();
 
@@ -612,8 +609,8 @@ void AppApplySettings( const AppConfig* oldconf )
 	// Update the compression attribute on the Memcards folder.
 	// Memcards generally compress very well via NTFS compression.
 
-	#ifdef __WXMSW__
-	NTFS_CompressFile( g_Conf->Folders.MemoryCards.ToString(), g_Conf->EmuOptions.McdCompressNTFS );
+	#ifdef _WIN32
+	FileSystem::SetPathCompression( g_Conf->Folders.MemoryCards.ToUTF8(), g_Conf->EmuOptions.McdCompressNTFS );
 	#endif
 	sApp.DispatchEvent( AppStatus_SettingsApplied );
 
@@ -719,7 +716,7 @@ void Pcsx2App::OpenGsPanel()
 		//
 		// FIXME: GS memory leaks in DX10 have been fixed.  This code may not be needed
 		// anymore.
-		
+
 		const wxSize oldsize( gsFrame->GetSize() );
 		wxSize newsize( oldsize );
 		newsize.DecBy(1);
@@ -735,7 +732,6 @@ void Pcsx2App::OpenGsPanel()
 	pxAssertDev(wi.has_value(), "GS frame has a valid native window");
 	g_gs_window_info = std::move(*wi);
 
-#ifndef DISABLE_RECORDING
 	// Enable New & Play after the first game load of the session
 	sMainFrame.enableRecordingMenuItem(MenuId_Recording_New, !g_InputRecording.IsActive());
 	sMainFrame.enableRecordingMenuItem(MenuId_Recording_Play, true);
@@ -744,7 +740,6 @@ void Pcsx2App::OpenGsPanel()
 	sMainFrame.enableRecordingMenuItem(MenuId_Recording_FrameAdvance, true);
 	sMainFrame.enableRecordingMenuItem(MenuId_Recording_TogglePause, true);
 	sMainFrame.enableRecordingMenuItem(MenuId_Recording_ToggleRecordingMode, g_InputRecording.IsActive());
-#endif
 }
 
 
@@ -785,12 +780,10 @@ void Pcsx2App::OnGsFrameDestroyed(wxWindowID id)
 	m_id_GsFrame = wxID_ANY;
 	g_gs_window_info = {};
 
-#ifndef DISABLE_RECORDING
 	// Disable recording controls that only make sense if the game is running
 	sMainFrame.enableRecordingMenuItem(MenuId_Recording_FrameAdvance, false);
 	sMainFrame.enableRecordingMenuItem(MenuId_Recording_TogglePause, false);
 	sMainFrame.enableRecordingMenuItem(MenuId_Recording_ToggleRecordingMode, false);
-#endif
 }
 
 void Pcsx2App::OnProgramLogClosed( wxWindowID id )
@@ -804,12 +797,10 @@ void Pcsx2App::OnProgramLogClosed( wxWindowID id )
 
 void Pcsx2App::OnMainFrameClosed( wxWindowID id )
 {
-#ifndef DISABLE_RECORDING
 	if (g_InputRecording.IsActive())
 	{
 		g_InputRecording.Stop();
 	}
-#endif
 
 	// Nothing threaded depends on the mainframe (yet) -- it all passes through the main wxApp
 	// message handler.  But that might change in the future.
@@ -841,7 +832,7 @@ public:
 	{
 		return _("Executing PS2 Virtual Machine...");
 	}
-	
+
 	SysExecEvent_Execute()
 		: m_UseCDVDsrc(false)
 		, m_UseELFOverride(false)
@@ -905,12 +896,10 @@ void Pcsx2App::SysExecute( CDVD_SourceType cdvdsrc, const wxString& elf_override
 		return;
 
 	SysExecutorThread.PostEvent( new SysExecEvent_Execute(cdvdsrc, elf_override) );
-#ifndef DISABLE_RECORDING
 	if (g_Conf->EmuOptions.EnableRecordingTools)
 	{
 		g_InputRecording.RecordingReset();
 	}
-#endif
 }
 
 // Returns true if there is a "valid" virtual machine state from the user's perspective.  This
@@ -928,7 +917,7 @@ __fi bool SysHasValidState()
 void SysStatus( const wxString& text )
 {
 	// mirror output to the console!
-	Console.WriteLn( WX_STR(text) );
+	Console.WriteLn( text.ToStdString() );
 	sMainFrame.SetStatusText( text );
 }
 

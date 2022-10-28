@@ -16,6 +16,7 @@
 #include "PrecompiledHeader.h"
 #include "GSDeviceVK.h"
 #include "GSTextureVK.h"
+#include "common/Align.h"
 #include "common/Assertions.h"
 #include "common/Vulkan/Builders.h"
 #include "common/Vulkan/Context.h"
@@ -59,7 +60,7 @@ GSTextureVK::~GSTextureVK()
 	}
 }
 
-std::unique_ptr<GSTextureVK> GSTextureVK::Create(Type type, u32 width, u32 height, u32 levels, Format format)
+std::unique_ptr<GSTextureVK> GSTextureVK::Create(Type type, u32 width, u32 height, u32 levels, Format format, VkFormat vk_format)
 {
 	switch (type)
 	{
@@ -77,7 +78,7 @@ std::unique_ptr<GSTextureVK> GSTextureVK::Create(Type type, u32 width, u32 heigh
 			}
 
 			Vulkan::Texture texture;
-			if (!texture.Create(width, height, levels, 1, LookupNativeFormat(format), VK_SAMPLE_COUNT_1_BIT,
+			if (!texture.Create(width, height, levels, 1, vk_format, VK_SAMPLE_COUNT_1_BIT,
 					VK_IMAGE_VIEW_TYPE_2D, VK_IMAGE_TILING_OPTIMAL, usage, swizzle))
 			{
 				return {};
@@ -93,7 +94,7 @@ std::unique_ptr<GSTextureVK> GSTextureVK::Create(Type type, u32 width, u32 heigh
 			pxAssert(levels == 1);
 
 			Vulkan::Texture texture;
-			if (!texture.Create(width, height, levels, 1, LookupNativeFormat(format), VK_SAMPLE_COUNT_1_BIT,
+			if (!texture.Create(width, height, levels, 1, vk_format, VK_SAMPLE_COUNT_1_BIT,
 					VK_IMAGE_VIEW_TYPE_2D, VK_IMAGE_TILING_OPTIMAL,
 					VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
 						VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
@@ -112,7 +113,7 @@ std::unique_ptr<GSTextureVK> GSTextureVK::Create(Type type, u32 width, u32 heigh
 			pxAssert(levels == 1);
 
 			Vulkan::Texture texture;
-			if (!texture.Create(width, height, levels, 1, LookupNativeFormat(format), VK_SAMPLE_COUNT_1_BIT,
+			if (!texture.Create(width, height, levels, 1, vk_format, VK_SAMPLE_COUNT_1_BIT,
 					VK_IMAGE_VIEW_TYPE_2D, VK_IMAGE_TILING_OPTIMAL,
 					VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
 						VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT))
@@ -130,23 +131,6 @@ std::unique_ptr<GSTextureVK> GSTextureVK::Create(Type type, u32 width, u32 heigh
 	}
 }
 
-VkFormat GSTextureVK::LookupNativeFormat(Format format)
-{
-	static constexpr std::array<VkFormat, static_cast<int>(GSTexture::Format::Int32) + 1> s_format_mapping = {{
-		VK_FORMAT_UNDEFINED, // Invalid
-		VK_FORMAT_R8G8B8A8_UNORM, // Color
-		VK_FORMAT_R32G32B32A32_SFLOAT, // FloatColor
-		VK_FORMAT_D32_SFLOAT_S8_UINT, // DepthStencil
-		VK_FORMAT_R8_UNORM, // UNorm8
-		VK_FORMAT_R16_UINT, // UInt16
-		VK_FORMAT_R32_UINT, // UInt32
-		VK_FORMAT_R32_SFLOAT, // Int32
-	}};
-
-
-	return s_format_mapping[static_cast<int>(format)];
-}
-
 void* GSTextureVK::GetNativeHandle() const { return const_cast<Vulkan::Texture*>(&m_texture); }
 
 VkCommandBuffer GSTextureVK::GetCommandBufferForUpdate()
@@ -161,6 +145,45 @@ VkCommandBuffer GSTextureVK::GetCommandBufferForUpdate()
 	return g_vulkan_context->GetCurrentInitCommandBuffer();
 }
 
+void GSTextureVK::CopyTextureDataForUpload(void* dst, const void* src, u32 pitch, u32 upload_pitch, u32 height) const
+{
+	const u32 block_size = GetCompressedBlockSize();
+	const u32 count = (height + (block_size - 1)) / block_size;
+	StringUtil::StrideMemCpy(dst, upload_pitch, src, pitch, std::min(upload_pitch, pitch), count);
+}
+
+VkBuffer GSTextureVK::AllocateUploadStagingBuffer(const void* data, u32 pitch, u32 upload_pitch, u32 height) const
+{
+	const u32 size = upload_pitch * height;
+	const VkBufferCreateInfo bci = {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, nullptr, 0,
+		static_cast<VkDeviceSize>(size), VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_SHARING_MODE_EXCLUSIVE, 0, nullptr};
+
+	// Don't worry about setting the coherent bit for this upload, the main reason we had
+	// that set in StreamBuffer was for MoltenVK, which would upload the whole buffer on
+	// smaller uploads, but we're writing to the whole thing anyway.
+	VmaAllocationCreateInfo aci = {};
+	aci.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
+	aci.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
+
+	VmaAllocationInfo ai;
+	VkBuffer buffer;
+	VmaAllocation allocation;
+	VkResult res = vmaCreateBuffer(g_vulkan_context->GetAllocator(), &bci, &aci, &buffer, &allocation, &ai);
+	if (res != VK_SUCCESS)
+	{
+		LOG_VULKAN_ERROR(res, "(AllocateUploadStagingBuffer) vmaCreateBuffer() failed: ");
+		return VK_NULL_HANDLE;
+	}
+
+	// Immediately queue it for freeing after the command buffer finishes, since it's only needed for the copy.
+	g_vulkan_context->DeferBufferDestruction(buffer, allocation);
+
+	// And write the data.
+	CopyTextureDataForUpload(ai.pMappedData, data, pitch, upload_pitch, height);
+	vmaFlushAllocation(g_vulkan_context->GetAllocator(), allocation, 0, size);
+	return buffer;
+}
+
 bool GSTextureVK::Update(const GSVector4i& r, const void* data, int pitch, int layer)
 {
 	if (layer >= m_mipmap_levels)
@@ -170,20 +193,39 @@ bool GSTextureVK::Update(const GSVector4i& r, const void* data, int pitch, int l
 
 	const u32 width = r.width();
 	const u32 height = r.height();
-	const u32 row_length = static_cast<u32>(pitch) / Vulkan::Util::GetTexelSize(m_texture.GetFormat());
-	const u32 required_size = static_cast<u32>(pitch) * height;
-	Vulkan::StreamBuffer& buffer = g_vulkan_context->GetTextureUploadBuffer();
-	if (!buffer.ReserveMemory(required_size, g_vulkan_context->GetBufferImageGranularity()))
-	{
-		GSDeviceVK::GetInstance()->ExecuteCommandBuffer(
-			false, "While waiting for %u bytes in texture upload buffer", required_size);
-		if (!buffer.ReserveMemory(required_size, g_vulkan_context->GetBufferImageGranularity()))
-			pxFailRel("Failed to reserve texture upload memory");
-	}
+	const u32 upload_pitch = Common::AlignUpPow2(pitch, g_vulkan_context->GetBufferCopyRowPitchAlignment());
+	const u32 required_size = CalcUploadSize(height, upload_pitch);
 
-	const u32 buffer_offset = buffer.GetCurrentOffset();
-	std::memcpy(buffer.GetCurrentHostPointer(), data, required_size);
-	buffer.CommitMemory(required_size);
+	// If the texture is larger than half our streaming buffer size, use a separate buffer.
+	// Otherwise allocation will either fail, or require lots of cmdbuffer submissions.
+	VkBuffer buffer;
+	u32 buffer_offset;
+	if (required_size > (g_vulkan_context->GetTextureUploadBuffer().GetCurrentSize() / 2))
+	{
+		buffer_offset = 0;
+		buffer = AllocateUploadStagingBuffer(data, pitch, upload_pitch, height);
+		if (buffer == VK_NULL_HANDLE)
+			return false;
+	}
+	else
+	{
+		Vulkan::StreamBuffer& sbuffer = g_vulkan_context->GetTextureUploadBuffer();
+		if (!sbuffer.ReserveMemory(required_size, g_vulkan_context->GetBufferCopyOffsetAlignment()))
+		{
+			GSDeviceVK::GetInstance()->ExecuteCommandBuffer(
+				false, "While waiting for %u bytes in texture upload buffer", required_size);
+			if (!sbuffer.ReserveMemory(required_size, g_vulkan_context->GetBufferCopyOffsetAlignment()))
+			{
+				Console.Error("Failed to reserve texture upload memory (%u bytes).", required_size);
+				return false;
+			}
+		}
+
+		buffer = sbuffer.GetBuffer();
+		buffer_offset = sbuffer.GetCurrentOffset();
+		CopyTextureDataForUpload(sbuffer.GetCurrentHostPointer(), data, pitch, upload_pitch, height);
+		sbuffer.CommitMemory(required_size);
+	}
 
 	const VkCommandBuffer cmdbuf = GetCommandBufferForUpdate();
 	GL_PUSH("GSTextureVK::Update({%d,%d} %dx%d Lvl:%u", r.x, r.y, r.width(), r.height(), layer);
@@ -201,8 +243,8 @@ bool GSTextureVK::Update(const GSVector4i& r, const void* data, int pitch, int l
 			m_state = State::Dirty;
 	}
 
-	m_texture.UpdateFromBuffer(
-		cmdbuf, layer, 0, r.x, r.y, width, height, row_length, buffer.GetBuffer(), buffer_offset);
+	m_texture.UpdateFromBuffer(cmdbuf, layer, 0, r.x, r.y, width, height,
+		CalcUploadRowLengthFromPitch(upload_pitch), buffer, buffer_offset);
 	m_texture.TransitionToLayout(cmdbuf, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
 	if (m_type == Type::Texture)
@@ -213,22 +255,27 @@ bool GSTextureVK::Update(const GSVector4i& r, const void* data, int pitch, int l
 
 bool GSTextureVK::Map(GSMap& m, const GSVector4i* r, int layer)
 {
-	if (layer >= m_mipmap_levels)
+	if (layer >= m_mipmap_levels || IsCompressedFormat())
 		return false;
 
 	// map for writing
 	m_map_area = r ? *r : GSVector4i(0, 0, m_texture.GetWidth(), m_texture.GetHeight());
 	m_map_level = layer;
 
-	m.pitch = m_map_area.width() * Vulkan::Util::GetTexelSize(m_texture.GetFormat());
+	m.pitch = Common::AlignUpPow2(m_map_area.width() * Vulkan::Util::GetTexelSize(m_texture.GetFormat()),
+		g_vulkan_context->GetBufferCopyRowPitchAlignment());
 
+	// see note in Update() for the reason why.
 	const u32 required_size = m.pitch * m_map_area.height();
 	Vulkan::StreamBuffer& buffer = g_vulkan_context->GetTextureUploadBuffer();
-	if (!buffer.ReserveMemory(required_size, g_vulkan_context->GetBufferImageGranularity()))
+	if (required_size >= (buffer.GetCurrentSize() / 2))
+		return false;
+
+	if (!buffer.ReserveMemory(required_size, g_vulkan_context->GetBufferCopyOffsetAlignment()))
 	{
 		GSDeviceVK::GetInstance()->ExecuteCommandBuffer(
 			false, "While waiting for %u bytes in texture upload buffer", required_size);
-		if (!buffer.ReserveMemory(required_size, g_vulkan_context->GetBufferImageGranularity()))
+		if (!buffer.ReserveMemory(required_size, g_vulkan_context->GetBufferCopyOffsetAlignment()))
 			pxFailRel("Failed to reserve texture upload memory");
 	}
 
@@ -244,7 +291,9 @@ void GSTextureVK::Unmap()
 	// TODO: non-tightly-packed formats
 	const u32 width = static_cast<u32>(m_map_area.width());
 	const u32 height = static_cast<u32>(m_map_area.height());
-	const u32 required_size = width * height * Vulkan::Util::GetTexelSize(m_texture.GetFormat());
+	const u32 pitch = Common::AlignUpPow2(m_map_area.width() * Vulkan::Util::GetTexelSize(m_texture.GetFormat()),
+		g_vulkan_context->GetBufferCopyRowPitchAlignment());
+	const u32 required_size = pitch * height;
 	Vulkan::StreamBuffer& buffer = g_vulkan_context->GetTextureUploadBuffer();
 	const u32 buffer_offset = buffer.GetCurrentOffset();
 	buffer.CommitMemory(required_size);
@@ -266,8 +315,8 @@ void GSTextureVK::Unmap()
 			m_state = State::Dirty;
 	}
 
-	m_texture.UpdateFromBuffer(cmdbuf, m_map_level, 0, m_map_area.x, m_map_area.y, width, height, width,
-		buffer.GetBuffer(), buffer_offset);
+	m_texture.UpdateFromBuffer(cmdbuf, m_map_level, 0, m_map_area.x, m_map_area.y, width, height,
+		CalcUploadRowLengthFromPitch(pitch), buffer.GetBuffer(), buffer_offset);
 	m_texture.TransitionToLayout(cmdbuf, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
 	if (m_type == Type::Texture)
@@ -308,6 +357,17 @@ void GSTextureVK::GenerateMipmap()
 	}
 }
 
+void GSTextureVK::Swap(GSTexture* tex)
+{
+	GSTexture::Swap(tex);
+	std::swap(m_texture, static_cast<GSTextureVK*>(tex)->m_texture);
+	std::swap(m_use_fence_counter, static_cast<GSTextureVK*>(tex)->m_use_fence_counter);
+	std::swap(m_clear_value, static_cast<GSTextureVK*>(tex)->m_clear_value);
+	std::swap(m_map_area, static_cast<GSTextureVK*>(tex)->m_map_area);
+	std::swap(m_map_level, static_cast<GSTextureVK*>(tex)->m_map_level);
+	std::swap(m_framebuffers, static_cast<GSTextureVK*>(tex)->m_framebuffers);
+}
+
 void GSTextureVK::TransitionToLayout(VkImageLayout layout)
 {
 	m_texture.TransitionToLayout(g_vulkan_context->GetCurrentCommandBuffer(), layout);
@@ -341,7 +401,7 @@ void GSTextureVK::CommitClear(VkCommandBuffer cmdbuf)
 		vkCmdClearColorImage(cmdbuf, m_texture.GetImage(), m_texture.GetLayout(), &cv, 1, &srr);
 	}
 
-	SetState(GSTexture::State::Dirty);	
+	SetState(GSTexture::State::Dirty);
 }
 
 VkFramebuffer GSTextureVK::GetFramebuffer(bool feedback_loop) { return GetLinkedFramebuffer(nullptr, feedback_loop); }

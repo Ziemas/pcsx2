@@ -24,23 +24,23 @@ using namespace pxSizerFlags;
 // --------------------------------------------------------------------------------------
 
 bool ConsoleLogSource_Event::Write( const pxEvtQueue* evtHandler, const SysExecEvent* evt, const wxChar* msg ) {
-	return _parent::Write( pxsFmt(L"(%s:%s) ", WX_STR(evtHandler->GetEventHandlerName()), WX_STR(evt->GetEventName())) + msg );
+	return _parent::Write("%s", (pxsFmt(L"(%s:%s) ", WX_STR(evtHandler->GetEventHandlerName()), WX_STR(evt->GetEventName())) + msg).ToUTF8().data() );
 }
 bool ConsoleLogSource_Event::Warn( const pxEvtQueue* evtHandler, const SysExecEvent* evt, const wxChar* msg )	{
-	return _parent::Write( pxsFmt(L"(%s:%s) ", WX_STR(evtHandler->GetEventHandlerName()), WX_STR(evt->GetEventName())) + msg );
+	return _parent::Write("%s", (pxsFmt(L"(%s:%s) ", WX_STR(evtHandler->GetEventHandlerName()), WX_STR(evt->GetEventName())) + msg).ToUTF8().data() );
 }
 bool ConsoleLogSource_Event::Error( const pxEvtQueue* evtHandler, const SysExecEvent* evt, const wxChar* msg ) {
-	return _parent::Write( pxsFmt(L"(%s:%s) ", WX_STR(evtHandler->GetEventHandlerName()), WX_STR(evt->GetEventName())) + msg );
+	return _parent::Write("%s", (pxsFmt(L"(%s:%s) ", WX_STR(evtHandler->GetEventHandlerName()), WX_STR(evt->GetEventName())) + msg).ToUTF8().data() );
 }
 
 ConsoleLogSource_Event::ConsoleLogSource_Event()
 {
 	static const TraceLogDescriptor myDesc =
 	{
-		L"SysEvents",	L"S&ysVM Control Events",
-		pxLt("Logs events as they are passed to the PS2 virtual machine."),
+		"SysEvents",	"S&ysVM Control Events",
+		"Logs events as they are passed to the PS2 virtual machine.",
 	};
-	
+
 	m_Descriptor = &myDesc;
 }
 
@@ -85,7 +85,9 @@ void SysExecEvent::SetException( BaseException* ex )
 {
 	if( !ex ) return;
 
-	ex->DiagMsg() += pxsFmt(L"(%s) ", WX_STR(GetEventName()));
+	ex->DiagMsg() += '(';
+	ex->DiagMsg() += StringUtil::wxStringToUTF8String(GetEventName());
+	ex->DiagMsg() += ')';
 	//ex->UserMsg() = prefix + ex->UserMsg();
 
 	if( m_sync )
@@ -181,7 +183,7 @@ struct ScopedThreadCancelDisable
 		int oldstate;
 		pthread_setcancelstate( PTHREAD_CANCEL_DISABLE, &oldstate );
 	}
-	
+
 	~ScopedThreadCancelDisable()
 	{
 		int oldstate;
@@ -193,7 +195,7 @@ struct ScopedThreadCancelDisable
 void pxEvtQueue::ProcessEvents( pxEvtList& list, bool isIdle )
 {
 	ScopedLock synclock( m_mtx_pending );
-    
+
     pxEvtList::iterator node;
     while( node = list.begin(), node != list.end() )
     {
@@ -273,7 +275,7 @@ void pxEvtQueue::PostEvent( SysExecEvent* evt )
 	}
 
 	ScopedLock synclock( m_mtx_pending );
-	
+
 	pxEvtLog.Write( this, evt, pxsFmt(L"Posting event! (pending=%d, idle=%d)", m_pendingEvents.size(), m_idleEvents.size()) );
 
 	m_pendingEvents.push_back( sevt.release() );
@@ -369,7 +371,7 @@ bool pxEvtQueue::Rpc_TryInvoke( FnType_Void* method, const wxChar* traceName )
 
 		return true;
 	}
-	
+
 	return false;
 }
 
@@ -409,7 +411,7 @@ bool ExecutorThread::IsRunning() const
 void ExecutorThread::ShutdownQueue()
 {
 	if( !m_EvtHandler ) return;
-	
+
 	if( !m_EvtHandler->IsShuttingDown() )
 		m_EvtHandler->ShutdownQueue();
 

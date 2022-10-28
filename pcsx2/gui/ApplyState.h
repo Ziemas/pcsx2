@@ -43,14 +43,14 @@ namespace Exception
 
 	protected:
 		BaseApplicableConfigPanel*	m_Panel;
-		
+
 	protected:
 		CannotApplySettings() { IsVerbose = true; }
 
 	public:
 		explicit CannotApplySettings( BaseApplicableConfigPanel* thispanel )
 		{
-			SetBothMsgs(pxL("Cannot apply new settings, one of the settings is invalid."));
+			SetBothMsgs("Cannot apply new settings, one of the settings is invalid.");
 			m_Panel = thispanel;
 			IsVerbose = true;
 		}
@@ -237,7 +237,7 @@ public:
 	);
 
 	virtual ~ApplicableWizardPage() { m_ApplyState.DoCleanup(); }
-	
+
 	virtual bool PrepForApply();
 };
 

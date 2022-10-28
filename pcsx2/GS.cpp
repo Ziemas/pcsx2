@@ -32,12 +32,13 @@ void gsSetVideoMode(GS_VideoMode mode)
 {
 	gsVideoMode = mode;
 	UpdateVSyncRate();
+	CSRreg.FIELD = 1;
 }
 
 // Make sure framelimiter options are in sync with GS capabilities.
 void gsReset()
 {
-	GetMTGS().ResetGS();
+	GetMTGS().ResetGS(true);
 
 	UpdateVSyncRate();
 	memzero(g_RealGSMem);
@@ -62,7 +63,7 @@ void gsUpdateFrequency(Pcsx2Config& config)
 			config.GS.LimitScalar = config.Framerate.TurboScalar;
 			break;
 		case LimiterModeType::Unlimited:
-			config.GS.LimitScalar = 0.0;
+			config.GS.LimitScalar = 0.0f;
 			break;
 		default:
 			pxAssert("Unknown framelimiter mode!");
@@ -70,7 +71,7 @@ void gsUpdateFrequency(Pcsx2Config& config)
 	}
 	else
 	{
-		config.GS.LimitScalar = 0.0;
+		config.GS.LimitScalar = 0.0f;
 	}
 
 	UpdateVSyncRate();
@@ -84,9 +85,10 @@ static __fi void gsCSRwrite( const tGS_CSR& csr )
 		//gifUnit.Reset(true); // Don't think gif should be reset...
 		gifUnit.gsSIGNAL.queued = false;
 		GetMTGS().SendSimplePacket(GS_RINGTYPE_RESET, 0, 0, 0);
-
+		const u32 field = CSRreg.FIELD;
 		CSRreg.Reset();
 		GSIMR.reset();
+		CSRreg.FIELD = field;
 	}
 
 	if(csr.FLUSH)
@@ -94,7 +96,7 @@ static __fi void gsCSRwrite( const tGS_CSR& csr )
 		// Our emulated GS has no FIFO, but if it did, it would flush it here...
 		//Console.WriteLn("GS_CSR FLUSH GS fifo: %x (CSRr=%x)", value, GSCSRr);
 	}
-	
+
 	if(csr.SIGNAL)
 	{
 		// SIGNAL : What's not known here is whether or not the SIGID register should be updated
@@ -112,9 +114,9 @@ static __fi void gsCSRwrite( const tGS_CSR& csr )
 		gifUnit.gsSIGNAL.queued = false;
 		gifUnit.Execute(false, true); // Resume paused transfers
 	}
-	
+
 	if (csr.FINISH)	{
-		CSRreg.FINISH = false; 
+		CSRreg.FINISH = false;
 		gifUnit.gsFINISH.gsFINISHFired = false; //Clear the previously fired FINISH (YS, Indiecar 2005, MGS3)
 	}
 	if(csr.HSINT)	CSRreg.HSINT	= false;
@@ -138,7 +140,7 @@ __fi void gsWrite8(u32 mem, u8 value)
 	{
 		// CSR 8-bit write handlers.
 		// I'm quite sure these would just write the CSR portion with the other
-		// bits set to 0 (no action).  The previous implementation masked the 8-bit 
+		// bits set to 0 (no action).  The previous implementation masked the 8-bit
 		// write value against the previous CSR write value, but that really doesn't
 		// make any sense, given that the real hardware's CSR circuit probably has no
 		// real "memory" where it saves anything.  (for example, you can't write to
@@ -171,7 +173,7 @@ __fi void gsWrite16(u32 mem, u16 value)
 	{
 		// See note above about CSR 8 bit writes, and handling them as zero'd bits
 		// for all but the written parts.
-		
+
 		case GS_CSR:
 			gsCSRwrite( tGS_CSR((u32)value) );
 		return; // do not write to MTGS memory
@@ -213,7 +215,7 @@ __fi void gsWrite32(u32 mem, u32 value)
 //////////////////////////////////////////////////////////////////////////
 // GS Write 64 bit
 
-void __fastcall gsWrite64_generic( u32 mem, const mem64_t* value )
+void gsWrite64_generic( u32 mem, const mem64_t* value )
 {
 	const u32* const srcval32 = (u32*)value;
 	GIF_LOG("GS Write64 at %8.8lx with data %8.8x_%8.8x", mem, srcval32[1], srcval32[0]);
@@ -221,14 +223,14 @@ void __fastcall gsWrite64_generic( u32 mem, const mem64_t* value )
 	*(u64*)PS2GS_BASE(mem) = *value;
 }
 
-void __fastcall gsWrite64_page_00( u32 mem, const mem64_t* value )
+void gsWrite64_page_00( u32 mem, const mem64_t* value )
 {
 	s_GSRegistersWritten |= (mem == GS_DISPFB1 || mem == GS_DISPFB2 || mem == GS_PMODE);
 
 	gsWrite64_generic( mem, value );
 }
 
-void __fastcall gsWrite64_page_01( u32 mem, const mem64_t* value )
+void gsWrite64_page_01( u32 mem, const mem64_t* value )
 {
 	GIF_LOG("GS Write64 at %8.8lx with data %8.8x_%8.8x", mem, (u32*)value[1], (u32*)value[0]);
 
@@ -246,17 +248,7 @@ void __fastcall gsWrite64_page_01( u32 mem, const mem64_t* value )
 				GUNIT_LOG("Busdir - EE->GS Upload");
 			}
 
-			//=========================================================================
-			// BUSDIR INSANITY !! MTGS FLUSH NEEDED
-			//
-			// Yup folks.  BUSDIR is evil.  The only safe way to handle it is to flush the whole MTGS
-			// and ensure complete MTGS and EEcore thread synchronization  This is very slow, no doubt,
-			// but on the bright side BUSDIR is used quite rarely, indeed.
-
-			// Important: writeback to gsRegs area *prior* to flushing the MTGS.  The flush will sync
-			// the GS and MTGS register states, and upload our screwy busdir register in the process. :)
 			gsWrite64_generic( mem, value );
-			GetMTGS().WaitGS();
 		return;
 
 		case GS_CSR:
@@ -274,12 +266,12 @@ void __fastcall gsWrite64_page_01( u32 mem, const mem64_t* value )
 //////////////////////////////////////////////////////////////////////////
 // GS Write 128 bit
 
-void __fastcall gsWrite128_page_00( u32 mem, const mem128_t* value )
+void gsWrite128_page_00( u32 mem, const mem128_t* value )
 {
 	gsWrite128_generic( mem, value );
 }
 
-void __fastcall gsWrite128_page_01( u32 mem, const mem128_t* value )
+void gsWrite128_page_01( u32 mem, const mem128_t* value )
 {
 	switch( mem )
 	{
@@ -295,7 +287,7 @@ void __fastcall gsWrite128_page_01( u32 mem, const mem128_t* value )
 	gsWrite128_generic( mem, value );
 }
 
-void __fastcall gsWrite128_generic( u32 mem, const mem128_t* value )
+void gsWrite128_generic( u32 mem, const mem128_t* value )
 {
 	const u32* const srcval32 = (u32*)value;
 
@@ -326,19 +318,20 @@ __fi u16 gsRead16(u32 mem)
 		case GS_SIGLBLID:
 			return *(u16*)PS2GS_BASE(mem);
 		default: // Only SIGLBLID and CSR are readable, everything else mirrors CSR
-			return *(u16*)PS2GS_BASE(GS_CSR + (mem & 0xF));
+			return *(u16*)PS2GS_BASE(GS_CSR + (mem & 0x7));
 	}
 }
 
 __fi u32 gsRead32(u32 mem)
 {
 	GIF_LOG("GS read 32 from %8.8lx  value: %8.8lx", mem, *(u32*)PS2GS_BASE(mem));
+
 	switch (mem & ~0xF)
 	{
 		case GS_SIGLBLID:
 			return *(u32*)PS2GS_BASE(mem);
 		default: // Only SIGLBLID and CSR are readable, everything else mirrors CSR
-			return *(u32*)PS2GS_BASE(GS_CSR + (mem & 0xF));
+			return *(u32*)PS2GS_BASE(GS_CSR + (mem & 0xC));
 	}
 }
 
@@ -346,12 +339,13 @@ __fi u64 gsRead64(u32 mem)
 {
 	// fixme - PS2GS_BASE(mem+4) = (g_RealGSMem+(mem + 4 & 0x13ff))
 	GIF_LOG("GS read 64 from %8.8lx  value: %8.8lx_%8.8lx", mem, *(u32*)PS2GS_BASE(mem+4), *(u32*)PS2GS_BASE(mem) );
+
 	switch (mem & ~0xF)
 	{
 		case GS_SIGLBLID:
 			return *(u64*)PS2GS_BASE(mem);
 		default: // Only SIGLBLID and CSR are readable, everything else mirrors CSR
-			return *(u64*)PS2GS_BASE(GS_CSR + (mem & 0xF));
+			return *(u64*)PS2GS_BASE(GS_CSR + (mem & 0x8));
 	}
 }
 
@@ -364,92 +358,16 @@ void gsIrq() {
 	hwIntcIrq(INTC_GS);
 }
 
-// --------------------------------------------------------------------------------------
-//  gsFrameSkip
-// --------------------------------------------------------------------------------------
-// This function regulates the frameskipping status of the GS.  Our new frameskipper for
-// 0.9.7 is a very simple logic pattern compared to the old mess.  The goal now is to provide
-// the most compatible and efficient frameskip, instead of doing the adaptive logic of
-// 0.9.6.  This is almost a necessity because of how many games treat the GS: they upload
-// great amounts of data while rendering 2 frames at a time (using double buffering), and
-// then use a simple pageswap to display the contents of the second frame for that vsync.
-//  (this approach is mostly seen on interlace games; progressive games less so)
-// The result is that any skip pattern besides a fully consistent 2on,2off would reuslt in
-// tons of missing geometry, rendering frameskip useless.
-//
-// So instead we use a simple "always skipping" or "never skipping" logic.
-//
-// EE vs MTGS:
-//   This function does not regulate frame limiting, meaning it does no stalling. Stalling
-//   functions are performed by the EE, which itself uses thread sleep logic to avoid spin
-//   waiting as much as possible (maximizes CPU resource availability for the GS).
-static bool s_isSkippingCurrentFrame = false;
-
-__fi void gsFrameSkip()
-{
-	static int consec_skipped = 0;
-	static int consec_drawn = 0;
-
-	if( !EmuConfig.GS.FrameSkipEnable )
-	{
-		if( s_isSkippingCurrentFrame )
-		{
-			// Frameskipping disabled on-the-fly .. make sure the GS is restored to non-skip
-			// behavior.
-			GSsetFrameSkip( false );
-			s_isSkippingCurrentFrame = false;
-		}
-		return;
-	}
-
-	GSsetFrameSkip( s_isSkippingCurrentFrame );
-
-	if( s_isSkippingCurrentFrame )
-	{
-		++consec_skipped;
-		if( consec_skipped >= EmuConfig.GS.FramesToSkip )
-		{
-			consec_skipped = 0;
-			s_isSkippingCurrentFrame = false;
-		}
-	}
-	else
-	{
-		++consec_drawn;
-		if( consec_drawn >= EmuConfig.GS.FramesToDraw )
-		{
-			consec_drawn = 0;
-			s_isSkippingCurrentFrame = true;
-		}
-	}
-}
-
-extern bool gsIsSkippingCurrentFrame()
-{
-	return s_isSkippingCurrentFrame;
-}
-
 //These are done at VSync Start.  Drawing is done when VSync is off, then output the screen when Vsync is on
 //The GS needs to be told at the start of a vsync else it loses half of its picture (could be responsible for some halfscreen issues)
 //We got away with it before i think due to our awful GS timing, but now we have it right (ish)
 void gsPostVsyncStart()
 {
 	//gifUnit.FlushToMTGS();  // Needed for some (broken?) homebrew game loaders
-	
+
 	const bool registers_written = s_GSRegistersWritten;
 	s_GSRegistersWritten = false;
 	GetMTGS().PostVsyncStart(registers_written);
-}
-
-void _gs_ResetFrameskip()
-{
-	GSsetFrameSkip( 0 );
-}
-
-// Disables the GS Frameskip at runtime without any racy mess...
-void gsResetFrameSkip()
-{
-	GetMTGS().SendSimplePacket(GS_RINGTYPE_FRAMESKIP, 0, 0, 0);
 }
 
 void SaveStateBase::gsFreeze()

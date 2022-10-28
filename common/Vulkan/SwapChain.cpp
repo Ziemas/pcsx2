@@ -15,6 +15,7 @@
 
 #include "common/Vulkan/SwapChain.h"
 #include "common/Assertions.h"
+#include "common/CocoaTools.h"
 #include "common/Console.h"
 #include "common/Vulkan/Context.h"
 #include "common/Vulkan/Util.h"
@@ -24,63 +25,6 @@
 
 #if defined(VK_USE_PLATFORM_XLIB_KHR)
 #include <X11/Xlib.h>
-#endif
-
-#if defined(__APPLE__)
-#include <objc/message.h>
-
-static bool CreateMetalLayer(WindowInfo* wi)
-{
-	id view = reinterpret_cast<id>(wi->window_handle);
-
-	Class clsCAMetalLayer = objc_getClass("CAMetalLayer");
-	if (!clsCAMetalLayer)
-	{
-		Console.Error("Failed to get CAMetalLayer class.");
-		return false;
-	}
-
-	// [CAMetalLayer layer]
-	id layer = reinterpret_cast<id (*)(Class, SEL)>(objc_msgSend)(objc_getClass("CAMetalLayer"), sel_getUid("layer"));
-	if (!layer)
-	{
-		Console.Error("Failed to create Metal layer.");
-		return false;
-	}
-
-	// [view setWantsLayer:YES]
-	reinterpret_cast<void (*)(id, SEL, BOOL)>(objc_msgSend)(view, sel_getUid("setWantsLayer:"), YES);
-
-	// [view setLayer:layer]
-	reinterpret_cast<void (*)(id, SEL, id)>(objc_msgSend)(view, sel_getUid("setLayer:"), layer);
-
-	// NSScreen* screen = [NSScreen mainScreen]
-	id screen = reinterpret_cast<id (*)(Class, SEL)>(objc_msgSend)(objc_getClass("NSScreen"), sel_getUid("mainScreen"));
-
-	// CGFloat factor = [screen backingScaleFactor]
-	double factor = reinterpret_cast<double (*)(id, SEL)>(objc_msgSend)(screen, sel_getUid("backingScaleFactor"));
-
-	// layer.contentsScale = factor
-	reinterpret_cast<void (*)(id, SEL, double)>(objc_msgSend)(layer, sel_getUid("setContentsScale:"), factor);
-
-	// Store the layer pointer, that way MoltenVK doesn't call [NSView layer] outside the main thread.
-	wi->surface_handle = layer;
-	return true;
-}
-
-static void DestroyMetalLayer(WindowInfo* wi)
-{
-	id view = reinterpret_cast<id>(wi->window_handle);
-	id layer = reinterpret_cast<id>(wi->surface_handle);
-	if (layer == nil)
-		return;
-
-	reinterpret_cast<void (*)(id, SEL, id)>(objc_msgSend)(view, sel_getUid("setLayer:"), nil);
-	reinterpret_cast<void (*)(id, SEL, BOOL)>(objc_msgSend)(view, sel_getUid("setWantsLayer:"), NO);
-	reinterpret_cast<void (*)(id, SEL)>(objc_msgSend)(layer, sel_getUid("release"));
-	wi->surface_handle = nullptr;
-}
-
 #endif
 
 namespace Vulkan
@@ -402,7 +346,7 @@ namespace Vulkan
 #if defined(VK_USE_PLATFORM_METAL_EXT)
 		if (wi->type == WindowInfo::Type::MacOS)
 		{
-			if (!wi->surface_handle && !CreateMetalLayer(wi))
+			if (!wi->surface_handle && !CocoaTools::CreateMetalLayer(wi))
 				return VK_NULL_HANDLE;
 
 			VkMetalSurfaceCreateInfoEXT surface_create_info = {VK_STRUCTURE_TYPE_METAL_SURFACE_CREATE_INFO_EXT, nullptr,
@@ -450,7 +394,7 @@ namespace Vulkan
 
 #if defined(__APPLE__)
 		if (wi->type == WindowInfo::Type::MacOS && wi->surface_handle)
-			DestroyMetalLayer(wi);
+			CocoaTools::DestroyMetalLayer(wi);
 #endif
 	}
 
@@ -730,6 +674,8 @@ namespace Vulkan
 
 		vkDestroySwapchainKHR(g_vulkan_context->GetDevice(), m_swap_chain, nullptr);
 		m_swap_chain = VK_NULL_HANDLE;
+		m_window_info.surface_width = 0;
+		m_window_info.surface_height = 0;
 	}
 
 	VkResult SwapChain::AcquireNextImage()
@@ -741,7 +687,7 @@ namespace Vulkan
 			m_image_available_semaphore, VK_NULL_HANDLE, &m_current_image);
 	}
 
-	bool SwapChain::ResizeSwapChain(u32 new_width /* = 0 */, u32 new_height /* = 0 */)
+	bool SwapChain::ResizeSwapChain(u32 new_width, u32 new_height, float new_scale)
 	{
 		DestroySwapChainImages();
 		DestroySemaphores();
@@ -751,6 +697,8 @@ namespace Vulkan
 			m_window_info.surface_width = new_width;
 			m_window_info.surface_height = new_height;
 		}
+
+		m_window_info.surface_scale = new_scale;
 
 		if (!CreateSwapChain() || !SetupSwapChainImages() || !CreateSemaphores())
 		{
@@ -795,6 +743,7 @@ namespace Vulkan
 		DestroySwapChainImages();
 		DestroySwapChain();
 		DestroySurface();
+		DestroySemaphores();
 
 		// Re-create the surface with the new native handle
 		m_window_info = new_wi;
@@ -819,7 +768,7 @@ namespace Vulkan
 		}
 
 		// Finally re-create the swap chain
-		if (!CreateSwapChain() || !SetupSwapChainImages())
+		if (!CreateSwapChain() || !SetupSwapChainImages() || !CreateSemaphores())
 			return false;
 
 		return true;

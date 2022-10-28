@@ -19,32 +19,64 @@
 #include <algorithm>
 
 #include "AdvancedSystemSettingsWidget.h"
-#include "EmuThread.h"
+#include "QtHost.h"
 #include "QtUtils.h"
 #include "SettingWidgetBinder.h"
 #include "SettingsDialog.h"
 
-AdvancedSystemSettingsWidget::AdvancedSystemSettingsWidget(QWidget* parent, SettingsDialog* dialog)
+AdvancedSystemSettingsWidget::AdvancedSystemSettingsWidget(SettingsDialog* dialog, QWidget* parent)
 	: QWidget(parent)
 {
+	SettingsInterface* sif = dialog->getSettingsInterface();
+
 	m_ui.setupUi(this);
 
-	SettingWidgetBinder::BindWidgetToBoolSetting(m_ui.eeRecompiler, "EmuCore/CPU/Recompiler", "EnableEE", true);
-	SettingWidgetBinder::BindWidgetToBoolSetting(m_ui.eeCache, "EmuCore/CPU/Recompiler", "EnableEECache", false);
-	SettingWidgetBinder::BindWidgetToBoolSetting(m_ui.eeINTCSpinDetection, "EmuCore/Speedhacks", "IntcStat", true);
-	SettingWidgetBinder::BindWidgetToBoolSetting(m_ui.eeWaitLoopDetection, "EmuCore/Speedhacks", "WaitLoop", true);
+	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_ui.eeRecompiler, "EmuCore/CPU/Recompiler", "EnableEE", true);
+	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_ui.eeCache, "EmuCore/CPU/Recompiler", "EnableEECache", false);
+	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_ui.eeINTCSpinDetection, "EmuCore/Speedhacks", "IntcStat", true);
+	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_ui.eeWaitLoopDetection, "EmuCore/Speedhacks", "WaitLoop", true);
 
-	SettingWidgetBinder::BindWidgetToBoolSetting(m_ui.vu0Recompiler, "EmuCore/CPU/Recompiler", "EnableVU0", true);
-	SettingWidgetBinder::BindWidgetToBoolSetting(m_ui.vu1Recompiler, "EmuCore/CPU/Recompiler", "EnableVU1", true);
-	SettingWidgetBinder::BindWidgetToBoolSetting(m_ui.vuFlagHack, "EmuCore/Speedhacks", "vuFlagHack", true);
+	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_ui.vu0Recompiler, "EmuCore/CPU/Recompiler", "EnableVU0", true);
+	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_ui.vu1Recompiler, "EmuCore/CPU/Recompiler", "EnableVU1", true);
+	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_ui.vuFlagHack, "EmuCore/Speedhacks", "vuFlagHack", true);
 
-	SettingWidgetBinder::BindWidgetToBoolSetting(m_ui.iopRecompiler, "EmuCore/CPU/Recompiler", "EnableIOP", true);
+	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_ui.iopRecompiler, "EmuCore/CPU/Recompiler", "EnableIOP", true);
 
-	SettingWidgetBinder::BindWidgetToBoolSetting(m_ui.gameFixes, "", "EnableGameFixes", true);
-	SettingWidgetBinder::BindWidgetToBoolSetting(m_ui.patches, "EmuCore", "EnablePatches", true);
+	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_ui.gameFixes, "EmuCore", "EnableGameFixes", true);
+	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_ui.patches, "EmuCore", "EnablePatches", true);
 
-	SettingWidgetBinder::BindWidgetToFloatSetting(m_ui.ntscFrameRate, "EmuCore/GS", "FramerateNTSC", 59.94f);
-	SettingWidgetBinder::BindWidgetToFloatSetting(m_ui.palFrameRate, "EmuCore/GS", "FrameratePAL", 50.00f);
+	SettingWidgetBinder::BindWidgetToFloatSetting(sif, m_ui.ntscFrameRate, "EmuCore/GS", "FramerateNTSC", 59.94f);
+	SettingWidgetBinder::BindWidgetToFloatSetting(sif, m_ui.palFrameRate, "EmuCore/GS", "FrameratePAL", 50.00f);
+
+	dialog->registerWidgetHelp(m_ui.eeRecompiler, tr("Enable Recompiler"), tr("Checked"),
+		tr("Performs just - in - time binary translation of 64 - bit MIPS - IV machine code to x86."));
+
+	dialog->registerWidgetHelp(m_ui.eeWaitLoopDetection, tr("Wait Loop Detection"), tr("Checked"),
+		tr("Moderate speedup for some games, with no known side effects."));
+
+	dialog->registerWidgetHelp(m_ui.eeCache, tr("Enable Cache (Slow)"), tr("Unchecked"),
+		tr("Interpreter only, provided for diagnostic."));
+
+	dialog->registerWidgetHelp(m_ui.eeINTCSpinDetection, tr("INTC Spin Detection"), tr("Checked"),
+		tr("Huge speedup for some games, with almost no compatibility side effects."));
+
+	dialog->registerWidgetHelp(m_ui.vu0Recompiler, tr("Enable VU0 Recompiler"), tr("Checked"),
+		tr("Enables VU0 Recompiler."));
+
+	dialog->registerWidgetHelp(m_ui.vu1Recompiler, tr("Enable VU1 Recompiler"), tr("Checked"),
+		tr("Enables VU1 Recompiler."));
+
+	dialog->registerWidgetHelp(m_ui.vuFlagHack, tr("mVU Flag Hack"), tr("Checked"),
+		tr("Good speedup and high compatibility, may cause graphical errors."));
+
+	dialog->registerWidgetHelp(m_ui.iopRecompiler, tr("Enable Recompiler"), tr("Checked"),
+		tr("Performs just-in-time binary translation of 32-bit MIPS-I machine code to x86."));
+
+	dialog->registerWidgetHelp(m_ui.gameFixes, tr("Enable Game Fixes"), tr("Checked"),
+		tr("Automatically loads and applies gamefixes to known problematic games on game start."));
+
+	dialog->registerWidgetHelp(m_ui.patches, tr("Enable Compatibility Patches"), tr("Checked"),
+		tr("Automatically loads and applies compatibility patches to known problematic games."));
 }
 
 AdvancedSystemSettingsWidget::~AdvancedSystemSettingsWidget() = default;

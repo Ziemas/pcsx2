@@ -21,7 +21,6 @@
   <ImportGroup Label="PropertySheets">
     <Import Project="vsprops\CommonLibrary.props" />
     <Import Project="vsprops\3rdpartyDeps.props" />
-    <Import Project="vsprops\pthreads.props" />
     <Import Condition="$(Configuration.Contains(Debug))" Project="vsprops\CodeGen_Debug.props" />
     <Import Condition="$(Configuration.Contains(Devel))" Project="vsprops\CodeGen_Devel.props" />
     <Import Condition="$(Configuration.Contains(Release))" Project="vsprops\CodeGen_Release.props" />
@@ -33,7 +32,10 @@
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
-      <AdditionalIncludeDirectories>$(SolutionDir)3rdparty\glad\include;$(SolutionDir)3rdparty\glslang\glslang;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)3rdparty\d3d12memalloc\include;$(SolutionDir)3rdparty\glad\include;$(SolutionDir)3rdparty\glslang\glslang;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories);$(SolutionDir)3rdparty\rapidyaml\rapidyaml\ext\c4core\src\c4\ext\fast_float\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories);$(SolutionDir)3rdparty\libpng</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories);$(SolutionDir)3rdparty\jpgd</AdditionalIncludeDirectories>
       <ExceptionHandling>Async</ExceptionHandling>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <ForcedIncludeFiles>PrecompiledHeader.h</ForcedIncludeFiles>
@@ -45,10 +47,17 @@
   <ItemGroup>
     <ClCompile Include="AlignedMalloc.cpp" />
     <ClCompile Include="Console.cpp" />
+    <ClCompile Include="CrashHandler.cpp" />
     <ClCompile Include="D3D11\ShaderCache.cpp" />
     <ClCompile Include="D3D11\ShaderCompiler.cpp" />
+    <ClCompile Include="D3D12\Builders.cpp" />
+    <ClCompile Include="D3D12\Context.cpp" />
+    <ClCompile Include="D3D12\DescriptorHeapManager.cpp" />
+    <ClCompile Include="D3D12\ShaderCache.cpp" />
+    <ClCompile Include="D3D12\StreamBuffer.cpp" />
+    <ClCompile Include="D3D12\Texture.cpp" />
+    <ClCompile Include="D3D12\Util.cpp" />
     <ClCompile Include="Exceptions.cpp" />
-    <ClCompile Include="FastFormatString.cpp" />
     <ClCompile Include="FastJmp.cpp">
       <ExcludedFromBuild>true</ExcludedFromBuild>
     </ClCompile>
@@ -58,11 +67,17 @@
     <ClCompile Include="GL\ShaderCache.cpp" />
     <ClCompile Include="GL\StreamBuffer.cpp" />
     <ClCompile Include="FileSystem.cpp" />
-    <ClCompile Include="IniInterface.cpp" />
+    <ClCompile Include="Image.cpp" />
+    <ClCompile Include="HTTPDownloader.cpp" />
+    <ClCompile Include="HTTPDownloaderCurl.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Devel|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="HTTPDownloaderWinHTTP.cpp" />
     <ClCompile Include="MD5Digest.cpp" />
     <ClCompile Include="ProgressCallback.cpp" />
-    <ClCompile Include="pxStreams.cpp" />
-    <ClCompile Include="pxTranslate.cpp" />
+    <ClCompile Include="StackWalker.cpp" />
     <ClCompile Include="StringUtil.cpp" />
     <ClCompile Include="SettingsWrapper.cpp" />
     <ClCompile Include="Timer.cpp" />
@@ -78,13 +93,10 @@
     <ClCompile Include="Vulkan\Texture.cpp" />
     <ClCompile Include="Vulkan\Util.cpp" />
     <ClCompile Include="WindowInfo.cpp" />
-    <ClCompile Include="x86\MemcpyFast.cpp" />
-    <ClCompile Include="PathUtils.cpp" />
     <ClCompile Include="Perf.cpp" />
     <ClCompile Include="PrecompiledHeader.cpp">
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="StringHelpers.cpp" />
     <ClCompile Include="Linux\LnxHostSys.cpp" />
     <ClCompile Include="Linux\LnxMisc.cpp" />
     <ClCompile Include="Linux\LnxThreads.cpp" />
@@ -92,10 +104,7 @@
     <ClCompile Include="Windows\WinMisc.cpp" />
     <ClCompile Include="Windows\WinThreads.cpp" />
     <ClCompile Include="Misc.cpp" />
-    <ClCompile Include="Mutex.cpp" />
-    <ClCompile Include="RwMutex.cpp" />
     <ClCompile Include="Semaphore.cpp" />
-    <ClCompile Include="ThreadTools.cpp" />
     <ClCompile Include="emitter\bmi.cpp" />
     <ClCompile Include="emitter\cpudetect.cpp" />
     <ClCompile Include="emitter\fpu.cpp" />
@@ -111,20 +120,24 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="EventSource.inl" />
-    <MASM Include="FastJmp.asm">
-      <FileType>Document</FileType>
-      <PreprocessorDefinitions Condition="'$(Platform)'=='Win32'">_M_X86_32;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <PreprocessorDefinitions Condition="'$(Platform)'=='x64'">_M_X86_64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-    </MASM>
+    <MASM Include="FastJmp.asm" />
     <None Include="Vulkan\EntryPoints.inl" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Align.h" />
     <ClInclude Include="AlignedMalloc.h" />
     <ClInclude Include="BitCast.h" />
+    <ClInclude Include="CrashHandler.h" />
     <ClInclude Include="D3D11\ShaderCache.h" />
     <ClInclude Include="D3D11\ShaderCompiler.h" />
-    <ClInclude Include="EmbeddedImage.h" />
+    <ClInclude Include="D3D12\Builders.h" />
+    <ClInclude Include="D3D12\Context.h" />
+    <ClInclude Include="D3D12\DescriptorHeapManager.h" />
+    <ClInclude Include="D3D12\ShaderCache.h" />
+    <ClInclude Include="D3D12\StreamBuffer.h" />
+    <ClInclude Include="D3D12\Texture.h" />
+    <ClInclude Include="D3D12\Util.h" />
+    <ClInclude Include="Easing.h" />
     <ClInclude Include="boost_spsc_queue.hpp" />
     <ClInclude Include="FastJmp.h" />
     <ClInclude Include="GL\Context.h" />
@@ -134,16 +147,24 @@
     <ClInclude Include="GL\StreamBuffer.h" />
     <ClInclude Include="FileSystem.h" />
     <ClInclude Include="HashCombine.h" />
+    <ClInclude Include="Image.h" />
+    <ClInclude Include="LRUCache.h" />
+    <ClInclude Include="HTTPDownloader.h" />
+    <ClInclude Include="HTTPDownloaderCurl.h">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Devel|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </ClInclude>
+    <ClInclude Include="HTTPDownloaderWinHTTP.h" />
     <ClInclude Include="MD5Digest.h" />
     <ClInclude Include="ProgressCallback.h" />
     <ClInclude Include="ScopedGuard.h" />
+    <ClInclude Include="StackWalker.h" />
     <ClInclude Include="StringUtil.h" />
     <ClInclude Include="SettingsInterface.h" />
     <ClInclude Include="SettingsWrapper.h" />
-    <ClInclude Include="ThreadingInternal.h" />
     <ClInclude Include="Assertions.h" />
     <ClInclude Include="Console.h" />
-    <ClInclude Include="Dependencies.h" />
     <ClInclude Include="EventSource.h" />
     <ClInclude Include="Exceptions.h" />
     <ClInclude Include="General.h" />
@@ -153,7 +174,7 @@
     <ClInclude Include="PrecompiledHeader.h" />
     <ClInclude Include="RedtapeWindows.h" />
     <ClInclude Include="SafeArray.h" />
-    <ClInclude Include="StringHelpers.h" />
+    <ClInclude Include="ThreadPool.h" />
     <ClInclude Include="Timer.h" />
     <ClInclude Include="Vulkan\Builders.h" />
     <ClInclude Include="Vulkan\Context.h" />
@@ -166,10 +187,7 @@
     <ClInclude Include="Vulkan\Texture.h" />
     <ClInclude Include="Vulkan\Util.h" />
     <ClInclude Include="WindowInfo.h" />
-    <ClInclude Include="wxBaseTools.h" />
     <ClInclude Include="Threading.h" />
-    <ClInclude Include="PersistentThread.h" />
-    <ClInclude Include="RwMutex.h" />
     <ClInclude Include="emitter\implement\bmi.h" />
     <ClInclude Include="emitter\cpudetect_internal.h" />
     <ClInclude Include="emitter\instructions.h" />
@@ -195,19 +213,20 @@
     <ClInclude Include="emitter\implement\simd_helpers.h" />
     <ClInclude Include="emitter\implement\simd_moremovs.h" />
     <ClInclude Include="emitter\implement\simd_shufflepack.h" />
+    <ClInclude Include="ZipHelpers.h" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\3rdparty\d3d12memalloc\d3d12memalloc.vcxproj">
+      <Project>{d45cec7a-3171-40dd-975d-e1544cf16139}</Project>
+    </ProjectReference>
     <ProjectReference Include="..\3rdparty\glad\glad.vcxproj">
       <Project>{c0293b32-5acf-40f0-aa6c-e6da6f3bf33a}</Project>
     </ProjectReference>
     <ProjectReference Include="..\3rdparty\glslang\glslang.vcxproj">
       <Project>{ef6834a9-11f3-4331-bc34-21b325abb180}</Project>
     </ProjectReference>
-    <ProjectReference Include="..\3rdparty\pthreads4w\build\pthreads4w.vcxproj">
-      <Project>{0fae817d-9a32-4830-857e-81da57246e16}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\3rdparty\wxwidgets3.0\build\msw\wx30_base.vcxproj">
-      <Project>{3fcc50c2-81e9-5db2-b8d8-2129427568b1}</Project>
+    <ProjectReference Include="..\3rdparty\jpgd\jpgd.vcxproj">
+      <Project>{ed2f21fd-0a36-4a8f-9b90-e7d92a2acb63}</Project>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

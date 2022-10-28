@@ -16,15 +16,11 @@
 #pragma once
 
 #include "common/Threading.h"
+#include "common/Assertions.h"
+#include "common/Pcsx2Defs.h"
 
-#ifdef __M_X86_64
 static const uint iREGCNT_XMM = 16;
 static const uint iREGCNT_GPR = 16;
-#else
-// Register counts for x86/32 mode:
-static const uint iREGCNT_XMM = 8;
-static const uint iREGCNT_GPR = 8;
-#endif
 
 enum XMMSSEType
 {
@@ -33,38 +29,8 @@ enum XMMSSEType
 	//XMMT_FPD = 3, // double
 };
 
-// --------------------------------------------------------------------------------------
-//  __tls_emit / x86EMIT_MULTITHREADED
-// --------------------------------------------------------------------------------------
-// Multithreaded support for the x86 emitter.  (defaults to 0)
-// To enable the multithreaded emitter, either set the below define to 1, or set the define
-// as a project option.  The multithreaded emitter relies on native compiler support for
-// TLS -- Macs are crap out of luck there (for now).
-
-#ifndef x86EMIT_MULTITHREADED
-#if PCSX2_THREAD_LOCAL
-#define x86EMIT_MULTITHREADED 1
-#else
-// No TLS support?  Force-clear the MT flag:
-#pragma message("x86emitter: TLS not available, multithreaded emitter disabled.")
-#undef x86EMIT_MULTITHREADED
-#define x86EMIT_MULTITHREADED 0
-#endif
-#endif
-
-#ifndef __tls_emit
-#if x86EMIT_MULTITHREADED
-#define __tls_emit thread_local
-#else
-// Using TlsVariable is sub-optimal and could result in huge executables, so we
-// force-disable TLS entirely, and disallow running multithreaded recompilation
-// components within PCSX2 manually.
-#define __tls_emit
-#endif
-#endif
-
-extern __tls_emit u8* x86Ptr;
-extern __tls_emit XMMSSEType g_xmmtypes[iREGCNT_XMM];
+extern thread_local u8* x86Ptr;
+extern thread_local XMMSSEType g_xmmtypes[iREGCNT_XMM];
 
 namespace x86Emitter
 {
@@ -81,7 +47,7 @@ namespace x86Emitter
 	template <typename T>
 	static __fi bool is_s8(T imm)
 	{
-		return (s8)imm == (s32)imm;
+		return (s8)imm == (typename std::make_signed<T>::type)imm;
 	}
 
 	template <typename T>
@@ -313,17 +279,10 @@ namespace x86Emitter
 		bool IsSIMD() const { return GetOperandSize() == 16; }
 
 // IsWide: return true if the register is 64 bits (requires a wide op on the rex prefix)
-#ifdef __M_X86_64
 		bool IsWide() const
 		{
 			return GetOperandSize() == 8;
 		}
-#else
-		bool IsWide() const
-		{
-			return false;
-		} // no 64 bits GPR
-#endif
 		// return true if the register is a valid YMM register
 		bool IsWideSIMD() const { return GetOperandSize() == 32; }
 
@@ -498,11 +457,7 @@ namespace x86Emitter
 	// more sense and allows the programmer a little more type protection if needed.
 	//
 
-#ifdef __M_X86_64
 #define xRegisterLong xRegister64
-#else
-#define xRegisterLong xRegister32
-#endif
 	static const int wordsize = sizeof(sptr);
 
 	class xAddressReg : public xRegisterLong
@@ -854,11 +809,7 @@ extern const xRegister32
 	typedef xIndirect<u32> xIndirect32;
 	typedef xIndirect<u16> xIndirect16;
 	typedef xIndirect<u8> xIndirect8;
-#ifdef __M_X86_64
 	typedef xIndirect<u64> xIndirectNative;
-#else
-	typedef xIndirect<u32> xIndirectNative;
-#endif
 
 	// --------------------------------------------------------------------------------------
 	//  xIndirect64orLess  -  base class 64, 32, 16, and 8 bit operand types

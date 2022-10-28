@@ -15,8 +15,9 @@
 
 #pragma once
 #include <QtCore/QDir>
-#include <QtCore/QString>
 #include <QtCore/QPair>
+#include <QtCore/QString>
+#include <QtCore/QThread>
 #include <QtCore/QVector>
 #include <QtWidgets/QWidget>
 #include <string>
@@ -42,14 +43,11 @@ class BIOSSettingsWidget : public QWidget
 	Q_OBJECT
 
 public:
-	BIOSSettingsWidget(QWidget* parent, SettingsDialog* dialog);
+	BIOSSettingsWidget(SettingsDialog* dialog, QWidget* parent);
 	~BIOSSettingsWidget();
 
 private Q_SLOTS:
 	void refreshList();
-	void browseSearchDirectory();
-	void openSearchDirectory();
-	void updateSearchDirectory();
 
 	void listItemChanged(const QTreeWidgetItem* current, const QTreeWidgetItem* previous);
 	void listRefreshed(const QVector<BIOSInfo>& items);

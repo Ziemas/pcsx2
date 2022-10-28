@@ -20,9 +20,8 @@
 #include <atomic>
 #include <mutex>
 #include <condition_variable>
-#include <ghc/filesystem.h>
-#include <fstream>
 
+#include "common/Path.h"
 #include "DEV9/SimpleQueue.h"
 
 class ATA
@@ -35,7 +34,7 @@ public:
 private:
 	const bool lba48Supported = false;
 
-	std::fstream hddImage;
+	std::FILE* hddImage = nullptr;
 	u64 hddImageSize;
 
 	int pioMode;
@@ -153,8 +152,9 @@ private:
 
 public:
 	ATA();
+	~ATA();
 
-	int Open(ghc::filesystem::path hddPath);
+	int Open(const std::string& hddPath);
 	void Close();
 
 	void ATA_HardReset();
@@ -172,7 +172,7 @@ public:
 
 private:
 	//Info
-	void CreateHDDinfo(int sizeMb);
+	void CreateHDDinfo(u64 sizeSectors);
 	void CreateHDDinfoCsum();
 
 	//State

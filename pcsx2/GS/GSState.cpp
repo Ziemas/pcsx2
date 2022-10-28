@@ -17,40 +17,42 @@
 #include "GSState.h"
 #include "GSGL.h"
 #include "GSUtil.h"
+#include "common/StringUtil.h"
 
 #include <algorithm> // clamp
 #include <cfloat> // FLT_MAX
+#include <fstream>
+#include <iomanip> // Dump Verticles
 
 int GSState::s_n = 0;
 
+static __fi bool IsAutoFlushEnabled()
+{
+	return (GSConfig.Renderer == GSRendererType::SW) ? GSConfig.AutoFlushSW : GSConfig.UserHacks_AutoFlush;
+}
+
+static __fi bool IsFirstProvokingVertex()
+{
+	return (GSConfig.Renderer != GSRendererType::SW && !g_gs_device->Features().provoking_vertex_last);
+}
+
 GSState::GSState()
-	: m_version(7)
+	: m_version(STATE_VERSION)
 	, m_gsc(NULL)
 	, m_skip(0)
 	, m_skip_offset(0)
 	, m_q(1.0f)
-	, m_scanmask_used(false)
-	, m_vt(this)
+	, m_scanmask_used(0)
+	, tex_flushed(true)
+	, m_vt(this, IsFirstProvokingVertex())
 	, m_regs(NULL)
 	, m_crc(0)
 	, m_options(0)
-	, m_frameskip(0)
 {
 	// m_nativeres seems to be a hack. Unfortunately it impacts draw call number which make debug painful in the replayer.
 	// Let's keep it disabled to ease debug.
 	m_nativeres = GSConfig.UpscaleMultiplier == 1;
-	m_mipmap = theApp.GetConfigB("mipmap");
-	m_NTSC_Saturation = theApp.GetConfigB("NTSC_Saturation");
-	if (theApp.GetConfigB("UserHacks"))
-	{
-		m_userhacks_auto_flush = theApp.GetConfigB("UserHacks_AutoFlush");
-		m_userhacks_wildhack = theApp.GetConfigB("UserHacks_WildHack");
-	}
-	else
-	{
-		m_userhacks_auto_flush = false;
-		m_userhacks_wildhack = false;
-	}
+	m_mipmap = GSConfig.Mipmap;
 
 	s_n = 0;
 	s_dump = theApp.GetConfigB("dump");
@@ -132,9 +134,7 @@ GSState::GSState()
 	PRIM = &m_env.PRIM;
 	//CSR->rREV = 0x20;
 	m_env.PRMODECONT.AC = 1;
-	tex_flushed = true;
-
-	Reset();
+	Reset(false);
 
 	ResetHandlers();
 }
@@ -147,38 +147,13 @@ GSState::~GSState()
 		_aligned_free(m_index.buff);
 }
 
-void GSState::SetFrameSkip(int skip)
+void GSState::Reset(bool hardware_reset)
 {
-	if (m_frameskip == skip)
-		return;
+	Flush();
 
-	m_frameskip = skip;
-
-	if (skip)
-	{
-		m_fpGIFPackedRegHandlers[GIF_REG_XYZF2] = &GSState::GIFPackedRegHandlerNOP;
-		m_fpGIFPackedRegHandlers[GIF_REG_XYZ2] = &GSState::GIFPackedRegHandlerNOP;
-		m_fpGIFPackedRegHandlers[GIF_REG_XYZF3] = &GSState::GIFPackedRegHandlerNOP;
-		m_fpGIFPackedRegHandlers[GIF_REG_XYZ3] = &GSState::GIFPackedRegHandlerNOP;
-
-		m_fpGIFRegHandlers[GIF_A_D_REG_XYZF2] = &GSState::GIFRegHandlerNOP;
-		m_fpGIFRegHandlers[GIF_A_D_REG_XYZ2] = &GSState::GIFRegHandlerNOP;
-		m_fpGIFRegHandlers[GIF_A_D_REG_XYZF3] = &GSState::GIFRegHandlerNOP;
-		m_fpGIFRegHandlers[GIF_A_D_REG_XYZ3] = &GSState::GIFRegHandlerNOP;
-
-		m_fpGIFPackedRegHandlersC[GIF_REG_STQRGBAXYZF2] = &GSState::GIFPackedRegHandlerNOP;
-		m_fpGIFPackedRegHandlersC[GIF_REG_STQRGBAXYZ2] = &GSState::GIFPackedRegHandlerNOP;
-	}
-	else
-	{
-		UpdateVertexKick();
-	}
-}
-
-void GSState::Reset()
-{
 	// FIXME: bios logo not shown cut in half after reset, missing graphics in GoW after first FMV
-	// memset(m_mem.m_vm8, 0, m_mem.m_vmsize);
+	if (hardware_reset)
+		memset(m_mem.m_vm8, 0, m_mem.m_vmsize);
 	memset(&m_path, 0, sizeof(m_path));
 	memset(&m_v, 0, sizeof(m_v));
 
@@ -209,8 +184,11 @@ void GSState::Reset()
 	m_vertex.tail = 0;
 	m_vertex.next = 0;
 	m_index.tail = 0;
+	m_scanmask_used = 0;
+	m_dirty_gs_regs = 0;
+	m_backed_up_ctx = -1;
 
-	m_scanmask_used = false;
+	memcpy(&m_prev_env, &m_env, sizeof(m_prev_env));
 }
 
 template<bool auto_flush, bool index_swap>
@@ -247,7 +225,7 @@ void GSState::ResetHandlers()
 	m_fpGIFPackedRegHandlers[GIF_REG_PRIM] = (GIFPackedRegHandler)(GIFRegHandler)&GSState::GIFRegHandlerPRIM;
 	m_fpGIFPackedRegHandlers[GIF_REG_RGBA] = &GSState::GIFPackedRegHandlerRGBA;
 	m_fpGIFPackedRegHandlers[GIF_REG_STQ] = &GSState::GIFPackedRegHandlerSTQ;
-	m_fpGIFPackedRegHandlers[GIF_REG_UV] = m_userhacks_wildhack ? &GSState::GIFPackedRegHandlerUV_Hack : &GSState::GIFPackedRegHandlerUV;
+	m_fpGIFPackedRegHandlers[GIF_REG_UV] = GSConfig.UserHacks_WildHack ? &GSState::GIFPackedRegHandlerUV_Hack : &GSState::GIFPackedRegHandlerUV;
 	m_fpGIFPackedRegHandlers[GIF_REG_TEX0_1] = (GIFPackedRegHandler)(GIFRegHandler)&GSState::GIFRegHandlerTEX0<0>;
 	m_fpGIFPackedRegHandlers[GIF_REG_TEX0_2] = (GIFPackedRegHandler)(GIFRegHandler)&GSState::GIFRegHandlerTEX0<1>;
 	m_fpGIFPackedRegHandlers[GIF_REG_CLAMP_1] = (GIFPackedRegHandler)(GIFRegHandler)&GSState::GIFRegHandlerCLAMP<0>;
@@ -257,11 +235,10 @@ void GSState::ResetHandlers()
 	m_fpGIFPackedRegHandlers[GIF_REG_NOP] = &GSState::GIFPackedRegHandlerNOP;
 
 	// swap first/last indices when the provoking vertex is the first (D3D/Vulkan)
-	const bool index_swap = GSConfig.UseHardwareRenderer() && !g_gs_device->Features().provoking_vertex_last;
-	if (m_userhacks_auto_flush)
-		index_swap ? SetPrimHandlers<true, true>() : SetPrimHandlers<true, false>();
+	if (IsAutoFlushEnabled())
+		IsFirstProvokingVertex() ? SetPrimHandlers<true, true>() : SetPrimHandlers<true, false>();
 	else
-		index_swap ? SetPrimHandlers<false, true>() : SetPrimHandlers<false, false>();
+		IsFirstProvokingVertex() ? SetPrimHandlers<false, true>() : SetPrimHandlers<false, false>();
 
 	std::fill(std::begin(m_fpGIFRegHandlers), std::end(m_fpGIFRegHandlers), &GSState::GIFRegHandlerNull);
 
@@ -269,7 +246,7 @@ void GSState::ResetHandlers()
 	m_fpGIFRegHandlers[GIF_A_D_REG_RGBAQ] = &GSState::GIFRegHandlerRGBAQ;
 	m_fpGIFRegHandlers[GIF_A_D_REG_RGBAQ + 0x10] = &GSState::GIFRegHandlerRGBAQ;
 	m_fpGIFRegHandlers[GIF_A_D_REG_ST] = &GSState::GIFRegHandlerST;
-	m_fpGIFRegHandlers[GIF_A_D_REG_UV] = m_userhacks_wildhack ? &GSState::GIFRegHandlerUV_Hack : &GSState::GIFRegHandlerUV;
+	m_fpGIFRegHandlers[GIF_A_D_REG_UV] = GSConfig.UserHacks_WildHack ? &GSState::GIFRegHandlerUV_Hack : &GSState::GIFRegHandlerUV;
 	m_fpGIFRegHandlers[GIF_A_D_REG_TEX0_1] = &GSState::GIFRegHandlerTEX0<0>;
 	m_fpGIFRegHandlers[GIF_A_D_REG_TEX0_2] = &GSState::GIFRegHandlerTEX0<1>;
 	m_fpGIFRegHandlers[GIF_A_D_REG_CLAMP_1] = &GSState::GIFRegHandlerCLAMP<0>;
@@ -320,9 +297,28 @@ void GSState::ResetHandlers()
 	m_fpGIFRegHandlers[GIF_A_D_REG_LABEL] = &GSState::GIFRegHandlerNull;
 }
 
+void GSState::UpdateSettings(const Pcsx2Config::GSOptions& old_config)
+{
+	m_mipmap = GSConfig.Mipmap;
+
+	if (
+		GSConfig.AutoFlushSW != old_config.AutoFlushSW ||
+		GSConfig.UserHacks_AutoFlush != old_config.UserHacks_AutoFlush ||
+		GSConfig.UserHacks_WildHack != old_config.UserHacks_WildHack)
+	{
+		ResetHandlers();
+	}
+}
+
 bool GSState::isinterlaced()
 {
 	return !!m_regs->SMODE2.INT;
+}
+
+bool GSState::isReallyInterlaced()
+{
+	// The FIELD register only flips if the CMOD field in SMODE1 is set to anything but 0 and Front Porch bottom bit in SYNCV is set.
+	return (m_regs->SYNCV.VFP & 0x1) && m_regs->SMODE1.CMOD;
 }
 
 GSVideoMode GSState::GetVideoMode()
@@ -356,86 +352,84 @@ GSVideoMode GSState::GetVideoMode()
 	__assume(0); // unreachable
 }
 
-// There are some cases where the PS2 seems to saturate the output circuit size when the developer requests for a higher
-// unsupported value with respect to the current video mode via the DISP registers, the following function handles such cases.
-// NOTE: This function is totally hacky as there are no documents related to saturation of output dimensions, function is
-// generally just based on technical and intellectual guesses.
-void GSState::SaturateOutputSize(GSVector4i& r)
+bool GSState::IsAnalogue()
 {
-	const GSVideoMode videomode = GetVideoMode();
+	return GetVideoMode() == GSVideoMode::NTSC || GetVideoMode() == GSVideoMode::PAL || GetVideoMode() == GSVideoMode::HDTV_1080I;
+}
 
-	const bool is_ntsc = videomode == GSVideoMode::NTSC;
-	const bool is_pal = videomode == GSVideoMode::PAL;
+GSVector4i GSState::GetFrameMagnifiedRect(int i)
+{
+	GSVector4i rectangle = { 0, 0, 0, 0 };
 
-	//Some games (such as Pool Paradise) use alternate line reading and provide a massive height which is really half.
-	if (r.height() > 640 && (is_ntsc || is_pal))
+	if (!IsEnabled(i))
+		return rectangle;
+
+	const int videomode = static_cast<int>(GetVideoMode()) - 1;
+	const auto& DISP = m_regs->DISP[i].DISPLAY;
+	const bool ignore_offset = !GSConfig.PCRTCOffsets;
+
+	const u32 DW = DISP.DW + 1;
+	const u32 DH = DISP.DH + 1;
+;
+	// The number of sub pixels to draw are given in DH and DW, the MAGH/V relates to the size of the original square in the FB
+	// but the size it's drawn to uses the default size of the display mode (for PAL/NTSC this is a MAGH of 3)
+	// so for example a game will have a DW of 2559 and a MAGH of 4 to make it 512 (from the FB), but because it's drawing 2560 subpixels
+	// it will cover the entire 640 wide of the screen (2560 / (3+1)).
+	int width;
+	int height;
+	if (ignore_offset)
 	{
-		r.bottom = r.top + (r.height() / 2);
-		return;
+		width = (DW / (DISP.MAGH + 1));
+		height = (DH / (DISP.MAGV + 1));
+	}
+	else
+	{
+		width = (DW / (VideoModeDividers[videomode].x + 1));
+		height = (DH / (VideoModeDividers[videomode].y + 1));
 	}
 
-	const auto& SMODE2 = m_regs->SMODE2;
-	const auto& PMODE = m_regs->PMODE;
+	int res_multi = 1;
 
-	//  Limit games to standard NTSC resolutions. games with 512X512 (PAL resolution) on NTSC video mode produces black border on the bottom.
-	//  512 X 448 is the resolution generally used by NTSC, saturating the height value seems to get rid of the black borders.
-	//  Though it's quite a bad hack as it affects binaries which are patched to run on a non-native video mode.
-	const bool interlaced_field = SMODE2.INT && !SMODE2.FFMD;
-	const bool single_frame_output = SMODE2.INT && SMODE2.FFMD && (PMODE.EN1 ^ PMODE.EN2);
-	const bool unsupported_output_size = r.height() > 448 && r.width() < 640;
+	if (isinterlaced() && m_regs->SMODE2.FFMD && height > 1)
+		res_multi = 2;
 
-	const bool saturate =
-		m_NTSC_Saturation &&
-		is_ntsc &&
-		(interlaced_field || single_frame_output) &&
-		unsupported_output_size;
+	// Set up the display rectangle based on the values obtained from DISPLAY registers
+	rectangle.right = width;
+	rectangle.bottom = height / res_multi;
 
-	if (saturate)
-		r.bottom = r.top + 448;
+	return rectangle;
+}
+
+int GSState::GetDisplayHMagnification()
+{
+	// Pick one of the DISPLAY's and hope that they are both the same. Favour DISPLAY[1]
+	for (int i = 1; i >= 0; i--)
+	{
+		if (IsEnabled(i))
+			return m_regs->DISP[i].DISPLAY.MAGH + 1;
+	}
+
+	// If neither DISPLAY is enabled, fallback to resolution offset (should never happen)
+	const int videomode = static_cast<int>(GetVideoMode()) - 1;
+	return VideoModeDividers[videomode].x + 1;
 }
 
 GSVector4i GSState::GetDisplayRect(int i)
 {
-	if (!IsEnabled(0) && !IsEnabled(1))
-		return {};
+	GSVector4i rectangle = { 0, 0, 0, 0 };
 
-	// If no specific context is requested then pass the merged rectangle as return value
 	if (i == -1)
 	{
-		if (IsEnabled(0) && IsEnabled(1))
-		{
-			const GSVector4i disp1_rect = GetDisplayRect(0);
-			const GSVector4i disp2_rect = GetDisplayRect(1);
-
-			const GSVector4i intersect = disp1_rect.rintersect(disp2_rect);
-			const GSVector4i combined = disp1_rect.runion_ordered(disp2_rect);
-
-			// If the conditions for passing the merged rectangle is unsatisfied, then
-			// pass the rectangle with the bigger size.
-			const bool can_be_merged =
-				intersect.width() == 0 ||
-				intersect.height() == 0 ||
-				intersect.xyxy().eq(combined.xyxy());
-
-			if (can_be_merged)
-				return combined;
-
-			if (disp1_rect.rarea() > disp2_rect.rarea())
-				return disp1_rect;
-
-			return disp2_rect;
-		}
-
-		i = m_regs->PMODE.EN2;
+		return GetDisplayRect(0).runion(GetDisplayRect(1));
 	}
+
+	if (!IsEnabled(i))
+		return rectangle;
 
 	const auto& DISP = m_regs->DISP[i].DISPLAY;
 
 	const u32 DW = DISP.DW + 1;
 	const u32 DH = DISP.DH + 1;
-	const u32 DX = DISP.DX;
-	const u32 DY = DISP.DY;
-
 	const u32 MAGH = DISP.MAGH + 1;
 	const u32 MAGV = DISP.MAGV + 1;
 
@@ -444,40 +438,117 @@ GSVector4i GSState::GetDisplayRect(int i)
 	const int width = DW / magnification.x;
 	const int height = DH / magnification.y;
 
-	// Set up the display rectangle based on the values obtained from DISPLAY registers
-	GSVector4i rectangle;
+	const GSVector2i offsets = GetResolutionOffset(i);
 
-	rectangle.left = DX / magnification.x;
-	rectangle.top = DY / magnification.y;
+	// Set up the display rectangle based on the values obtained from DISPLAY registers
+	rectangle.left = offsets.x;
+	rectangle.top = offsets.y;
+
 	rectangle.right = rectangle.left + width;
 	rectangle.bottom = rectangle.top + height;
-
-	SaturateOutputSize(rectangle);
 
 	return rectangle;
 }
 
-GSVector4i GSState::GetFrameRect(int i)
+GSVector2i GSState::GetResolutionOffset(int i)
+{
+	GSVector2i offset = { 0, 0 };
+
+	if (!IsEnabled(i))
+		return offset;
+
+	const int videomode = static_cast<int>(GetVideoMode()) - 1;
+	const auto& DISP = m_regs->DISP[i].DISPLAY;
+
+	const auto& SMODE2 = m_regs->SMODE2;
+	const int res_multi = (SMODE2.INT + 1);
+	const GSVector4i offsets = !GSConfig.PCRTCOverscan ? VideoModeOffsets[videomode] : VideoModeOffsetsOverscan[videomode];
+
+	offset.x = (static_cast<int>(DISP.DX) - offsets.z) / (VideoModeDividers[videomode].x + 1);
+	offset.y = (static_cast<int>(DISP.DY) - (offsets.w * ((IsAnalogue() && res_multi) ? res_multi : 1))) / (VideoModeDividers[videomode].y + 1);
+
+	return offset;
+}
+
+GSVector2i GSState::GetResolution()
+{
+	const int videomode = static_cast<int>(GetVideoMode()) - 1;
+	const bool ignore_offset = !GSConfig.PCRTCOffsets;
+
+	const GSVector4i offsets = !GSConfig.PCRTCOverscan ? VideoModeOffsets[videomode] : VideoModeOffsetsOverscan[videomode];
+
+	GSVector2i resolution(offsets.x, offsets.y);
+
+	// The resolution of the framebuffer is double when in FRAME mode and interlaced.
+	// Also we need a special check because no-interlace patches like to render in the original height, but in non-interlaced mode
+	// which means it would normally go off the bottom of the screen. Advantages of emulation, i guess... Limited to Ignore Offsets + Deinterlacing = Off.
+	if ((isinterlaced() && !m_regs->SMODE2.FFMD) || (GSConfig.InterlaceMode == GSInterlaceMode::Off && !GSConfig.PCRTCOffsets && !isinterlaced()))
+		resolution.y *= 2;
+
+	if (ignore_offset)
+	{
+		// Ideally we'd just cut the width at the resolution, but of course we have to hack the hack...
+		// Some games (Mortal Kombat Armageddon) render the image at 834 pixels then shrink it to 624 pixels
+		// which does fit, but when we ignore offsets we go on framebuffer size and some other games
+		// such as Johnny Mosleys Mad Trix and Transformers render too much but design it to go off the screen.
+		int magnified_width = (VideoModeDividers[videomode].z + 1) / GetDisplayHMagnification();
+
+		// When viewing overscan allow up to the overscan size
+		if (GSConfig.PCRTCOverscan)
+			magnified_width = std::max(magnified_width, offsets.x);
+
+		GSVector4i total_rect = GetDisplayRect(0).runion(GetDisplayRect(1));
+		total_rect.z = total_rect.z - total_rect.x;
+		total_rect.w = total_rect.w - total_rect.y;
+		total_rect.z = std::min(total_rect.z, magnified_width);
+		total_rect.w = std::min(total_rect.w, resolution.y);
+		resolution.x = total_rect.z;
+		resolution.y = total_rect.w;
+	}
+
+	return resolution;
+}
+
+GSVector4i GSState::GetFrameRect(int i, bool ignore_off)
 {
 	// If no specific context is requested then pass the merged rectangle as return value
 	if (i == -1)
-		return GetFrameRect(0).runion(GetFrameRect(1));
+		return GetFrameRect(0, ignore_off).runion(GetFrameRect(1, ignore_off));
 
-	GSVector4i rectangle = GetDisplayRect(i);
+	GSVector4i rectangle = { 0, 0, 0, 0 };
 
-	int w = rectangle.width();
-	int h = rectangle.height();
+	if (!IsEnabled(i))
+		return rectangle;
 
-	if (isinterlaced() && m_regs->SMODE2.FFMD && h > 1)
-		h >>= 1;
+	const auto& DISP = m_regs->DISP[i].DISPLAY;
+
+	const u32 DW = DISP.DW + 1;
+	const u32 DH = DISP.DH + 1;
+	const GSVector2i magnification(DISP.MAGH+1, DISP.MAGV + 1);
 
 	const u32 DBX = m_regs->DISP[i].DISPFB.DBX;
-	const u32 DBY = m_regs->DISP[i].DISPFB.DBY;
+	int DBY = m_regs->DISP[i].DISPFB.DBY;
 
-	rectangle.left = DBX;
-	rectangle.top = DBY;
+
+	const int w = DW / magnification.x;
+	const int h = DH / magnification.y;
+
+	// If the combined height overflows 2048, it's likely adding a bit of extra data before the picture for offsetting the interlace
+	// only game known to do this is NASCAR '08
+	if (!ignore_off && (DBY + h) >= 2048)
+		DBY = DBY - 2048;
+
+	rectangle.left = (ignore_off) ? 0 : DBX;
+	rectangle.top = (ignore_off) ? 0 : DBY;
+
 	rectangle.right = rectangle.left + w;
 	rectangle.bottom = rectangle.top + h;
+
+	if (isinterlaced() && m_regs->SMODE2.FFMD && h > 1)
+	{
+		rectangle.bottom += 1;
+		rectangle.bottom >>= 1;
+	}
 
 	return rectangle;
 }
@@ -487,9 +558,8 @@ int GSState::GetFramebufferHeight()
 	// Framebuffer height is 11 bits max
 	constexpr int height_limit = (1 << 11);
 
-	const GSVector4i disp1_rect = GetFrameRect(0);
-	const GSVector4i disp2_rect = GetFrameRect(1);
-
+	const GSVector4i disp1_rect = GetFrameRect(0, true);
+	const GSVector4i disp2_rect = GetFrameRect(1, true);
 	const GSVector4i combined = disp1_rect.runion(disp2_rect);
 
 	// DBY isn't an offset to the frame memory but rather an offset to read output circuit inside
@@ -503,6 +573,16 @@ int GSState::GetFramebufferHeight()
 		GL_PERF("Massive framebuffer height detected! (height:%d)", frame_memory_height);
 
 	return frame_memory_height;
+}
+
+int GSState::GetFramebufferWidth()
+{
+	const GSVector4i disp1_rect = GetFrameRect(0, true);
+	const GSVector4i disp2_rect = GetFrameRect(1, true);
+
+	const int max_width = std::max(disp1_rect.width(), disp2_rect.width());
+
+	return max_width;
 }
 
 bool GSState::IsEnabled(int i)
@@ -542,6 +622,117 @@ float GSState::GetTvRefreshRate()
 	}
 
 	__assume(0); // unreachable
+}
+
+void GSState::DumpVertices(const std::string& filename)
+{
+	std::ofstream file(filename);
+
+	if (!file.is_open())
+		return;
+
+	const size_t count = m_index.tail;
+	GSVertex* buffer = &m_vertex.buff[0];
+
+	const char* DEL = ", ";
+
+	file << "VERTEX COORDS (XYZ)" << std::endl;
+	file << std::fixed << std::setprecision(4);
+	for (size_t i = 0; i < count; ++i)
+	{
+		file << "\t" << "v" << i << ": ";
+		GSVertex v = buffer[m_index.buff[i]];
+
+		const float x = (v.XYZ.X - (int)m_context->XYOFFSET.OFX) / 16.0f;
+		const float y = (v.XYZ.Y - (int)m_context->XYOFFSET.OFY) / 16.0f;
+
+		file << x << DEL;
+		file << y << DEL;
+		file << v.XYZ.Z;
+		file << std::endl;
+	}
+
+	file << std::endl;
+
+	file << "VERTEX COLOR (RGBA)" << std::endl;
+	file << std::fixed << std::setprecision(6);
+	for (size_t i = 0; i < count; ++i)
+	{
+		file << "\t" << "v" << i << ": ";
+		GSVertex v = buffer[m_index.buff[i]];
+
+		file << std::setfill('0') << std::setw(3) << unsigned(v.RGBAQ.R) << DEL;
+		file << std::setfill('0') << std::setw(3) << unsigned(v.RGBAQ.G) << DEL;
+		file << std::setfill('0') << std::setw(3) << unsigned(v.RGBAQ.B) << DEL;
+		file << std::setfill('0') << std::setw(3) << unsigned(v.RGBAQ.A);
+		file << std::endl;
+	}
+
+	file << std::endl;
+
+	const bool use_uv = PRIM->FST;
+	const std::string qualifier = use_uv ? "UV" : "STQ";
+
+	file << "TEXTURE COORDS (" << qualifier << ")" << std::endl;;
+	for (size_t i = 0; i < count; ++i)
+	{
+		file << "\t" << "v" << i << ": ";
+		const GSVertex v = buffer[m_index.buff[i]];
+
+		// note
+		// Yes, technically as far as the GS is concerned Q belongs
+		// to RGBAQ. However, the purpose of this dump is to print
+		// our data in a more human readable format and typically Q
+		// is associated with STQ.
+		if (use_uv)
+		{
+			const float uv_U = v.U / 16.0f;
+			const float uv_V = v.V / 16.0f;
+
+			file << uv_U << DEL << uv_V;
+		}
+		else
+			file << v.ST.S << DEL << v.ST.T << DEL << v.RGBAQ.Q;
+
+		file << std::endl;
+	}
+
+	file << std::endl;
+
+	file << "TRACER" << std::endl;
+
+	GSVector4i v = m_vt.m_min.c;
+	file << "\tmin c (x,y,z,w): " << v.x << DEL << v.y << DEL << v.z << DEL << v.w << std::endl;
+	v = m_vt.m_max.c;
+	file << "\tmax c (x,y,z,w): " << v.x << DEL << v.y << DEL << v.z << DEL << v.w << std::endl;
+
+	GSVector4 v2 = m_vt.m_min.p;
+	file << "\tmin p (x,y,z,w): " << v2.x << DEL << v2.y << DEL << v2.z << DEL << v2.w << std::endl;
+	v2 = m_vt.m_max.p;
+	file << "\tmax p (x,y,z,w): " << v2.x << DEL << v2.y << DEL << v2.z << DEL << v2.w << std::endl;
+	v2 = m_vt.m_min.t;
+	file << "\tmin t (x,y,z,w): " << v2.x << DEL << v2.y << DEL << v2.z << DEL << v2.w << std::endl;
+	v2 = m_vt.m_max.t;
+	file << "\tmax t (x,y,z,w): " << v2.x << DEL << v2.y << DEL << v2.z << DEL << v2.w << std::endl;
+
+	file.close();
+}
+
+__inline void GSState::CheckFlushes()
+{
+	if (m_dirty_gs_regs && m_index.tail > 0)
+	{
+		if (TestDrawChanged())
+		{
+			Flush();
+		}
+	}
+	if ((m_context->FRAME.FBMSK & GSLocalMemory::m_psm[m_context->FRAME.PSM].fmsk) != GSLocalMemory::m_psm[m_context->FRAME.PSM].fmsk)
+		m_mem.m_clut.Invalidate(m_context->FRAME.Block());
+
+	// Hey, why not check? I mean devs have done crazier things..
+	if(!m_context->ZBUF.ZMSK)
+		m_mem.m_clut.Invalidate(m_context->ZBUF.Block());
 }
 
 void GSState::GIFPackedRegHandlerNull(const GIFPackedReg* RESTRICT r)
@@ -601,6 +792,8 @@ void GSState::GIFPackedRegHandlerUV_Hack(const GIFPackedReg* RESTRICT r)
 template <u32 prim, u32 adc, bool auto_flush, bool index_swap>
 void GSState::GIFPackedRegHandlerXYZF2(const GIFPackedReg* RESTRICT r)
 {
+	CheckFlushes();
+
 	GSVector4i xy = GSVector4i::loadl(&r->U64[0]);
 	GSVector4i zf = GSVector4i::loadl(&r->U64[1]);
 
@@ -609,12 +802,14 @@ void GSState::GIFPackedRegHandlerXYZF2(const GIFPackedReg* RESTRICT r)
 
 	m_v.m[1] = xy.upl32(zf);
 
-	VertexKick<prim, auto_flush, index_swap>(adc ? 1 : r->XYZF2.Skip());
+	VertexKick<prim, auto_flush, index_swap>(adc ? 1 : r->XYZ2.Skip());
 }
 
 template <u32 prim, u32 adc, bool auto_flush, bool index_swap>
 void GSState::GIFPackedRegHandlerXYZ2(const GIFPackedReg* RESTRICT r)
 {
+	CheckFlushes();
+
 	const GSVector4i xy = GSVector4i::loadl(&r->U64[0]);
 	const GSVector4i z = GSVector4i::loadl(&r->U64[1]);
 	const GSVector4i xyz = xy.upl16(xy.srl<4>()).upl32(z);
@@ -643,13 +838,15 @@ void GSState::GIFPackedRegHandlerSTQRGBAXYZF2(const GIFPackedReg* RESTRICT r, u3
 {
 	ASSERT(size > 0 && size % 3 == 0);
 
+	CheckFlushes();
+
 	const GIFPackedReg* RESTRICT r_end = r + size;
 
 	while (r < r_end)
 	{
-		GSVector4i st = GSVector4i::loadl(&r[0].U64[0]);
+		const GSVector4i st = GSVector4i::loadl(&r[0].U64[0]);
 		GSVector4i q = GSVector4i::loadl(&r[0].U64[1]);
-		GSVector4i rgba = (GSVector4i::load<false>(&r[1]) & GSVector4i::x000000ff()).ps32().pu16();
+		const GSVector4i rgba = (GSVector4i::load<false>(&r[1]) & GSVector4i::x000000ff()).ps32().pu16();
 
 		q = q.blend8(GSVector4i::cast(GSVector4::m_one), q == GSVector4i::zero()); // see GIFPackedRegHandlerSTQ
 
@@ -675,21 +872,23 @@ void GSState::GIFPackedRegHandlerSTQRGBAXYZ2(const GIFPackedReg* RESTRICT r, u32
 {
 	ASSERT(size > 0 && size % 3 == 0);
 
+	CheckFlushes();
+
 	const GIFPackedReg* RESTRICT r_end = r + size;
 
 	while (r < r_end)
 	{
-		GSVector4i st = GSVector4i::loadl(&r[0].U64[0]);
+		const GSVector4i st = GSVector4i::loadl(&r[0].U64[0]);
 		GSVector4i q = GSVector4i::loadl(&r[0].U64[1]);
-		GSVector4i rgba = (GSVector4i::load<false>(&r[1]) & GSVector4i::x000000ff()).ps32().pu16();
+		const GSVector4i rgba = (GSVector4i::load<false>(&r[1]) & GSVector4i::x000000ff()).ps32().pu16();
 
 		q = q.blend8(GSVector4i::cast(GSVector4::m_one), q == GSVector4i::zero()); // see GIFPackedRegHandlerSTQ
 
 		m_v.m[0] = st.upl64(rgba.upl32(q)); // TODO: only store the last one
 
-		GSVector4i xy = GSVector4i::loadl(&r[2].U64[0]);
-		GSVector4i z = GSVector4i::loadl(&r[2].U64[1]);
-		GSVector4i xyz = xy.upl16(xy.srl<4>()).upl32(z);
+		const GSVector4i xy = GSVector4i::loadl(&r[2].U64[0]);
+		const GSVector4i z = GSVector4i::loadl(&r[2].U64[1]);
+		const GSVector4i xyz = xy.upl16(xy.srl<4>()).upl32(z);
 
 		m_v.m[1] = xyz.upl64(GSVector4i::loadl(&m_v.UV)); // TODO: only store the last one
 
@@ -711,20 +910,6 @@ void GSState::GIFRegHandlerNull(const GIFReg* RESTRICT r)
 
 __forceinline void GSState::ApplyPRIM(u32 prim)
 {
-	if (GSUtil::GetPrimClass(m_env.PRIM.PRIM) == GSUtil::GetPrimClass(prim & 7)) // NOTE: assume strips/fans are converted to lists
-	{
-		u32 prim_mask = 0x7f8;
-		if (GSConfig.UseHardwareRenderer() && GSUtil::GetPrimClass(prim & 7) == GS_TRIANGLE_CLASS)
-			prim_mask &= ~0x80; // Mask out AA1.
-
-		if (m_env.PRMODECONT.AC == 1 && (m_env.PRIM.U32[0] ^ prim) & prim_mask) // all fields except PRIM
-			Flush();
-	}
-	else
-	{
-		Flush();
-	}
-
 	if (m_env.PRMODECONT.AC == 1)
 	{
 		m_env.PRIM.U32[0] = prim;
@@ -732,9 +917,12 @@ __forceinline void GSState::ApplyPRIM(u32 prim)
 		UpdateContext();
 	}
 	else
-	{
 		m_env.PRIM.PRIM = prim & 0x7;
-	}
+
+	if (m_prev_env.PRIM.U32[0] ^ m_env.PRIM.U32[0])
+		m_dirty_gs_regs |= (1 << DIRTY_REG_PRIM);
+	else
+		m_dirty_gs_regs &= ~(1<< DIRTY_REG_PRIM);
 
 	UpdateVertexKick();
 
@@ -755,7 +943,7 @@ void GSState::GIFRegHandlerPRIM(const GIFReg* RESTRICT r)
 
 void GSState::GIFRegHandlerRGBAQ(const GIFReg* RESTRICT r)
 {
-	GSVector4i rgbaq = (GSVector4i)r->RGBAQ;
+	const GSVector4i rgbaq = (GSVector4i)r->RGBAQ;
 
 	GSVector4i q = rgbaq.blend8(GSVector4i::cast(GSVector4::m_one), rgbaq == GSVector4i::zero()).yyyy(); // see GIFPackedRegHandlerSTQ
 
@@ -792,9 +980,11 @@ void GSState::GIFRegHandlerUV_Hack(const GIFReg* RESTRICT r)
 template <u32 prim, u32 adc, bool auto_flush, bool index_swap>
 void GSState::GIFRegHandlerXYZF2(const GIFReg* RESTRICT r)
 {
-	GSVector4i xyzf = GSVector4i::loadl(&r->XYZF);
-	GSVector4i xyz = xyzf & (GSVector4i::xffffffff().upl32(GSVector4i::x00ffffff()));
-	GSVector4i uvf = GSVector4i::load((int)m_v.UV).upl32(xyzf.srl32(24).srl<4>());
+	CheckFlushes();
+
+	const GSVector4i xyzf = GSVector4i::loadl(&r->XYZF);
+	const GSVector4i xyz = xyzf & (GSVector4i::xffffffff().upl32(GSVector4i::x00ffffff()));
+	const GSVector4i uvf = GSVector4i::load((int)m_v.UV).upl32(xyzf.srl32(24).srl<4>());
 
 	m_v.m[1] = xyz.upl64(uvf);
 
@@ -804,6 +994,8 @@ void GSState::GIFRegHandlerXYZF2(const GIFReg* RESTRICT r)
 template <u32 prim, u32 adc, bool auto_flush, bool index_swap>
 void GSState::GIFRegHandlerXYZ2(const GIFReg* RESTRICT r)
 {
+	CheckFlushes();
+
 	m_v.m[1] = GSVector4i::load(&r->XYZ, &m_v.UV);
 
 	VertexKick<prim, auto_flush, index_swap>(adc);
@@ -832,9 +1024,7 @@ void GSState::ApplyTEX0(GIFRegTEX0& TEX0)
 
 	// clut loading already covered with WriteTest, for drawing only have to check CPSM and CSA (MGS3 intro skybox would be drawn piece by piece without this)
 
-	constexpr u64 mask = 0x1f78001fffffffffull; // TBP0 TBW PSM TW TH TCC TFX CPSM CSA
-
-	if (wt || PRIM->CTXT == i && ((TEX0.U64 ^ m_env.CTXT[i].TEX0.U64) & mask))
+	if (wt)
 		Flush();
 
 	TEX0.CPSM &= 0xa; // 1010b
@@ -887,6 +1077,15 @@ void GSState::ApplyTEX0(GIFRegTEX0& TEX0)
 
 		m_mem.m_clut.Write(m_env.CTXT[i].TEX0, m_env.TEXCLUT);
 	}
+
+	constexpr u64 mask = 0x1f78001fffffffffull; // TBP0 TBW PSM TW TH TCC TFX CPSM CSA
+	if (i == m_prev_env.PRIM.CTXT)
+	{
+		if ((m_prev_env.CTXT[i].TEX0.U64 ^ m_env.CTXT[i].TEX0.U64) & mask)
+			m_dirty_gs_regs |= (1 << DIRTY_REG_TEX0);
+		else
+			m_dirty_gs_regs &= ~(1 << DIRTY_REG_TEX0);
+	}
 }
 
 template <int i>
@@ -895,10 +1094,10 @@ void GSState::GIFRegHandlerTEX0(const GIFReg* RESTRICT r)
 	GL_REG("TEX0_%d = 0x%x_%x", i, r->U32[1], r->U32[0]);
 
 	GIFRegTEX0 TEX0 = r->TEX0;
-
-	bool MTBA_reload = false;
-	if ((m_env.CTXT[i].TEX0.TBP0 != TEX0.TBP0 || tex_flushed) && m_env.CTXT[i].TEX1.MTBA)
-		MTBA_reload = true;
+	GIFRegMIPTBP1 temp_MIPTBP1;
+	bool MTBAReloaded = false;
+	// Max allowed MTBA size for 32bit swizzled textures (including 8H 4HL etc) is 512, 16bit and normal 8/4bit formats can be 1024
+	const u32 maxTex = (GSLocalMemory::m_psm[TEX0.PSM].bpp < 32) ? 10 : 9;
 
 	// Spec max is 10
 	//
@@ -914,59 +1113,60 @@ void GSState::GIFRegHandlerTEX0(const GIFReg* RESTRICT r)
 	TEX0.TW = std::clamp<u32>(TEX0.TW, 0, 10);
 	TEX0.TH = std::clamp<u32>(TEX0.TH, 0, 10);
 
-	ApplyTEX0<i>(TEX0);
-
-	// Textures must be of equal width/height and a minimum of 32x32
-	if (MTBA_reload && TEX0.TW == TEX0.TH && TEX0.TW >= 5)
+	// MTBA loads are triggered by writes to TEX0 (but not TEX2!)
+	// Textures MUST be a minimum width of 32 pixels
+	// Format must be a color, Z formats do not trigger MTBA (but are valid for Mipmapping)
+	if (m_env.CTXT[i].TEX1.MTBA && TEX0.TW >= 5 && TEX0.TW <= maxTex && (TEX0.PSM & 0x30) != 0x30)
 	{
-		// NOTE 1: TEX1.MXL must not be automatically set to 3 here.
-		// NOTE 2: Mipmap levels are tightly packed, if (tbw << 6) > (1 << tw) then the left-over space to the right is used. (common for PSM_PSMT4)
-		// NOTE 3: Non-rectangular textures are treated as rectangular when calculating the occupied space (height is extended, not sure about width)
-
+		// NOTE 1: TEX1.MXL must not be automatically set to 3 here and it has no effect on MTBA.
+		// NOTE 2: Mipmap levels are packed with a minimum distance between them of 1 block, even down at 4bit textures under 16x16.
+		// NOTE 3: Everything is derrived from the width of the texture, TBW and TH are completely ignored (useful for handling non-rectangular ones)
+		// NOTE 4: Cartoon Network Racing's menu is VERY sensitive to this as it uses 4bit sized textures for the sky.
 		u32 bp = TEX0.TBP0;
-		u32 bw = TEX0.TBW;
-		u32 w = 1u << TEX0.TW;
-		u32 h = 1u << TEX0.TH;
-		u32 minwidth = m_context->TEX1.MMIN >= 4 ? 8 : 1;
+		u32 bw = std::max(1u, (1u << TEX0.TW) >> 6);
 
-		const u32 bpp = GSLocalMemory::m_psm[TEX0.PSM].bpp;
+		// Address is calculated as a 4bit address space, then converted (/8) to 32bit address space
+		// ((w * w * bpp) / 8) / 64. No the 'w' is not a typo ;)
+		const u32 bpp = GSLocalMemory::m_psm[TEX0.PSM].bpp >> 2;
+		u32 tex_size = ((1u << TEX0.TW) * (1u << TEX0.TW) * bpp) >> 9;
 
-		bp += (int)((w * h * ((float)bpp / 8))) >> 8;
+		bp += tex_size;
+		bw = std::max<u32>(bw >> 1, 1);
+		tex_size = std::max<u32>(tex_size >> 2, 1);
 
-		if (w > minwidth)
-		{
-			bw = std::max<u32>(bw >> 1, 1);
-			w = std::max<u32>(w >> 1, 1);
-			h = std::max<u32>(h >> 1, 1);
-		}
+		temp_MIPTBP1.TBP1 = bp;
+		temp_MIPTBP1.TBW1 = bw;
 
-		m_env.CTXT[i].MIPTBP1.TBP1 = bp;
-		m_env.CTXT[i].MIPTBP1.TBW1 = bw;
+		bp += tex_size;
+		bw = std::max<u32>(bw >> 1, 1);
+		tex_size = std::max<u32>(tex_size >> 2, 1);
 
-		bp += (int)((w * h * ((float)bpp / 8))) >> 8;
-		
-		if (w > minwidth)
-		{
-			bw = std::max<u32>(bw >> 1, 1);
-			w = std::max<u32>(w >> 1, 1);
-			h = std::max<u32>(h >> 1, 1);
-		}
+		temp_MIPTBP1.TBP2 = bp;
+		temp_MIPTBP1.TBW2 = bw;
 
-		m_env.CTXT[i].MIPTBP1.TBP2 = bp;
-		m_env.CTXT[i].MIPTBP1.TBW2 = bw;
+		bp += tex_size;
+		bw = std::max<u32>(bw >> 1, 1);
 
-		bp += (int)((w * h * ((float)bpp / 8))) >> 8;
+		temp_MIPTBP1.TBP3 = bp;
+		temp_MIPTBP1.TBW3 = bw;
 
-		if (w > minwidth)
-		{
-			bw = std::max<u32>(bw >> 1, 1);
-		}
-		
-		m_env.CTXT[i].MIPTBP1.TBP3 = bp;
-		m_env.CTXT[i].MIPTBP1.TBW3 = bw;
+		MTBAReloaded = true;
 	}
 
-	tex_flushed = false;
+	ApplyTEX0<i>(TEX0);
+
+	if (MTBAReloaded)
+	{
+		m_env.CTXT[i].MIPTBP1 = temp_MIPTBP1;
+
+		if (i == m_prev_env.PRIM.CTXT)
+		{
+			if (m_prev_env.CTXT[i].MIPTBP1.U64 ^ m_env.CTXT[i].MIPTBP1.U64)
+				m_dirty_gs_regs |= (1 << DIRTY_REG_MIPTBP1);
+			else
+				m_dirty_gs_regs &= ~(1 << DIRTY_REG_MIPTBP1);
+		}
+	}
 }
 
 template <int i>
@@ -974,10 +1174,15 @@ void GSState::GIFRegHandlerCLAMP(const GIFReg* RESTRICT r)
 {
 	GL_REG("CLAMP_%d = 0x%x_%x", i, r->U32[1], r->U32[0]);
 
-	if (PRIM->CTXT == i && r->CLAMP != m_env.CTXT[i].CLAMP)
-		Flush();
-
 	m_env.CTXT[i].CLAMP = (GSVector4i)r->CLAMP;
+
+	if (i == m_prev_env.PRIM.CTXT)
+	{
+		if (m_prev_env.CTXT[i].CLAMP.U64 ^ m_env.CTXT[i].CLAMP.U64)
+			m_dirty_gs_regs |= (1 << DIRTY_REG_CLAMP);
+		else
+			m_dirty_gs_regs &= ~(1 << DIRTY_REG_CLAMP);
+	}
 }
 
 void GSState::GIFRegHandlerFOG(const GIFReg* RESTRICT r)
@@ -994,10 +1199,15 @@ void GSState::GIFRegHandlerTEX1(const GIFReg* RESTRICT r)
 {
 	GL_REG("TEX1_%d = 0x%x_%x", i, r->U32[1], r->U32[0]);
 
-	if (PRIM->CTXT == i && r->TEX1 != m_env.CTXT[i].TEX1)
-		Flush();
-
 	m_env.CTXT[i].TEX1 = (GSVector4i)r->TEX1;
+
+	if (i == m_prev_env.PRIM.CTXT)
+	{
+		if (m_prev_env.CTXT[i].TEX1.U64 ^ m_env.CTXT[i].TEX1.U64)
+			m_dirty_gs_regs |= (1 << DIRTY_REG_TEX1);
+		else
+			m_dirty_gs_regs &= ~(1 << DIRTY_REG_TEX1);
+	}
 }
 
 template <int i>
@@ -1013,7 +1223,7 @@ void GSState::GIFRegHandlerTEX2(const GIFReg* RESTRICT r)
 
 	constexpr u64 mask = 0xFFFFFFE003F00000ull; // TEX2 bits
 
-	GIFRegTEX0 TEX0;
+	GIFRegTEX0 TEX0{};
 
 	TEX0.U64 = (m_env.CTXT[i].TEX0.U64 & ~mask) | (r->U64 & mask);
 
@@ -1027,10 +1237,15 @@ void GSState::GIFRegHandlerXYOFFSET(const GIFReg* RESTRICT r)
 
 	const GSVector4i o = (GSVector4i)r->XYOFFSET & GSVector4i::x0000ffff();
 
-	if (!o.eq(m_env.CTXT[i].XYOFFSET))
-		Flush();
-
 	m_env.CTXT[i].XYOFFSET = o;
+
+	if (i == m_prev_env.PRIM.CTXT)
+	{
+		if (m_prev_env.CTXT[i].XYOFFSET.U64 ^ m_env.CTXT[i].XYOFFSET.U64)
+			m_dirty_gs_regs |= (1 << DIRTY_REG_XYOFFSET);
+		else
+			m_dirty_gs_regs &= ~(1 << DIRTY_REG_XYOFFSET);
+	}
 
 	m_env.CTXT[i].UpdateScissor();
 
@@ -1048,23 +1263,18 @@ void GSState::GIFRegHandlerPRMODE(const GIFReg* RESTRICT r)
 {
 	GL_REG("PRMODE = 0x%x_%x", r->U32[1], r->U32[0]);
 
-	if (!m_env.PRMODECONT.AC)
-	{
-		u32 prim_mask = 0x7f8;
-		if (GSConfig.UseHardwareRenderer() && GSUtil::GetPrimClass(m_env.PRIM.PRIM) == GS_TRIANGLE_CLASS)
-			prim_mask &= ~0x80; // Mask out AA1.
-
-		if ((m_env.PRIM.U32[0] ^ r->PRMODE.U32[0]) & prim_mask)
-			Flush();
-	}
-	else
-	{
+	// We're in PRIM mode, need to ignore any writes
+	if (m_env.PRMODECONT.AC)
 		return;
-	}
 
 	const u32 _PRIM = m_env.PRIM.PRIM;
 	m_env.PRIM = (GSVector4i)r->PRMODE;
 	m_env.PRIM.PRIM = _PRIM;
+
+	if (m_prev_env.PRIM.U32[0] ^ m_env.PRIM.U32[0])
+		m_dirty_gs_regs |= (1 << DIRTY_REG_PRIM);
+	else
+		m_dirty_gs_regs &= ~(1 << DIRTY_REG_PRIM);
 
 	UpdateContext();
 }
@@ -1073,20 +1283,20 @@ void GSState::GIFRegHandlerTEXCLUT(const GIFReg* RESTRICT r)
 {
 	GL_REG("TEXCLUT = 0x%x_%x", r->U32[1], r->U32[0]);
 
-	if (r->TEXCLUT != m_env.TEXCLUT)
-		Flush();
-
 	m_env.TEXCLUT = (GSVector4i)r->TEXCLUT;
 }
 
 void GSState::GIFRegHandlerSCANMSK(const GIFReg* RESTRICT r)
 {
-	if (r->SCANMSK != m_env.SCANMSK)
-		Flush();
-
 	m_env.SCANMSK = (GSVector4i)r->SCANMSK;
+
 	if (m_env.SCANMSK.MSK & 2)
-		m_scanmask_used = true;
+		m_scanmask_used = 2;
+
+	if (m_prev_env.SCANMSK.MSK != m_env.SCANMSK.MSK)
+		m_dirty_gs_regs |= (1 << DIRTY_REG_SCANMSK);
+	else
+		m_dirty_gs_regs &= ~(1 << DIRTY_REG_SCANMSK);
 }
 
 template <int i>
@@ -1094,10 +1304,15 @@ void GSState::GIFRegHandlerMIPTBP1(const GIFReg* RESTRICT r)
 {
 	GL_REG("MIPTBP1_%d = 0x%x_%x", i, r->U32[1], r->U32[0]);
 
-	if (PRIM->CTXT == i && r->MIPTBP1 != m_env.CTXT[i].MIPTBP1)
-		Flush();
-
 	m_env.CTXT[i].MIPTBP1 = (GSVector4i)r->MIPTBP1;
+
+	if (i == m_prev_env.PRIM.CTXT)
+	{
+		if (m_prev_env.CTXT[i].MIPTBP1.U64 != m_env.CTXT[i].MIPTBP1.U64)
+			m_dirty_gs_regs |= (1 << DIRTY_REG_MIPTBP1);
+		else
+			m_dirty_gs_regs &= ~(1 << DIRTY_REG_MIPTBP1);
+	}
 }
 
 template <int i>
@@ -1105,44 +1320,64 @@ void GSState::GIFRegHandlerMIPTBP2(const GIFReg* RESTRICT r)
 {
 	GL_REG("MIPTBP2_%d = 0x%x_%x", i, r->U32[1], r->U32[0]);
 
-	if (PRIM->CTXT == i && r->MIPTBP2 != m_env.CTXT[i].MIPTBP2)
-		Flush();
-
 	m_env.CTXT[i].MIPTBP2 = (GSVector4i)r->MIPTBP2;
+
+	if (i == m_prev_env.PRIM.CTXT)
+	{
+		if (m_prev_env.CTXT[i].MIPTBP2.U64 != m_env.CTXT[i].MIPTBP2.U64)
+			m_dirty_gs_regs |= (1 << DIRTY_REG_MIPTBP2);
+		else
+			m_dirty_gs_regs &= ~(1 << DIRTY_REG_MIPTBP2);
+	}
 }
 
 void GSState::GIFRegHandlerTEXA(const GIFReg* RESTRICT r)
 {
 	GL_REG("TEXA = 0x%x_%x", r->U32[1], r->U32[0]);
-	if (r->TEXA != m_env.TEXA)
-		Flush();
 
 	m_env.TEXA = (GSVector4i)r->TEXA;
+
+	if (m_prev_env.TEXA != m_env.TEXA)
+		m_dirty_gs_regs |= (1 << DIRTY_REG_TEXA);
+	else
+		m_dirty_gs_regs &= ~(1 << DIRTY_REG_TEXA);
 }
 
 void GSState::GIFRegHandlerFOGCOL(const GIFReg* RESTRICT r)
 {
 	GL_REG("FOGCOL = 0x%x_%x", r->U32[1], r->U32[0]);
 
-	if (r->FOGCOL != m_env.FOGCOL)
-		Flush();
-
 	m_env.FOGCOL = (GSVector4i)r->FOGCOL;
+
+	if (m_prev_env.FOGCOL != m_env.FOGCOL)
+		m_dirty_gs_regs |= (1 << DIRTY_REG_FOGCOL);
+	else
+		m_dirty_gs_regs &= ~(1 << DIRTY_REG_FOGCOL);
 }
 
 void GSState::GIFRegHandlerTEXFLUSH(const GIFReg* RESTRICT r)
 {
-	GL_REG("TEXFLUSH = 0x%x_%x", r->U32[1], r->U32[0]);
-	tex_flushed = true;
+	GL_REG("TEXFLUSH = 0x%x_%x PRIM TME %x", r->U32[1], r->U32[0], PRIM->TME);
+
+	// Some games do a single sprite draw to itself, then flush the texture cache, then use that texture again.
+	// This won't get picked up by the new autoflush logic (which checks for page crossings for the PS2 Texture Cache flush)
+	// so we need to do it here.
+	if (IsAutoFlushEnabled())
+		Flush();
 }
 
 template <int i>
 void GSState::GIFRegHandlerSCISSOR(const GIFReg* RESTRICT r)
 {
-	if (PRIM->CTXT == i && r->SCISSOR != m_env.CTXT[i].SCISSOR)
-		Flush();
-
 	m_env.CTXT[i].SCISSOR = (GSVector4i)r->SCISSOR;
+
+	if (i == m_prev_env.PRIM.CTXT)
+	{
+		if (m_prev_env.CTXT[i].SCISSOR.U64 != m_env.CTXT[i].SCISSOR.U64)
+			m_dirty_gs_regs |= (1 << DIRTY_REG_SCISSOR);
+		else
+			m_dirty_gs_regs &= ~(1 << DIRTY_REG_SCISSOR);
+	}
 
 	m_env.CTXT[i].UpdateScissor();
 
@@ -1153,8 +1388,6 @@ template <int i>
 void GSState::GIFRegHandlerALPHA(const GIFReg* RESTRICT r)
 {
 	GL_REG("ALPHA = 0x%x_%x", r->U32[1], r->U32[0]);
-	if (PRIM->CTXT == i && r->ALPHA != m_env.CTXT[i].ALPHA)
-		Flush();
 
 	m_env.CTXT[i].ALPHA = (GSVector4i)r->ALPHA;
 
@@ -1164,6 +1397,14 @@ void GSState::GIFRegHandlerALPHA(const GIFReg* RESTRICT r)
 	m_env.CTXT[i].ALPHA.B = std::clamp<u32>(r->ALPHA.B, 0, 2);
 	m_env.CTXT[i].ALPHA.C = std::clamp<u32>(r->ALPHA.C, 0, 2);
 	m_env.CTXT[i].ALPHA.D = std::clamp<u32>(r->ALPHA.D, 0, 2);
+
+	if (i == m_prev_env.PRIM.CTXT)
+	{
+		if (m_prev_env.CTXT[i].ALPHA.U64 != m_env.CTXT[i].ALPHA.U64)
+			m_dirty_gs_regs |= (1 << DIRTY_REG_ALPHA);
+		else
+			m_dirty_gs_regs &= ~(1 << DIRTY_REG_ALPHA);
+	}
 }
 
 void GSState::GIFRegHandlerDIMX(const GIFReg* RESTRICT r)
@@ -1171,58 +1412,76 @@ void GSState::GIFRegHandlerDIMX(const GIFReg* RESTRICT r)
 	bool update = false;
 
 	if (r->DIMX != m_env.DIMX)
-	{
-		Flush();
-
 		update = true;
-	}
 
 	m_env.DIMX = (GSVector4i)r->DIMX;
 
 	if (update)
 		m_env.UpdateDIMX();
+
+	if (m_prev_env.DIMX != m_env.DIMX)
+		m_dirty_gs_regs |= (1 << DIRTY_REG_DIMX);
+	else
+		m_dirty_gs_regs &= ~(1 << DIRTY_REG_DIMX);
 }
 
 void GSState::GIFRegHandlerDTHE(const GIFReg* RESTRICT r)
 {
-	if (r->DTHE != m_env.DTHE)
-		Flush();
-
 	m_env.DTHE = (GSVector4i)r->DTHE;
+
+	if (m_prev_env.DTHE != m_env.DTHE)
+		m_dirty_gs_regs |= (1 << DIRTY_REG_DTHE);
+	else
+		m_dirty_gs_regs &= ~(1 << DIRTY_REG_DTHE);
 }
 
 void GSState::GIFRegHandlerCOLCLAMP(const GIFReg* RESTRICT r)
 {
-	if (r->COLCLAMP != m_env.COLCLAMP)
-		Flush();
-
 	m_env.COLCLAMP = (GSVector4i)r->COLCLAMP;
+
+	if (m_prev_env.COLCLAMP != m_env.COLCLAMP)
+		m_dirty_gs_regs |= (1 << DIRTY_REG_COLCLAMP);
+	else
+		m_dirty_gs_regs &= ~(1 << DIRTY_REG_COLCLAMP);
 }
 
 template <int i>
 void GSState::GIFRegHandlerTEST(const GIFReg* RESTRICT r)
 {
-	if (PRIM->CTXT == i && r->TEST != m_env.CTXT[i].TEST)
-		Flush();
-
 	m_env.CTXT[i].TEST = (GSVector4i)r->TEST;
+
+	if (i == m_prev_env.PRIM.CTXT)
+	{
+		if (m_prev_env.CTXT[i].TEST != m_env.CTXT[i].TEST)
+			m_dirty_gs_regs |= (1 << DIRTY_REG_TEST);
+		else
+			m_dirty_gs_regs &= ~(1 << DIRTY_REG_TEST);
+	}
 }
 
 void GSState::GIFRegHandlerPABE(const GIFReg* RESTRICT r)
 {
-	if (r->PABE != m_env.PABE)
-		Flush();
 
 	m_env.PABE = (GSVector4i)r->PABE;
+
+	if (m_prev_env.PABE != m_env.PABE)
+		m_dirty_gs_regs |= (1 << DIRTY_REG_PABE);
+	else
+		m_dirty_gs_regs &= ~(1 << DIRTY_REG_PABE);
 }
 
 template <int i>
 void GSState::GIFRegHandlerFBA(const GIFReg* RESTRICT r)
 {
-	if (PRIM->CTXT == i && r->FBA != m_env.CTXT[i].FBA)
-		Flush();
-
 	m_env.CTXT[i].FBA = (GSVector4i)r->FBA;
+
+	if (i == m_prev_env.PRIM.CTXT)
+	{
+		if (m_prev_env.CTXT[i].FBA != m_env.CTXT[i].FBA)
+			m_dirty_gs_regs |= (1 << DIRTY_REG_FBA);
+		else
+			m_dirty_gs_regs &= ~(1 << DIRTY_REG_FBA);
+	}
 }
 
 template <int i>
@@ -1230,18 +1489,24 @@ void GSState::GIFRegHandlerFRAME(const GIFReg* RESTRICT r)
 {
 	GL_REG("FRAME_%d = 0x%x_%x", i, r->U32[1], r->U32[0]);
 
-	if (PRIM->CTXT == i && r->FRAME != m_env.CTXT[i].FRAME)
-		Flush();
+	GIFRegFRAME NewFrame = r->FRAME;
+	// FBW is clamped to 32
+	NewFrame.FBW = std::min(NewFrame.FBW, 32U);
 
-	if ((m_env.CTXT[i].FRAME.U32[0] ^ r->FRAME.U32[0]) & 0x3f3f01ff) // FBP FBW PSM
+	if ((NewFrame.PSM & 0x30) == 0x30)
+		m_env.CTXT[i].ZBUF.PSM &= ~0x30;
+	else
+		m_env.CTXT[i].ZBUF.PSM |= 0x30;
+
+	if ((m_env.CTXT[i].FRAME.U32[0] ^ NewFrame.U32[0]) & 0x3f3f01ff) // FBP FBW PSM
 	{
-		m_env.CTXT[i].offset.fb = m_mem.GetOffset(r->FRAME.Block(), r->FRAME.FBW, r->FRAME.PSM);
-		m_env.CTXT[i].offset.zb = m_mem.GetOffset(m_env.CTXT[i].ZBUF.Block(), r->FRAME.FBW, m_env.CTXT[i].ZBUF.PSM);
-		m_env.CTXT[i].offset.fzb = m_mem.GetPixelOffset(r->FRAME, m_env.CTXT[i].ZBUF);
-		m_env.CTXT[i].offset.fzb4 = m_mem.GetPixelOffset4(r->FRAME, m_env.CTXT[i].ZBUF);
+		m_env.CTXT[i].offset.fb = m_mem.GetOffset(NewFrame.Block(), NewFrame.FBW, NewFrame.PSM);
+		m_env.CTXT[i].offset.zb = m_mem.GetOffset(m_env.CTXT[i].ZBUF.Block(), NewFrame.FBW, m_env.CTXT[i].ZBUF.PSM);
+		m_env.CTXT[i].offset.fzb = m_mem.GetPixelOffset(NewFrame, m_env.CTXT[i].ZBUF);
+		m_env.CTXT[i].offset.fzb4 = m_mem.GetPixelOffset4(NewFrame, m_env.CTXT[i].ZBUF);
 	}
 
-	m_env.CTXT[i].FRAME = (GSVector4i)r->FRAME;
+	m_env.CTXT[i].FRAME = (GSVector4i)NewFrame;
 
 	switch (m_env.CTXT[i].FRAME.PSM)
 	{
@@ -1264,6 +1529,14 @@ void GSState::GIFRegHandlerFRAME(const GIFReg* RESTRICT r)
 		default:
 			break;
 	}
+
+	if (i == m_prev_env.PRIM.CTXT)
+	{
+		if (m_prev_env.CTXT[i].FRAME != m_env.CTXT[i].FRAME)
+			m_dirty_gs_regs |= (1 << DIRTY_REG_FRAME);
+		else
+			m_dirty_gs_regs &= ~(1 << DIRTY_REG_FRAME);
+	}
 }
 
 template <int i>
@@ -1273,14 +1546,16 @@ void GSState::GIFRegHandlerZBUF(const GIFReg* RESTRICT r)
 
 	GIFRegZBUF ZBUF = r->ZBUF;
 
-	// TODO: I tested this and I believe it is possible to set zbuf to a color format
-	// Powerdrome relies on this behavior to clear the z buffer
-	// the undocumented formats do have behavior (they mess with the swizzling)
-	// we don't emulate this yet (and maybe we wont need to)
-	ZBUF.PSM |= 0x30;
-
-	if (PRIM->CTXT == i && ZBUF != m_env.CTXT[i].ZBUF)
-		Flush();
+	// We tested this on the PS2 and it seems to be that when the FRAME is a Z format,
+	// the Z buffer is forced to use color swizzling.
+	// Powerdrome relies on this behavior to clear the z buffer by drawing 32 pixel wide strips, skipping 32,
+	// causing the FRAME to do one strip and the Z to do the other 32 due to the block arrangement.
+	// Other games listed here also hit this Color/Z swap behaviour without masking Z so could be problematic:
+	// Black, Driver Parallel Lines, Driv3r, Dropship, DT Racer, Scarface, The Simpsons, THP8
+	if ((m_env.CTXT[i].FRAME.PSM & 0x30) == 0x30)
+		ZBUF.PSM &= ~0x30;
+	else
+		ZBUF.PSM |= 0x30;
 
 	if ((m_env.CTXT[i].ZBUF.U32[0] ^ ZBUF.U32[0]) & 0x3f0001ff) // ZBP PSM
 	{
@@ -1290,6 +1565,14 @@ void GSState::GIFRegHandlerZBUF(const GIFReg* RESTRICT r)
 	}
 
 	m_env.CTXT[i].ZBUF = (GSVector4i)ZBUF;
+
+	if (i == m_prev_env.PRIM.CTXT)
+	{
+		if (m_prev_env.CTXT[i].ZBUF != m_env.CTXT[i].ZBUF)
+			m_dirty_gs_regs |= (1 << DIRTY_REG_ZBUF);
+		else
+			m_dirty_gs_regs &= ~(1 << DIRTY_REG_ZBUF);
+	}
 }
 
 void GSState::GIFRegHandlerBITBLTBUF(const GIFReg* RESTRICT r)
@@ -1350,8 +1633,7 @@ void GSState::GIFRegHandlerTRXDIR(const GIFReg* RESTRICT r)
 		case 2: // local -> local
 			Move();
 			break;
-		default: // 3 prohibited, behavior unknown
-			Console.Warning("Invalid guest transfer direction. Please report: https://github.com/PCSX2/pcsx2/issues");
+		default: // 3 deactivated as stated by manual. Tested on hardware and no transfers happen.
 			break;
 	}
 }
@@ -1368,11 +1650,54 @@ void GSState::GIFRegHandlerHWREG(const GIFReg* RESTRICT r)
 	Write(reinterpret_cast<const u8*>(r), 8); // haunting ground
 }
 
+inline void GSState::CopyEnv(GSDrawingEnvironment* dest, GSDrawingEnvironment* src, int ctx)
+{
+	memcpy(dest, src, 88);
+	memcpy(&dest->CTXT[ctx], &src->CTXT[ctx], 96);
+	dest->CTXT[ctx].m_fixed_tex0 = src->CTXT[ctx].m_fixed_tex0;
+}
+
 void GSState::Flush()
 {
 	FlushWrite();
 
-	FlushPrim();
+	if (m_index.tail > 0)
+	{
+		if (m_dirty_gs_regs)
+		{
+			const int ctx = m_prev_env.PRIM.CTXT;
+			bool restore_offsets = false;
+
+			CopyEnv(&m_backup_env, &m_env, ctx);
+			CopyEnv(&m_env, &m_prev_env, ctx);
+
+			m_env.UpdateDIMX();
+			m_env.CTXT[ctx].UpdateScissor();
+			UpdateContext();
+
+			if (((m_backup_env.CTXT[ctx].ZBUF.U32[0] ^ m_env.CTXT[ctx].ZBUF.U32[0]) & 0x3f0001ff) || ((m_backup_env.CTXT[ctx].FRAME.U32[0] ^ m_env.CTXT[ctx].FRAME.U32[0]) & 0x3f3f01ff))
+			{
+				memcpy(&m_backup_env.CTXT[ctx].offset, &m_env.CTXT[ctx].offset, sizeof(m_env.CTXT[ctx].offset));
+				memcpy(&m_env.CTXT[ctx].offset, &m_prev_env.CTXT[ctx].offset, sizeof(m_env.CTXT[ctx].offset));
+				restore_offsets = true;
+			}
+
+			FlushPrim();
+
+			if (restore_offsets)
+				memcpy(&m_env.CTXT[ctx].offset, &m_backup_env.CTXT[ctx].offset, sizeof(m_env.CTXT[ctx].offset));
+
+			CopyEnv(&m_env, &m_backup_env, ctx);
+			m_env.CTXT[ctx].UpdateScissor();
+			m_env.UpdateDIMX();
+			UpdateContext();
+			m_backed_up_ctx = -1;
+		}
+		else
+			FlushPrim();
+
+		m_dirty_gs_regs = 0;
+	}
 }
 
 void GSState::FlushWrite()
@@ -1400,6 +1725,67 @@ void GSState::FlushWrite()
 	g_perfmon.Put(GSPerfMon::Swizzle, len);
 }
 
+// This function decides if the context has changed in a way which warrants flushing the draw.
+inline bool GSState::TestDrawChanged()
+{
+	// Check if PRIM has changed we need to check if it's just a different triangle or the context is changing.
+	if (m_dirty_gs_regs & (1 << DIRTY_REG_PRIM))
+	{
+		u32 prim_mask = 0x7ff;
+
+		if (GSUtil::GetPrimClass(m_prev_env.PRIM.PRIM) == GSUtil::GetPrimClass(m_env.PRIM.PRIM))
+			prim_mask &= ~0x7;
+		else
+			return true;
+
+		if ((m_env.PRIM.U32[0] ^ m_prev_env.PRIM.U32[0]) & prim_mask)
+			return true;
+
+		m_dirty_gs_regs &= ~(1 << DIRTY_REG_PRIM);
+
+		// Shortcut, a bunch of games just change the prim reg
+		if (!m_dirty_gs_regs)
+			return false;
+	}
+
+	if ((m_dirty_gs_regs & ((1 << DIRTY_REG_TEST) | (1 << DIRTY_REG_SCISSOR) | (1 << DIRTY_REG_XYOFFSET) | (1 << DIRTY_REG_SCANMSK) | (1 << DIRTY_REG_DTHE))) || ((m_dirty_gs_regs & (1 << DIRTY_REG_DIMX)) && m_prev_env.DTHE.DTHE))
+		return true;
+
+	if (m_env.PRIM.ABE && (m_dirty_gs_regs & ((1 << DIRTY_REG_ALPHA) | (1 << DIRTY_REG_PABE))))
+		return true;
+
+	if (m_env.PRIM.FGE && (m_dirty_gs_regs & (1 << DIRTY_REG_FOGCOL)))
+		return true;
+
+	const int context = m_env.PRIM.CTXT;
+
+	// If the frame is getting updated check the FRAME, otherwise, we can ignore it
+	if ((m_env.CTXT[context].TEST.ATST != ATST_NEVER) || !m_env.CTXT[context].TEST.ATE || (m_env.CTXT[context].TEST.AFAIL & 1) || m_env.CTXT[context].TEST.DATE)
+	{
+		if ((m_dirty_gs_regs & ((1 << DIRTY_REG_FRAME) | (1 << DIRTY_REG_COLCLAMP) | (1 << DIRTY_REG_FBA))))
+			return true;
+	}
+
+	if ((m_env.CTXT[context].TEST.ATST != ATST_NEVER) || !m_env.CTXT[context].TEST.ATE || m_env.CTXT[context].TEST.AFAIL == AFAIL_ZB_ONLY)
+	{
+		if (m_dirty_gs_regs & (1 << DIRTY_REG_ZBUF))
+			return true;
+	}
+
+	if (m_env.PRIM.TME)
+	{
+		if (m_dirty_gs_regs & ((1 << DIRTY_REG_TEX0) | (1 << DIRTY_REG_TEX1) | (1 << DIRTY_REG_CLAMP) | (1 << DIRTY_REG_TEXA)))
+			return true;
+
+		if(m_env.CTXT[context].TEX1.MXL > 0 && (m_dirty_gs_regs & ((1 << DIRTY_REG_MIPTBP1) | (1 << DIRTY_REG_MIPTBP2))))
+			return true;
+	}
+
+	m_dirty_gs_regs = 0;
+
+	return false;
+}
+
 void GSState::FlushPrim()
 {
 	if (m_index.tail > 0)
@@ -1419,9 +1805,9 @@ void GSState::FlushPrim()
 		GSVertex buff[2];
 		s_n++;
 
-		size_t head = m_vertex.head;
-		size_t tail = m_vertex.tail;
-		size_t next = m_vertex.next;
+		const size_t head = m_vertex.head;
+		const size_t tail = m_vertex.tail;
+		const size_t next = m_vertex.next;
 		size_t unused = 0;
 
 		if (tail > head)
@@ -1434,10 +1820,13 @@ void GSState::FlushPrim()
 				case GS_LINELIST:
 				case GS_LINESTRIP:
 				case GS_SPRITE:
+					unused = 1;
+					buff[0] = m_vertex.buff[tail - 1];
+					break;
 				case GS_TRIANGLELIST:
 				case GS_TRIANGLESTRIP:
-					unused = tail - head;
-					memcpy(buff, &m_vertex.buff[head], sizeof(GSVertex) * unused);
+					unused = std::min<size_t>(tail - head, 2);
+					memcpy(buff, &m_vertex.buff[tail - unused], sizeof(GSVertex) * 2);
 					break;
 				case GS_TRIANGLEFAN:
 					buff[0] = m_vertex.buff[head];
@@ -1491,7 +1880,6 @@ void GSState::FlushPrim()
 		g_perfmon.Put(GSPerfMon::Prim, m_index.tail / GSUtil::GetVertexCount(PRIM->PRIM));
 
 		m_index.tail = 0;
-
 		m_vertex.head = 0;
 
 		if (unused > 0)
@@ -1500,6 +1888,20 @@ void GSState::FlushPrim()
 
 			m_vertex.tail = unused;
 			m_vertex.next = next > head ? next - head : 0;
+
+			// If it's a Triangle fan the XY buffer needs to be updated to point to the correct head vert
+			// Jak 3 shadows get spikey (with autoflush) if you don't.
+			if (PRIM->PRIM == GS_TRIANGLEFAN)
+			{
+				for (size_t i = 0; i < unused; i++)
+				{
+					GSVector4i* RESTRICT vert_ptr = (GSVector4i*)&m_vertex.buff[i];
+					GSVector4i v = vert_ptr[1];
+					v = v.xxxx().u16to32().sub32(m_ofxy);
+					GSVector4i::storel(&m_vertex.xy[i & 3], v.blend16<0xf0>(v.sra32(4)).ps32());
+					m_vertex.xy_tail = unused;
+				}
+			}
 		}
 		else
 		{
@@ -1511,7 +1913,7 @@ void GSState::FlushPrim()
 
 void GSState::Write(const u8* mem, int len)
 {
-	int w = m_env.TRXREG.RRW;
+	const int w = m_env.TRXREG.RRW;
 	int h = m_env.TRXREG.RRH;
 
 	GIFRegBITBLTBUF& blit = m_tr.m_blit;
@@ -1548,8 +1950,11 @@ void GSState::Write(const u8* mem, int len)
 			 m_env.TRXPOS.DIRX, m_env.TRXPOS.DIRY,
 			 m_env.TRXPOS.DSAX, m_env.TRXPOS.DSAY, w, h);
 
-	if (PRIM->TME && (blit.DBP == m_context->TEX0.TBP0 || blit.DBP == m_context->TEX0.CBP)) // TODO: hmmmm
-		FlushPrim();
+	// TODO: Not really sufficient if a partial texture update is done outside the block.
+	// No need to check CLUT here, we can invalidate it below, no need to flush it since TEX0 needs to update, then we can flush.
+	if ((PRIM->TME && (blit.DBP == m_context->TEX0.TBP0)) ||
+		(m_prev_env.PRIM.TME && (blit.DBP == m_prev_env.CTXT[m_prev_env.PRIM.CTXT].TEX0.TBP0)))
+		Flush();
 
 	if (m_tr.end == 0 && len >= m_tr.total)
 	{
@@ -1579,7 +1984,12 @@ void GSState::Write(const u8* mem, int len)
 			FlushWrite();
 	}
 
-	m_mem.m_clut.Invalidate();
+	const int page_width = std::max(1, ((w + static_cast<int>(m_env.TRXPOS.DSAX)) / psm.pgs.x));
+	const int page_height = std::max(1, ((h + static_cast<int>(m_env.TRXPOS.DSAY)) / psm.pgs.y));
+	const int pitch = (std::max(1U, blit.DBW) * 64) / psm.pgs.x;
+
+	// Try to avoid flushing draws if it doesn't cross paths
+	m_mem.m_clut.InvalidateRange(blit.DBP, blit.DBP + ((page_width << 5) + ((page_height * pitch) << 5)));
 }
 
 void GSState::InitReadFIFO(u8* mem, int len)
@@ -1623,7 +2033,7 @@ void GSState::Read(u8* mem, int len)
 
 	if (s_dump && s_save && s_n >= s_saven)
 	{
-		std::string s = m_dump_root + format(
+		std::string s = m_dump_root + StringUtil::StdStringFromFormat(
 			"%05d_read_%05x_%d_%d_%d_%d_%d_%d.bmp",
 			s_n, (int)m_env.BITBLTBUF.SBP, (int)m_env.BITBLTBUF.SBW, (int)m_env.BITBLTBUF.SPSM,
 			r.left, r.top, r.right, r.bottom);
@@ -1675,26 +2085,71 @@ void GSState::Move()
 
 	// TODO: unroll inner loops (width has special size requirement, must be multiples of 1 << n, depending on the format)
 
-	int sbp = m_env.BITBLTBUF.SBP;
-	int sbw = m_env.BITBLTBUF.SBW;
-	int dbp = m_env.BITBLTBUF.DBP;
-	int dbw = m_env.BITBLTBUF.DBW;
-	GSOffset spo = m_mem.GetOffset(sbp, sbw, m_env.BITBLTBUF.SPSM);
-	GSOffset dpo = m_mem.GetOffset(dbp, dbw, m_env.BITBLTBUF.DPSM);
+	const int sbp = m_env.BITBLTBUF.SBP;
+	const int sbw = m_env.BITBLTBUF.SBW;
+	const int dbp = m_env.BITBLTBUF.DBP;
+	const int dbw = m_env.BITBLTBUF.DBW;
+	const GSOffset spo = m_mem.GetOffset(sbp, sbw, m_env.BITBLTBUF.SPSM);
+	const GSOffset dpo = m_mem.GetOffset(dbp, dbw, m_env.BITBLTBUF.DPSM);
 
 	auto genericCopy = [=](const GSOffset& dpo, const GSOffset& spo, auto&& getPAHelper, auto&& pxCopyFn)
 	{
 		int _sy = sy, _dy = dy; // Faster with local copied variables, compiler optimizations are dumb
 		if (xinc > 0)
 		{
-			for (int y = 0; y < h; y++, _sy += yinc, _dy += yinc)
+			const int page_width = GSLocalMemory::m_psm[m_env.BITBLTBUF.DPSM].pgs.x;
+			const int page_height = GSLocalMemory::m_psm[m_env.BITBLTBUF.DPSM].pgs.y;
+			const int xpage = sx & ~(page_width - 1);
+			const int ypage = _sy & ~(page_height - 1);
+			// Copying from itself to itself (rotating textures) used in Gitaroo Man stage 8
+			// What probably happens is because the copy is buffered, the source stays just ahead of the destination.
+			if (sbp == dbp && (((_sy < _dy) && ((ypage + page_height) > _dy)) || ((sx < dx) && ((xpage + page_width) > dx))))
 			{
-				auto s = getPAHelper(spo, sx, _sy);
-				auto d = getPAHelper(dpo, dx, _dy);
+				int starty = (yinc > 0) ? 0 : h-1;
+				int endy = (yinc > 0) ? h : -1;
+				int y_inc = yinc;
 
-				for (int x = 0; x < w; x++)
+				if (((_sy < _dy) && ((ypage + page_height) > _dy)) && yinc > 0)
 				{
-					pxCopyFn(d, s, x);
+					_sy += h;
+					_dy += h;
+					starty = h-1;
+					endy = -1;
+					y_inc = -y_inc;
+				}
+
+				for (int y = starty; y != endy; y+= y_inc, _sy += y_inc, _dy += y_inc)
+				{
+					auto s = getPAHelper(spo, sx, _sy);
+					auto d = getPAHelper(dpo, dx, _dy);
+
+					if (((sx < dx) && ((xpage + page_width) > dx)))
+					{
+						for (int x = w - 1; x >= 0; x--)
+						{
+							pxCopyFn(d, s, x);
+						}
+					}
+					else
+					{
+						for (int x = 0; x < w; x++)
+						{
+							pxCopyFn(d, s, x);
+						}
+					}
+				}
+			}
+			else
+			{
+				for (int y = 0; y < h; y++, _sy += yinc, _dy += yinc)
+				{
+					auto s = getPAHelper(spo, sx, _sy);
+					auto d = getPAHelper(dpo, dx, _dy);
+
+					for (int x = 0; x < w; x++)
+					{
+						pxCopyFn(d, s, x);
+					}
 				}
 			}
 		}
@@ -1737,21 +2192,21 @@ void GSState::Move()
 	{
 		if (spsm.trbpp == 32)
 		{
-			copyFast(m_mem.m_vm32, dpo.assertSizesMatch(GSLocalMemory::swizzle32), spo.assertSizesMatch(GSLocalMemory::swizzle32), [](u32* d, u32* s)
+			copyFast(m_mem.vm32(), dpo.assertSizesMatch(GSLocalMemory::swizzle32), spo.assertSizesMatch(GSLocalMemory::swizzle32), [](u32* d, u32* s)
 			{
 				*d = *s;
 			});
 		}
 		else if (spsm.trbpp == 24)
 		{
-			copyFast(m_mem.m_vm32, dpo.assertSizesMatch(GSLocalMemory::swizzle32), spo.assertSizesMatch(GSLocalMemory::swizzle32), [](u32* d, u32* s)
+			copyFast(m_mem.vm32(), dpo.assertSizesMatch(GSLocalMemory::swizzle32), spo.assertSizesMatch(GSLocalMemory::swizzle32), [](u32* d, u32* s)
 			{
 				*d = (*d & 0xff000000) | (*s & 0x00ffffff);
 			});
 		}
 		else // if(spsm.trbpp == 16)
 		{
-			copyFast(m_mem.m_vm16, dpo.assertSizesMatch(GSLocalMemory::swizzle16), spo.assertSizesMatch(GSLocalMemory::swizzle16), [](u16* d, u16* s)
+			copyFast(m_mem.vm16(), dpo.assertSizesMatch(GSLocalMemory::swizzle16), spo.assertSizesMatch(GSLocalMemory::swizzle16), [](u16* d, u16* s)
 			{
 				*d = *s;
 			});
@@ -1778,6 +2233,12 @@ void GSState::Move()
 			(m_mem.*dpsm.wpa)(doff, (m_mem.*spsm.rpa)(soff));
 		});
 	}
+	const int page_width = std::max(1, ((w + static_cast<int>(m_env.TRXPOS.DSAX)) / dpsm.pgs.x));
+	const int page_height = std::max(1, ((h + static_cast<int>(m_env.TRXPOS.DSAY)) / dpsm.pgs.y));
+	const int pitch = (std::max(1, dbw) * 64) / dpsm.pgs.x;
+
+	// Try to avoid flushing draws if it doesn't cross paths
+	m_mem.m_clut.InvalidateRange(dbp, dbp + ((page_width << 5) + ((page_height * pitch) << 5)));
 }
 
 void GSState::SoftReset(u32 mask)
@@ -1801,8 +2262,6 @@ void GSState::SoftReset(u32 mask)
 
 void GSState::ReadFIFO(u8* mem, int size)
 {
-	GSPerfMonAutoTimer pmat(&g_perfmon);
-
 	Flush();
 
 	size *= 16;
@@ -1810,7 +2269,24 @@ void GSState::ReadFIFO(u8* mem, int size)
 	Read(mem, size);
 
 	if (m_dump)
-		m_dump->ReadFIFO(size);
+		m_dump->ReadFIFO(size / 16);
+}
+
+void GSState::ReadLocalMemoryUnsync(u8* mem, int qwc, GIFRegBITBLTBUF BITBLTBUF, GIFRegTRXPOS TRXPOS, GIFRegTRXREG TRXREG)
+{
+	const int w = TRXREG.RRW;
+	const int h = TRXREG.RRH;
+
+	const u16 bpp = GSLocalMemory::m_psm[BITBLTBUF.SPSM].trbpp;
+
+	GSTransferBuffer tb;
+	tb.Init(TRXPOS.SSAX, TRXPOS.SSAY, BITBLTBUF);
+
+	int len = qwc * 16;
+	if (!tb.Update(w, h, bpp, len))
+		return;
+
+	m_mem.ReadImageX(tb.x, tb.y, mem, len, BITBLTBUF, TRXPOS, TRXREG);
 }
 
 template void GSState::Transfer<0>(const u8* mem, u32 size);
@@ -1821,8 +2297,6 @@ template void GSState::Transfer<3>(const u8* mem, u32 size);
 template <int index>
 void GSState::Transfer(const u8* mem, u32 size)
 {
-	GSPerfMonAutoTimer pmat(&g_perfmon);
-
 	const u8* start = mem;
 
 	GIFPath& path = m_path[index];
@@ -1955,7 +2429,7 @@ void GSState::Transfer(const u8* mem, u32 size)
 					// and according to Pseudonym we shouldn't even land in this code. So hmm indeed. (rama)
 				case GIF_FLG_IMAGE:
 				{
-					int len = (int)std::min(size, path.nloop);
+					const int len = (int)std::min(size, path.nloop);
 
 					switch (m_env.TRXDIR.XDIR)
 					{
@@ -2034,7 +2508,7 @@ int GSState::Freeze(freezeData* fd, bool sizeonly)
 
 	Flush();
 
-    u8* data = fd->data;
+	u8* data = fd->data;
 
 	WriteState(data, &m_version);
 	WriteState(data, &m_env.PRIM);
@@ -2109,7 +2583,7 @@ int GSState::Defrost(const freezeData* fd)
 
 	u8* data = fd->data;
 
-	int version;
+	u32 version;
 
 	ReadState(&version, data);
 
@@ -2121,7 +2595,7 @@ int GSState::Defrost(const freezeData* fd)
 
 	Flush();
 
-	Reset();
+	Reset(false);
 
 	ReadState(&m_env.PRIM, data);
 
@@ -2253,9 +2727,6 @@ void GSState::UpdateScissor()
 
 void GSState::UpdateVertexKick()
 {
-	if (m_frameskip)
-		return;
-
 	const u32 prim = PRIM->PRIM;
 
 	m_fpGIFPackedRegHandlers[GIF_REG_XYZF2] = m_fpGIFPackedRegHandlerXYZ[prim][0];
@@ -2277,7 +2748,8 @@ void GSState::GrowVertexBuffer()
 	const size_t maxcount = std::max<size_t>(m_vertex.maxcount * 3 / 2, 10000);
 
 	GSVertex* vertex = (GSVertex*)_aligned_malloc(sizeof(GSVertex) * maxcount, 32);
-	u32* index = (u32*)_aligned_malloc(sizeof(u32) * maxcount * 3, 32); // worst case is slightly less than vertex number * 3
+	// Worst case index list is a list of points with vs expansion, 6 indices per point
+	u32* index = (u32*)_aligned_malloc(sizeof(u32) * maxcount * 6, 32);
 
 	if (vertex == NULL || index == NULL)
 	{
@@ -2413,10 +2885,234 @@ GSState::PRIM_OVERLAP GSState::PrimitiveOverlap()
 	return overlap;
 }
 
+__forceinline void GSState::HandleAutoFlush()
+{
+	// Kind of a cheat, making the assumption that 2 consecutive fan/strip triangles won't overlap each other (*should* be safe)
+	if ((m_index.tail & 1) && (PRIM->PRIM == GS_TRIANGLESTRIP || PRIM->PRIM == GS_TRIANGLEFAN))
+		return;
+
+	const u32 frame_mask = GSLocalMemory::m_psm[m_context->TEX0.PSM].fmsk;
+	const bool frame_hit = (m_context->FRAME.Block() == m_context->TEX0.TBP0) && !(m_context->TEST.ATE && m_context->TEST.ATST == 0 && m_context->TEST.AFAIL == 2) && ((m_context->FRAME.FBMSK & frame_mask) != frame_mask);
+	// There's a strange behaviour we need to test on a PS2 here, if the FRAME is a Z format, like Powerdrome something swaps over, and it seems Alpha Fail of "FB Only" writes to the Z.. it's odd.
+	const bool zbuf_hit = (m_context->ZBUF.Block() == m_context->TEX0.TBP0) && !(m_context->TEST.ATE && m_context->TEST.ATST == 0 && m_context->TEST.AFAIL != 2) && !m_context->ZBUF.ZMSK;
+	const u32 frame_z_psm = frame_hit ? m_context->FRAME.PSM : m_context->ZBUF.PSM;
+	const u32 frame_z_bp = frame_hit ? m_context->FRAME.Block() : m_context->ZBUF.Block();
+
+	// To briefly explain what's going on here, what we are checking for is draws over a texture when the source and destination are themselves.
+	// Because one page of the texture gets buffered in the Texture Cache (the PS2's one) if any of those pixels are overwritten, you still read the old data.
+	// So we need to calculate if a page boundary is being crossed for the format it is in and if the same part of the texture being written and read inside the draw.
+	if (PRIM->TME && (frame_hit || zbuf_hit) && GSUtil::HasSharedBits(frame_z_bp, frame_z_psm, m_context->TEX0.TBP0, m_context->TEX0.PSM))
+	{
+		int  n = 1;
+		size_t buff[3];
+		const size_t head = m_vertex.head;
+		const size_t tail = m_vertex.tail;
+
+		switch (PRIM->PRIM)
+		{
+			case GS_POINTLIST:
+				n = 1;
+				break;
+			case GS_LINELIST:
+			case GS_LINESTRIP:
+			case GS_SPRITE:
+				buff[0] = tail - 1;
+				n = 2;
+				break;
+			case GS_TRIANGLELIST:
+			case GS_TRIANGLESTRIP:
+				buff[0] = tail - 2;
+				buff[1] = tail - 1;
+				n = 3;
+				break;
+			case GS_TRIANGLEFAN:
+				buff[0] = head;
+				buff[1] = tail - 1;
+				n = 3;
+				break;
+			case GS_INVALID:
+			default:
+				break;
+		}
+
+		const int page_mask_x = ~(GSLocalMemory::m_psm[m_context->TEX0.PSM].pgs.x - 1);
+		const int page_mask_y = ~(GSLocalMemory::m_psm[m_context->TEX0.PSM].pgs.y - 1);
+		const GSVector4i page_mask = { page_mask_x, page_mask_y, page_mask_x, page_mask_y };
+
+		GSVector4i tex_coord;
+		// Prepare the currently processed vertex.
+		if (PRIM->FST)
+		{
+			tex_coord.x = m_v.U >> 4;
+			tex_coord.y = m_v.V >> 4;
+		}
+		else
+		{
+			const float s = std::min((m_v.ST.S / m_v.RGBAQ.Q), 1.0f);
+			const float t = std::min((m_v.ST.T / m_v.RGBAQ.Q), 1.0f);
+
+			tex_coord.x = (int)((1 << m_context->TEX0.TW) * s);
+			tex_coord.y = (int)((1 << m_context->TEX0.TH) * t);
+		}
+
+		GSVector4i tex_rect = tex_coord.xyxy();
+
+		// Get the rest of the rect.
+		for (int i = 0; i < (n - 1); i++)
+		{
+			const GSVertex* v = &m_vertex.buff[buff[i]];
+
+			if (PRIM->FST)
+			{
+				tex_coord.x = v->U >> 4;
+				tex_coord.y = v->V >> 4;
+			}
+			else
+			{
+				const float s = std::min((v->ST.S / v->RGBAQ.Q), 1.0f);
+				const float t = std::min((v->ST.T / v->RGBAQ.Q), 1.0f);
+
+				tex_coord.x = (int)((1 << m_context->TEX0.TW) * s);
+				tex_coord.y = (int)((1 << m_context->TEX0.TH) * t);
+			}
+
+			tex_rect.x = std::min(tex_rect.x, tex_coord.x);
+			tex_rect.z = std::max(tex_rect.z, tex_coord.x);
+			tex_rect.y = std::min(tex_rect.y, tex_coord.y);
+			tex_rect.w = std::max(tex_rect.w, tex_coord.y);
+		}
+
+		// Get the last texture position from the last draw.
+		const GSVertex* v = &m_vertex.buff[m_index.buff[m_index.tail - 1]];
+
+		if (PRIM->FST)
+		{
+			tex_coord.x = v->U >> 4;
+			tex_coord.y = v->V >> 4;
+		}
+		else
+		{
+			const float s = std::min((v->ST.S / v->RGBAQ.Q), 1.0f);
+			const float t = std::min((v->ST.T / v->RGBAQ.Q), 1.0f);
+
+			tex_coord.x = (int)((1 << m_context->TEX0.TW) * s);
+			tex_coord.y = (int)((1 << m_context->TEX0.TH) * t);
+		}
+
+		const GSVector4i last_tex_page = tex_coord.xyxy() & page_mask;
+		const GSVector4i tex_page = tex_rect.xyxy() & page_mask;
+
+		// Crossed page since last draw end
+		if(!tex_page.eq(last_tex_page))
+		{
+			// Make sure the format matches, otherwise the coordinates aren't gonna match, so the draws won't intersect.
+			if (GSUtil::HasCompatibleBits(m_context->TEX0.PSM, frame_z_psm) && (m_context->FRAME.FBW == m_context->TEX0.TBW))
+			{
+				// If the draw was 1 line thick, make it larger as rects are exclusive of ends.
+				if (tex_rect.x == tex_rect.z)
+					tex_rect += GSVector4i(0, 0, 1, 0);
+				if (tex_rect.y == tex_rect.w)
+					tex_rect += GSVector4i(0, 0, 0, 1);
+
+				const GSVector2i offset = GSVector2i(m_context->XYOFFSET.OFX, m_context->XYOFFSET.OFY);
+				const GSVector4i scissor = GSVector4i(m_context->scissor.in);
+				GSVector4i old_tex_rect = GSVector4i(0, 0, 0, 0);
+				int current_draw_end = m_index.tail;
+
+				while (current_draw_end >= n)
+				{
+					for (int i = current_draw_end - 1; i >= current_draw_end - n; i--)
+					{
+						const GSVertex* v = &m_vertex.buff[m_index.buff[i]];
+
+						tex_coord.x = (static_cast<int>(v->XYZ.X) - offset.x) >> 4;
+						tex_coord.y = (static_cast<int>(v->XYZ.Y) - offset.y) >> 4;
+
+						if (i == (current_draw_end - 1))
+						{
+							old_tex_rect = tex_coord.xyxy();
+						}
+						else
+						{
+							old_tex_rect.x = std::min(old_tex_rect.x, tex_coord.x);
+							old_tex_rect.z = std::max(old_tex_rect.z, tex_coord.x);
+							old_tex_rect.y = std::min(old_tex_rect.y, tex_coord.y);
+							old_tex_rect.w = std::max(old_tex_rect.w, tex_coord.y);
+						}
+					}
+
+					if (old_tex_rect.x == old_tex_rect.z)
+						old_tex_rect += GSVector4i(0, 0, 1, 0);
+					if (old_tex_rect.y == old_tex_rect.w)
+						old_tex_rect += GSVector4i(0, 0, 0, 1);
+
+					old_tex_rect = tex_rect.rintersect(old_tex_rect);
+					if (!old_tex_rect.rintersect(scissor).rempty())
+					{
+						Flush();
+						return;
+					}
+
+					current_draw_end -= n;
+				}
+			}
+			else // Storage of the TEX and FRAME/Z is different, so uhh, just fall back to flushing each page. It's slower, sorry.
+			{
+				if (m_context->FRAME.FBW == m_context->TEX0.TBW)
+				{
+					//We know we've changed page, so let's set the dimension to cover the page they're in (for different pixel orders)
+					tex_rect = tex_rect & page_mask;
+					tex_rect += GSVector4i(0, 0, 1, 1); // Intersect goes on space inside the rect
+					tex_rect.z += GSLocalMemory::m_psm[m_context->TEX0.PSM].pgs.x;
+					tex_rect.w += GSLocalMemory::m_psm[m_context->TEX0.PSM].pgs.y;
+
+					m_vt.Update(m_vertex.buff, m_index.buff, m_vertex.tail - m_vertex.head, m_index.tail, GSUtil::GetPrimClass(PRIM->PRIM));
+
+					GSVector4i area_out = GSVector4i(m_vt.m_min.p.xyxy(m_vt.m_max.p)).rintersect(GSVector4i(m_context->scissor.in));
+					area_out = area_out & page_mask;
+					area_out += GSVector4i(0, 0, 1, 1); // Intersect goes on space inside the rect
+					area_out.z += GSLocalMemory::m_psm[m_context->TEX0.PSM].pgs.x;
+					area_out.w += GSLocalMemory::m_psm[m_context->TEX0.PSM].pgs.y;
+
+					if (!area_out.rintersect(tex_rect).rempty())
+						Flush();
+				}
+				else // Page width is different, so it's much more difficult to calculate where it's modifying.
+					Flush();
+			}
+		}
+	}
+}
+
 template <u32 prim, bool auto_flush, bool index_swap>
 __forceinline void GSState::VertexKick(u32 skip)
 {
+	size_t n = 0;
+
+	switch (prim)
+	{
+		case GS_POINTLIST:
+		case GS_INVALID:
+			n = 1;
+			break;
+		case GS_LINELIST:
+		case GS_SPRITE:
+		case GS_LINESTRIP:
+			n = 2;
+			break;
+		case GS_TRIANGLELIST:
+		case GS_TRIANGLESTRIP:
+		case GS_TRIANGLEFAN:
+			n = 3;
+			break;
+	}
+
 	ASSERT(m_vertex.tail < m_vertex.maxcount + 3);
+
+	if (auto_flush && m_index.tail > 0 && ((m_vertex.tail + 1) - m_vertex.head) >= n)
+	{
+		HandleAutoFlush();
+	}
 
 	size_t head = m_vertex.head;
 	size_t tail = m_vertex.tail;
@@ -2425,64 +3121,34 @@ __forceinline void GSState::VertexKick(u32 skip)
 
 	// callers should write XYZUVF to m_v.m[1] in one piece to have this load store-forwarded, either by the cpu or the compiler when this function is inlined
 
-	GSVector4i v0(m_v.m[0]);
-	GSVector4i v1(m_v.m[1]);
+	const GSVector4i new_v0(m_v.m[0]);
+	const GSVector4i new_v1(m_v.m[1]);
 
 	GSVector4i* RESTRICT tailptr = (GSVector4i*)&m_vertex.buff[tail];
 
-	tailptr[0] = v0;
-	tailptr[1] = v1;
+	tailptr[0] = new_v0;
+	tailptr[1] = new_v1;
 
-	const GSVector4i xy = v1.xxxx().u16to32().sub32(m_ofxy);
+	const GSVector4i xy = new_v1.xxxx().u16to32().sub32(m_ofxy);
 
 	GSVector4i::storel(&m_vertex.xy[xy_tail & 3], xy.blend16<0xf0>(xy.sra32(4)).ps32());
 
 	m_vertex.tail = ++tail;
 	m_vertex.xy_tail = ++xy_tail;
 
-	size_t n = 0;
-
-	switch (prim)
-	{
-		case GS_POINTLIST:
-			n = 1;
-			break;
-		case GS_LINELIST:
-			n = 2;
-			break;
-		case GS_LINESTRIP:
-			n = 2;
-			break;
-		case GS_TRIANGLELIST:
-			n = 3;
-			break;
-		case GS_TRIANGLESTRIP:
-			n = 3;
-			break;
-		case GS_TRIANGLEFAN:
-			n = 3;
-			break;
-		case GS_SPRITE:
-			n = 2;
-			break;
-		case GS_INVALID:
-			n = 1;
-			break;
-	}
-
-	size_t m = tail - head;
+	const size_t m = tail - head;
 
 	if (m < n)
 		return;
 
 	if (skip == 0 && (prim != GS_TRIANGLEFAN || m <= 4)) // m_vertex.xy only knows about the last 4 vertices, head could be far behind for fan
 	{
-		GSVector4i v0, v1, v2, v3, pmin, pmax;
+		GSVector4i pmin, pmax;
 
-		v0 = GSVector4i::loadl(&m_vertex.xy[(xy_tail + 1) & 3]); // T-3
-		v1 = GSVector4i::loadl(&m_vertex.xy[(xy_tail + 2) & 3]); // T-2
-		v2 = GSVector4i::loadl(&m_vertex.xy[(xy_tail + 3) & 3]); // T-1
-		v3 = GSVector4i::loadl(&m_vertex.xy[(xy_tail - m) & 3]); // H
+		const GSVector4i v0 = GSVector4i::loadl(&m_vertex.xy[(xy_tail + 1) & 3]); // T-3
+		const GSVector4i v1 = GSVector4i::loadl(&m_vertex.xy[(xy_tail + 2) & 3]); // T-2
+		const GSVector4i v2 = GSVector4i::loadl(&m_vertex.xy[(xy_tail + 3) & 3]); // T-1
+		const GSVector4i v3 = GSVector4i::loadl(&m_vertex.xy[(xy_tail - m) & 3]); // H
 
 		switch (prim)
 		{
@@ -2572,6 +3238,14 @@ __forceinline void GSState::VertexKick(u32 skip)
 	if (tail >= m_vertex.maxcount)
 		GrowVertexBuffer();
 
+	if (m_index.tail == 0 && ((m_backed_up_ctx != m_env.PRIM.CTXT) || m_dirty_gs_regs))
+	{
+		CopyEnv(&m_prev_env, &m_env, m_env.PRIM.CTXT);
+		memcpy(&m_prev_env.CTXT[m_prev_env.PRIM.CTXT].offset, &m_env.CTXT[m_prev_env.PRIM.CTXT].offset, sizeof(m_env.CTXT[m_prev_env.PRIM.CTXT].offset));
+		m_dirty_gs_regs = 0;
+		m_backed_up_ctx = m_env.PRIM.CTXT;
+	}
+
 	u32* RESTRICT buff = &m_index.buff[m_index.tail];
 
 	switch (prim)
@@ -2648,16 +3322,6 @@ __forceinline void GSState::VertexKick(u32 skip)
 		default:
 			__assume(0);
 	}
-
-	if (m_context->FRAME.FBMSK != 0xFFFFFFFF)
-	{
-		m_mem.m_clut.Invalidate(m_context->FRAME.Block());
-
-		if (auto_flush && PRIM->TME && (m_context->FRAME.Block() == m_context->TEX0.TBP0) && (m_context->TEX0.PSM == m_context->FRAME.PSM))
-		{
-			FlushPrim();
-		}
-	}
 }
 
 /// Checks if region repeat is used (applying it does something to at least one of the values in min...max)
@@ -2694,7 +3358,7 @@ static bool UsesRegionRepeat(int fix, int msk, int min, int max, int* min_out, i
 	// The true minimum value is `min` with all bits below the most significant replaced variable `0` bit cleared
 	const int min_overwritten_variable_zeros = ~min & overwritten_variable_bits;
 	if (_BitScanReverse(&msb, min_overwritten_variable_zeros))
-		min &= (~0 << msb);
+		min &= (~0u << msb);
 	// Similar thing for max, but the first masked `1` bit
 	const int max_overwritten_variable_ones = max & overwritten_variable_bits;
 	if (_BitScanReverse(&msb, max_overwritten_variable_ones))
@@ -2718,7 +3382,7 @@ GSState::TextureMinMaxResult GSState::GetTextureMinMax(const GIFRegTEX0& TEX0, c
 	const int tw_mask = w - 1;
 	const int th_mask = h - 1;
 
-	GSVector4i tr(0, 0, w, h);
+	const GSVector4i tr(0, 0, w, h);
 
 	const int wms = CLAMP.WMS;
 	const int wmt = CLAMP.WMT;
@@ -2783,11 +3447,76 @@ GSState::TextureMinMaxResult GSState::GetTextureMinMax(const GIFRegTEX0& TEX0, c
 	{
 		// Optimisation aims to reduce the amount of texture loaded to only the bit which will be read
 		GSVector4 st = m_vt.m_min.t.xyxy(m_vt.m_max.t);
-
 		if (linear)
 			st += GSVector4(-0.5f, 0.5f).xxyy();
 
-		GSVector4i uv = GSVector4i(st.floor());
+		// Adjust texture range when sprites get scissor clipped. Since we linearly interpolate, this
+		// optimization doesn't work when perspective correction is enabled.
+		if (m_vt.m_primclass == GS_SPRITE_CLASS && PRIM->FST == 1 && m_index.tail < 3)
+		{
+			// When coordinates are fractional, GS appears to draw to the right/bottom (effectively
+			// taking the ceiling), not to the top/left (taking the floor).
+			const GSVector4i int_rc(m_vt.m_min.p.ceil().xyxy(m_vt.m_max.p.floor()));
+			const GSVector4i scissored_rc(int_rc.rintersect(GSVector4i(m_context->scissor.in)));
+			if (!int_rc.eq(scissored_rc))
+			{
+				// draw will get scissored, adjust UVs to suit
+				const GSVector2 pos_range(m_vt.m_max.p.x - m_vt.m_min.p.x, m_vt.m_max.p.y - m_vt.m_min.p.y);
+				const GSVector2 uv_range(m_vt.m_max.t.x - m_vt.m_min.t.x, m_vt.m_max.t.y - m_vt.m_min.t.y);
+				const GSVector2 grad(uv_range / pos_range);
+
+				const GSVertex* vert_first = &m_vertex.buff[m_index.buff[0]];
+				const GSVertex* vert_second = &m_vertex.buff[m_index.buff[1]];
+
+				// we need to check that it's not going to repeat over the non-clipped part
+				if (wms != CLAMP_REGION_REPEAT && (wms != CLAMP_REPEAT || (static_cast<int>(st.x) & ~tw_mask) == (static_cast<int>(st.z) & ~tw_mask)))
+				{
+					// Check if the UV coords are going in a different direction to the verts, if they match direction, no need to swap
+					const bool u_forward = vert_first->U < vert_second->U;
+					const bool x_forward = vert_first->XYZ.X < vert_second->XYZ.X;
+					const bool swap_x = u_forward != x_forward;
+
+					if (int_rc.left < scissored_rc.left)
+					{
+						if(!swap_x)
+							st.x += floor(static_cast<float>(scissored_rc.left - int_rc.left) * grad.x);
+						else
+							st.z -= floor(static_cast<float>(scissored_rc.left - int_rc.left) * grad.x);
+					}
+					if (int_rc.right > scissored_rc.right)
+					{
+						if (!swap_x)
+							st.z -= floor(static_cast<float>(int_rc.right - scissored_rc.right) * grad.x);
+						else
+							st.x += floor(static_cast<float>(int_rc.right - scissored_rc.right) * grad.x);
+					}
+				}
+				if (wmt != CLAMP_REGION_REPEAT && (wmt != CLAMP_REPEAT || (static_cast<int>(st.y) & ~th_mask) == (static_cast<int>(st.w) & ~th_mask)))
+				{
+					// Check if the UV coords are going in a different direction to the verts, if they match direction, no need to swap
+					const bool v_forward = vert_first->V < vert_second->V;
+					const bool y_forward = vert_first->XYZ.Y < vert_second->XYZ.Y;
+					const bool swap_y = v_forward != y_forward;
+
+					if (int_rc.top < scissored_rc.top)
+					{
+						if (!swap_y)
+							st.y += floor(static_cast<float>(scissored_rc.top - int_rc.top) * grad.y);
+						else
+							st.w -= floor(static_cast<float>(scissored_rc.top - int_rc.top) * grad.y);
+					}
+					if (int_rc.bottom > scissored_rc.bottom)
+					{
+						if (!swap_y)
+							st.w -= floor(static_cast<float>(int_rc.bottom - scissored_rc.bottom) * grad.y);
+						else
+							st.y += floor(static_cast<float>(int_rc.bottom - scissored_rc.bottom) * grad.y);
+					}
+				}
+			}
+		}
+
+		const GSVector4i uv = GSVector4i(st.floor());
 		uses_border = GSVector4::cast((uv < vr).blend32<0xc>(uv >= vr)).mask();
 
 		// Roughly cut out the min/max of the read (Clamp)
@@ -2804,9 +3533,9 @@ GSState::TextureMinMaxResult GSState::GetTextureMinMax(const GIFRegTEX0& TEX0, c
 			case CLAMP_CLAMP:
 			case CLAMP_REGION_CLAMP:
 				if (vr.x < uv.x)
-					vr.x = uv.x;
+					vr.x = std::min(uv.x, vr.z - 1);
 				if (vr.z > (uv.z + 1))
-					vr.z = uv.z + 1;
+					vr.z = std::max(uv.z, vr.x) + 1;
 				break;
 			case CLAMP_REGION_REPEAT:
 				if (UsesRegionRepeat(maxu, minu, uv.x, uv.z, &vr.x, &vr.z) || maxu >= tw)
@@ -2826,9 +3555,9 @@ GSState::TextureMinMaxResult GSState::GetTextureMinMax(const GIFRegTEX0& TEX0, c
 			case CLAMP_CLAMP:
 			case CLAMP_REGION_CLAMP:
 				if (vr.y < uv.y)
-					vr.y = uv.y;
+					vr.y = std::min(uv.y, vr.w - 1);
 				if (vr.w > (uv.w + 1))
-					vr.w = uv.w + 1;
+					vr.w = std::max(uv.w, vr.y) + 1;
 				break;
 			case CLAMP_REGION_REPEAT:
 				if (UsesRegionRepeat(maxv, minv, uv.y, uv.w, &vr.y, &vr.w) || maxv >= th)
@@ -2861,13 +3590,14 @@ void GSState::CalcAlphaMinMax()
 	if (m_vt.m_alpha.valid)
 		return;
 
-	const GSDrawingEnvironment& env = m_env;
 	const GSDrawingContext* context = m_context;
 
 	GSVector4i a = m_vt.m_min.c.uph32(m_vt.m_max.c).zzww();
 
 	if (PRIM->TME && context->TEX0.TCC)
 	{
+		const GSDrawingEnvironment& env = m_env;
+
 		switch (GSLocalMemory::m_psm[context->TEX0.PSM].fmt)
 		{
 			case 0:
@@ -2925,12 +3655,14 @@ void GSState::CalcAlphaMinMax()
 	m_vt.m_alpha.valid = true;
 }
 
-bool GSState::TryAlphaTest(u32& fm, u32& zm)
+bool GSState::TryAlphaTest(u32& fm, const u32 fm_mask, u32& zm)
 {
 	// Shortcut for the easy case
 	if (m_context->TEST.ATST == ATST_ALWAYS)
 		return true;
 
+	const u32 framemask = GSLocalMemory::m_psm[m_context->FRAME.PSM].fmsk;
+	const u32 framemaskalpha = GSLocalMemory::m_psm[m_context->FRAME.PSM].fmsk & 0xFF000000;
 	// Alpha test can only control the write of some channels. If channels are already masked
 	// the alpha test is therefore a nop.
 	switch (m_context->TEST.AFAIL)
@@ -2942,11 +3674,11 @@ bool GSState::TryAlphaTest(u32& fm, u32& zm)
 				return true;
 			break;
 		case AFAIL_ZB_ONLY:
-			if (fm == 0xFFFFFFFF)
+			if ((fm & framemask) == framemask)
 				return true;
 			break;
 		case AFAIL_RGB_ONLY:
-			if (zm == 0xFFFFFFFF && ((fm & 0xFF000000) == 0xFF000000 || GSLocalMemory::m_psm[m_context->FRAME.PSM].fmt == 1))
+			if (zm == 0xFFFFFFFF && ((fm & framemaskalpha) == framemaskalpha || GSLocalMemory::m_psm[m_context->FRAME.PSM].fmt == 1))
 				return true;
 			break;
 		default:
@@ -2961,8 +3693,9 @@ bool GSState::TryAlphaTest(u32& fm, u32& zm)
 	}
 	else
 	{
-		const int amin = GetAlphaMinMax().min;
-		const int amax = GetAlphaMinMax().max;
+		const GSVertexTrace::VertexAlpha& aminmax = GetAlphaMinMax();
+		const int amin = aminmax.min;
+		const int amax = aminmax.max;
 
 		const int aref = m_context->TEST.AREF;
 
@@ -3088,12 +3821,17 @@ bool GSState::IsOpaque()
 
 bool GSState::IsMipMapDraw()
 {
-	return m_context->TEX1.MXL > 0 && m_context->TEX1.MMIN >= 2 && m_context->TEX1.MMIN <= 5 && m_vt.m_lod.y > 0 && (!m_context->TEX1.MTBA || m_context->TEX0.TH == m_context->TEX0.TW);
+	return m_context->TEX1.MXL > 0 && m_context->TEX1.MMIN >= 2 && m_context->TEX1.MMIN <= 5 && m_vt.m_lod.y > 0;
 }
 
 bool GSState::IsMipMapActive()
 {
 	return m_mipmap && IsMipMapDraw();
+}
+
+bool GSState::IsCoverageAlpha()
+{
+	return !PRIM->ABE && PRIM->AA1 && (m_vt.m_primclass == GS_LINE_CLASS || m_vt.m_primclass == GS_TRIANGLE_CLASS);
 }
 
 GIFRegTEX0 GSState::GetTex0Layer(u32 lod)
@@ -3153,7 +3891,6 @@ GIFRegTEX0 GSState::GetTex0Layer(u32 lod)
 GSState::GSTransferBuffer::GSTransferBuffer()
 {
 	x = y = 0;
-	overflow = false;
 	start = end = total = 0;
 
 	constexpr size_t alloc_size = 1024 * 1024 * 4;
@@ -3175,22 +3912,23 @@ void GSState::GSTransferBuffer::Init(int tx, int ty, const GIFRegBITBLTBUF& blit
 
 bool GSState::GSTransferBuffer::Update(int tw, int th, int bpp, int& len)
 {
+	int tex_size = (((tw * th * bpp) + 7) >> 3); // Round to nearest byte
+	int packet_size = (tex_size + 15) & ~0xF; // Round up to the nearest quadword
+
 	if (total == 0)
 	{
 		start = end = 0;
-		total = std::min<int>((tw * bpp >> 3) * th, 1024 * 1024 * 4);
-		overflow = false;
+		total = std::min<int>(tex_size, 1024 * 1024 * 4);
 	}
 
 	const int remaining = total - end;
 
 	if (len > remaining)
 	{
-		if (!overflow)
+		if (len > packet_size)
 		{
-			overflow = true;
 #if defined(PCSX2_DEVBUILD) || defined(_DEBUG)
-			Console.Warning("GS transfer buffer overflow");
+			Console.Warning("GS transfer buffer overflow len %d remaining %d, tex_size %d tw %d th %d bpp %d", len, remaining, tex_size, tw, th, bpp);
 #endif
 		}
 

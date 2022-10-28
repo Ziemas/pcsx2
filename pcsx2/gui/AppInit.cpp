@@ -19,17 +19,17 @@
 #include "ConsoleLogger.h"
 #include "MSWstuff.h"
 #include "MTVU.h" // for thread cancellation on shutdown
+#include "IniInterface.h"
+#include "StringHelpers.h"
 
-#include "common/IniInterface.h"
+#include "common/FileSystem.h"
 #include "common/StringUtil.h"
 #include "DebugTools/Debug.h"
 #include "Dialogs/ModalPopups.h"
 
 #include "Debugger/DisassemblyDialog.h"
 
-#ifndef DISABLE_RECORDING
 #include "Recording/InputRecording.h"
-#endif
 
 #include <wx/cmdline.h>
 #include <wx/intl.h>
@@ -42,6 +42,10 @@
 #include <X11/Xlib.h>
 #endif
 #endif	// __WXGTK__
+
+#ifdef SDL_BUILD
+#include <SDL.h>
+#endif
 
 using namespace pxSizerFlags;
 
@@ -59,19 +63,19 @@ void Pcsx2App::DetectCpuAndUserMode()
 		// This code will probably never run if the binary was correctly compiled for SSE4
 		// SSE4 is required for any decent speed and is supported by more than decade old x86 CPUs
 		throw Exception::HardwareDeficiency()
-			.SetDiagMsg(L"Critical Failure: SSE4.1 Extensions not available.")
-			.SetUserMsg(_("SSE4 extensions are not available.  PCSX2 requires a cpu that supports the SSE4.1 instruction set."));
+			.SetDiagMsg("Critical Failure: SSE4.1 Extensions not available.")
+			.SetUserMsg("SSE4 extensions are not available.  PCSX2 requires a cpu that supports the SSE4.1 instruction set.");
 	}
 #endif
 
 	EstablishAppUserMode();
 
 	// Check that the resources directory exists and contains our data files.
-	if (!EmuFolders::Resources.Exists())
+	if (!FileSystem::DirectoryExists(EmuFolders::Resources.c_str()))
 	{
 		throw Exception::RuntimeError()
-			.SetDiagMsg(L"Resources directory does not exist.")
-			.SetUserMsg(_("Resources directory does not exist. Your installation is incomplete."));
+			.SetDiagMsg("Resources directory does not exist.")
+			.SetUserMsg("Resources directory does not exist. Your installation is incomplete.");
 	}
 }
 
@@ -89,12 +93,10 @@ void Pcsx2App::OpenMainFrame()
 	DisassemblyDialog* disassembly = new DisassemblyDialog(mainFrame);
 	m_id_Disassembler = disassembly->GetId();
 
-#ifndef DISABLE_RECORDING
 	NewRecordingFrame* newRecordingFrame = new NewRecordingFrame(mainFrame);
 	m_id_NewRecordingFrame = newRecordingFrame->GetId();
 	if (g_Conf->EmuOptions.EnableRecordingTools)
 		g_InputRecording.InitVirtualPadWindows(mainFrame);
-#endif
 
 	if (g_Conf->EmuOptions.Debugger.ShowDebuggerOnStart)
 		disassembly->Show();
@@ -133,8 +135,8 @@ void Pcsx2App::OpenProgramLog()
 	for( int li=wxLANGUAGE_UNKNOWN+1; li<wxLANGUAGE_USER_DEFINED; ++li )
 	{
 		if (const wxLanguageInfo* info = wxLocale::GetLanguageInfo( li ))
-		{			
-			if (i18n_IsLegacyLanguageId((wxLanguage)info->Language)) continue;			
+		{
+			if (i18n_IsLegacyLanguageId((wxLanguage)info->Language)) continue;
 			Console.WriteLn( L"|| %-30s || %-8s ||", info->Description.c_str(), info->CanonicalName.c_str() );
 		}
 	}
@@ -180,25 +182,25 @@ void Pcsx2App::AllocateCoreStuffs()
 
 			if (BaseException* ex = m_CpuProviders->GetException_EE())
 			{
-				scrollableTextArea->AppendText(L"* R5900 (EE)\n\t" + ex->FormatDisplayMessage() + L"\n\n");
+				scrollableTextArea->AppendText(StringUtil::UTF8StringToWxString("* R5900 (EE)\n\t" + ex->FormatDisplayMessage() + "\n\n"));
 				recOps.EnableEE = false;
 			}
 
 			if (BaseException* ex = m_CpuProviders->GetException_IOP())
 			{
-				scrollableTextArea->AppendText(L"* R3000A (IOP)\n\t" + ex->FormatDisplayMessage() + L"\n\n");
+				scrollableTextArea->AppendText(StringUtil::UTF8StringToWxString("* R3000A (IOP)\n\t" + ex->FormatDisplayMessage() + "\n\n"));
 				recOps.EnableIOP = false;
 			}
 
 			if (BaseException* ex = m_CpuProviders->GetException_MicroVU0())
 			{
-				scrollableTextArea->AppendText(L"* microVU0\n\t" + ex->FormatDisplayMessage() + L"\n\n");
+				scrollableTextArea->AppendText(StringUtil::UTF8StringToWxString("* microVU0\n\t" + ex->FormatDisplayMessage() + "\n\n"));
 				recOps.EnableVU0 = false;
 			}
 
 			if (BaseException* ex = m_CpuProviders->GetException_MicroVU1())
 			{
-				scrollableTextArea->AppendText(L"* microVU1\n\t" + ex->FormatDisplayMessage() + L"\n\n");
+				scrollableTextArea->AppendText(StringUtil::UTF8StringToWxString("* microVU1\n\t" + ex->FormatDisplayMessage() + "\n\n"));
 				recOps.EnableVU1 = false;
 			}
 
@@ -258,6 +260,25 @@ bool Pcsx2App::OnCmdLineError(wxCmdLineParser& parser)
 	return false;
 }
 
+static void SetGameFixOptionsFromString(Pcsx2Config::GamefixOptions& dest, const wxString& list, bool enabled)
+{
+	wxStringTokenizer izer(list, L",|", wxTOKEN_STRTOK);
+
+	while (izer.HasMoreTokens())
+	{
+		wxString token(izer.GetNextToken());
+
+		GamefixId i;
+		for (i = GamefixId_FIRST; i < pxEnumEnd; ++i)
+		{
+			if (token.CmpNoCase(EnumToString(i)) == 0)
+				break;
+		}
+		if (i < pxEnumEnd)
+			dest.Set(i);
+	}
+}
+
 bool Pcsx2App::ParseOverrides(wxCmdLineParser& parser)
 {
 	wxString dest;
@@ -265,13 +286,13 @@ bool Pcsx2App::ParseOverrides(wxCmdLineParser& parser)
 
 	if (parser.Found(L"cfgpath", &dest) && !dest.IsEmpty())
 	{
-		Console.Warning(L"Config path override: " + dest);
+		Console.Warning("Config path override: %ls", WX_STR(dest));
 		Overrides.SettingsFolder = dest;
 	}
 
 	if (parser.Found(L"cfg", &dest) && !dest.IsEmpty())
 	{
-		Console.Warning(L"Config file override: " + dest);
+		Console.Warning("Config file override: %ls", WX_STR(dest));
 		Overrides.VmSettingsFile = dest;
 	}
 
@@ -282,7 +303,7 @@ bool Pcsx2App::ParseOverrides(wxCmdLineParser& parser)
 	if (parser.Found(L"gamefixes", &dest))
 	{
 		Overrides.ApplyCustomGamefixes = true;
-		Overrides.Gamefixes.Set(dest, true);
+		SetGameFixOptionsFromString(Overrides.Gamefixes, dest, true);
 	}
 
 	if (parser.Found(L"fullscreen"))
@@ -366,9 +387,6 @@ bool Pcsx2App::OnInit()
 	Console.WriteLn("Interface is initializing.  Entering Pcsx2App::OnInit!");
 
 	InitCPUTicks();
-
-	pxDoAssert = AppDoAssert;
-	pxDoOutOfMemory = SysOutOfMemory_EmergencyResponse;
 
 	g_Conf = std::make_unique<AppConfig>();
 	wxInitAllImageHandlers();
@@ -463,6 +481,8 @@ bool Pcsx2App::OnInit()
 			{
 				g_Conf->Folders.RunELF = elfFile.GetPath();
 				sApp.SysExecute(Startup.CdvdSource, Startup.ElfFile);
+				if (Startup.ElfFile.Find(' ') == -1)
+					EmuConfig.CurrentGameArgs = StringUtil::wxStringToUTF8String(Startup.GameLaunchArgs);
 			}
 		}
 		else if (Startup.SysAutoRunIrx)
@@ -473,6 +493,8 @@ bool Pcsx2App::OnInit()
 
 			// FIXME: ElfFile is an irx it will crash
 			sApp.SysExecute(Startup.CdvdSource, Startup.ElfFile);
+			if (Startup.ElfFile.Find(' ') == -1)
+				EmuConfig.CurrentGameArgs = StringUtil::wxStringToUTF8String(Startup.GameLaunchArgs);
 		}
 	}
 	// ----------------------------------------------------------------------------
@@ -484,7 +506,7 @@ bool Pcsx2App::OnInit()
 	}
 	catch (Exception::HardwareDeficiency& ex)
 	{
-		Msgbox::Alert(ex.FormatDisplayMessage() + L"\n\n" + AddAppName(_("Press OK to close %s.")), _("PCSX2 Error: Hardware Deficiency."));
+		Msgbox::Alert(StringUtil::UTF8StringToWxString(ex.FormatDisplayMessage()) + L"\n\n" + AddAppName(_("Press OK to close %s.")), _("PCSX2 Error: Hardware Deficiency."));
 		CleanupOnExit();
 		return false;
 	}
@@ -496,11 +518,17 @@ bool Pcsx2App::OnInit()
 	catch (Exception::RuntimeError& ex)
 	{
 		Console.Error(ex.FormatDiagnosticMessage());
-		Msgbox::Alert(ex.FormatDisplayMessage() + L"\n\n" + AddAppName(_("Press OK to close %s.")),
+		Msgbox::Alert(StringUtil::UTF8StringToWxString(ex.FormatDisplayMessage()) + L"\n\n" + AddAppName(_("Press OK to close %s.")),
 					  AddAppName(_("%s Critical Error")), wxICON_ERROR);
 		CleanupOnExit();
 		return false;
 	}
+
+#ifdef SDL_BUILD
+	// MacOS Game Controller framework requires a few runs of the main event loop after interest in game controllers is first indicated to connect controllers
+	// Since OnePad doesn't currently handle connection/disconnection events and requires controllers to be connected on start, we need to initialize SDL before OnePad looks at the controller list
+	SDL_Init(SDL_INIT_GAMECONTROLLER);
+#endif
 	return true;
 }
 
@@ -587,13 +615,12 @@ void Pcsx2App::CleanupOnExit()
 		// that we just don't care about by now, and just want to "get 'er done!" so
 		// we can exit the app. ;)
 
-		Console.Error(L"Runtime exception handled during CleanupOnExit:\n");
+		Console.Error("Runtime exception handled during CleanupOnExit:\n");
 		Console.Indent().Error(ex.FormatDiagnosticMessage());
 	}
 
 	// FIXME: performing a wxYield() here may fix that problem. -- air
 
-	pxDoAssert = pxAssertImpl_LogIt;
 	Console_SetActiveHandler(ConsoleWriter_Stdout);
 }
 
@@ -650,6 +677,10 @@ protected:
 
 Pcsx2App::Pcsx2App()
 	: SysExecutorThread(new SysEvtHandler())
+	, m_id_MainFrame(wxID_ANY)
+	, m_id_GsFrame(wxID_ANY)
+	, m_id_ProgramLogBox(wxID_ANY)
+	, m_id_Disassembler(wxID_ANY)
 {
 // Warning: Do not delete this comment block! Gettext will parse it to allow
 // the translation of some wxWidget internal strings. -- greg
@@ -690,10 +721,6 @@ Pcsx2App::Pcsx2App()
 	m_UseGUI = true;
 	m_NoGuiExitPrompt = true;
 
-	m_id_MainFrame = wxID_ANY;
-	m_id_GsFrame = wxID_ANY;
-	m_id_ProgramLogBox = wxID_ANY;
-	m_id_Disassembler = wxID_ANY;
 	m_ptr_ProgramLog = NULL;
 
 	SetAppName(L"PCSX2");
@@ -702,12 +729,6 @@ Pcsx2App::Pcsx2App()
 
 Pcsx2App::~Pcsx2App()
 {
-	pxDoAssert = pxAssertImpl_LogIt;
-	try
-	{
-		vu1Thread.Cancel();
-	}
-	DESTRUCTOR_CATCHALL
 }
 
 void Pcsx2App::CleanUp()
@@ -725,6 +746,11 @@ void Pcsx2App::CleanUp()
 	}
 
 	_parent::CleanUp();
+}
+
+__fi wxString AddAppName(const wxString& fmt)
+{
+	return pxsFmt(fmt, WX_STR(pxGetAppName()));
 }
 
 __fi wxString AddAppName(const wxChar* fmt)

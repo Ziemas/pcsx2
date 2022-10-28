@@ -18,6 +18,7 @@
 #include "GSPng.h"
 #include "GSUtil.h"
 #include "GSExtra.h"
+#include "common/StringUtil.h"
 
 #ifdef _WIN32
 
@@ -394,8 +395,11 @@ static wil::com_ptr_nothrow<IPin> GetFirstPin(IBaseFilter* pBF, PIN_DIRECTION di
 //
 
 GSCapture::GSCapture()
-	: m_capturing(false), m_frame(0)
+	: m_capturing(false)
 	, m_out_dir("/tmp/GS_Capture") // FIXME Later add an option
+#if defined(__unix__)
+	, m_frame(0)
+#endif
 {
 }
 
@@ -524,7 +528,7 @@ bool GSCapture::BeginCapture(float fps, GSVector2i recommendedResolution, float 
 	m_src.query<IGSSource>()->DeliverNewSegment();
 
 	m_capturing = true;
-	filename = convert_utf16_to_utf8(dlg.m_filename.erase(dlg.m_filename.length() - 3, 3) + L"wav");
+	filename = StringUtil::WideStringToUTF8String(dlg.m_filename.erase(dlg.m_filename.length() - 3, 3) + L"wav");
 	return true;
 #elif defined(__unix__)
 	// Note I think it doesn't support multiple depth creation
@@ -538,12 +542,15 @@ bool GSCapture::BeginCapture(float fps, GSVector2i recommendedResolution, float 
 
 	for (int i = 0; i < m_threads; i++)
 	{
-		m_workers.push_back(std::unique_ptr<GSPng::Worker>(new GSPng::Worker(&GSPng::Process)));
+		m_workers.push_back(std::unique_ptr<GSPng::Worker>(new GSPng::Worker({}, &GSPng::Process, {})));
 	}
 
 	m_capturing = true;
 	filename = m_out_dir + "/audio_recording.wav";
 	return true;
+#else
+	// FIXME: MACOS
+	return false;
 #endif
 }
 
@@ -569,7 +576,7 @@ bool GSCapture::DeliverFrame(const void* bits, int pitch, bool rgba)
 
 #elif defined(__unix__)
 
-	std::string out_file = m_out_dir + format("/frame.%010d.png", m_frame);
+	std::string out_file = m_out_dir + StringUtil::StdStringFromFormat("/frame.%010d.png", m_frame);
 	//GSPng::Save(GSPng::RGB_PNG, out_file, (u8*)bits, m_size.x, m_size.y, pitch, m_compression_level);
 	m_workers[m_frame % m_threads]->Push(std::make_shared<GSPng::Transaction>(GSPng::RGB_PNG, out_file, static_cast<const u8*>(bits), m_size.x, m_size.y, pitch, m_compression_level));
 

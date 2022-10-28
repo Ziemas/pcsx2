@@ -14,6 +14,7 @@
  */
 
 #include "FileSystem.h"
+#include "Path.h"
 #include "Assertions.h"
 #include "Console.h"
 #include "StringUtil.h"
@@ -21,6 +22,7 @@
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
+#include <limits>
 
 #ifdef __APPLE__
 #include <mach-o/dyld.h>
@@ -33,24 +35,10 @@
 #endif
 
 #if defined(_WIN32)
+#include "RedtapeWindows.h"
+#include <winioctl.h>
+#include <share.h>
 #include <shlobj.h>
-
-// We can't guarantee that windows.h isn't included before here, so we have to undef.
-#undef min
-#undef max
-
-#if defined(_UWP)
-#include <fcntl.h>
-#include <io.h>
-#include <winrt/Windows.ApplicationModel.h>
-#include <winrt/Windows.Devices.Enumeration.h>
-#include <winrt/Windows.Foundation.Collections.h>
-#include <winrt/Windows.Foundation.h>
-#include <winrt/Windows.Storage.FileProperties.h>
-#include <winrt/Windows.Storage.Search.h>
-#include <winrt/Windows.Storage.h>
-#endif
-
 #else
 #include <fcntl.h>
 #include <dirent.h>
@@ -73,75 +61,256 @@ static std::time_t ConvertFileTimeToUnixTime(const FILETIME& ft)
 }
 #endif
 
-static inline bool FileSystemCharacterIsSane(char c, bool StripSlashes)
+static inline bool FileSystemCharacterIsSane(char c, bool strip_slashes)
 {
-	if (!(c >= 'a' && c <= 'z') && !(c >= 'A' && c <= 'Z') && !(c >= '0' && c <= '9') && c != ' ' && c != ' ' &&
-		c != '_' && c != '-' && c != '.')
-	{
-		if (!StripSlashes && (c == '/' || c == '\\'))
-			return true;
+#ifdef _WIN32
+	// https://docs.microsoft.com/en-gb/windows/win32/fileio/naming-a-file?redirectedfrom=MSDN#naming-conventions
+	if ((c == U'/' || c == U'\\') && strip_slashes)
+		return false;
 
+	if (c == U'<' || c == U'>' || c == U':' || c == U'"' || c == U'|' || c == U'?' || c == U'*' || c == 0 ||
+		c <= static_cast<char32_t>(31))
+	{
 		return false;
 	}
+#else
+	if (c == '/' && strip_slashes)
+		return false;
+
+	// drop asterisks too, they make globbing annoying
+	if (c == '*')
+		return false;
+
+		// macos doesn't allow colons, apparently
+#ifdef __APPLE__
+	if (c == U':')
+		return false;
+#endif
+#endif
 
 	return true;
 }
 
-void FileSystem::SanitizeFileName(char* Destination, u32 cbDestination, const char* FileName, bool StripSlashes /* = true */)
+template<typename T>
+static inline void PathAppendString(std::string& dst, const T& src)
 {
-	u32 i;
-	u32 fileNameLength = static_cast<u32>(std::strlen(FileName));
+	if (dst.capacity() < (dst.length() + src.length()))
+		dst.reserve(dst.length() + src.length());
 
-	if (FileName == Destination)
+	bool last_separator = (!dst.empty() && dst.back() == FS_OSPATH_SEPARATOR_CHARACTER);
+
+	size_t index = 0;
+	
+#ifdef _WIN32
+	// special case for UNC paths here
+	if (dst.empty() && src.length() >= 3 && src[0] == '\\' && src[1] == '\\' && src[2] != '\\')
 	{
-		for (i = 0; i < fileNameLength; i++)
-		{
-			if (!FileSystemCharacterIsSane(FileName[i], StripSlashes))
-				Destination[i] = '_';
-		}
+		dst.append("\\\\");
+		index = 2;
 	}
-	else
+#endif
+
+	for (; index < src.length(); index++)
 	{
-		for (i = 0; i < fileNameLength && i < cbDestination; i++)
+		const char ch = src[index];
+
+#ifdef _WIN32
+		// convert forward slashes to backslashes
+		if (ch == '\\' || ch == '/')
+#else
+		if (ch == '/')
+#endif
 		{
-			if (FileSystemCharacterIsSane(FileName[i], StripSlashes))
-				Destination[i] = FileName[i];
-			else
-				Destination[i] = '_';
+			if (last_separator)
+				continue;
+			last_separator = true;
+			dst.push_back(FS_OSPATH_SEPARATOR_CHARACTER);
+		}
+		else
+		{
+			last_separator = false;
+			dst.push_back(ch);
 		}
 	}
 }
 
-void FileSystem::SanitizeFileName(std::string& Destination, bool StripSlashes /* = true*/)
+std::string Path::SanitizeFileName(const std::string_view& str, bool strip_slashes /* = true */)
 {
-	const std::size_t len = Destination.length();
-	for (std::size_t i = 0; i < len; i++)
+	std::string ret;
+	ret.reserve(str.length());
+
+	size_t pos = 0;
+	while (pos < str.length())
 	{
-		if (!FileSystemCharacterIsSane(Destination[i], StripSlashes))
-			Destination[i] = '_';
+		char32_t ch;
+		pos += StringUtil::DecodeUTF8(str, pos, &ch);
+		ch = FileSystemCharacterIsSane(ch, strip_slashes) ? ch : U'_';
+		StringUtil::EncodeAndAppendUTF8(ret, ch);
 	}
+
+#ifdef _WIN32
+	// Windows: Can't end filename with a period.
+	if (ret.length() > 0 && ret.back() == '.')
+		ret.back() = '_';
+#endif
+
+	return ret;
 }
 
-bool FileSystem::IsAbsolutePath(const std::string_view& path)
+void Path::SanitizeFileName(std::string* str, bool strip_slashes /* = true */)
+{
+	const size_t len = str->length();
+
+	char small_buf[128];
+	std::unique_ptr<char[]> large_buf;
+	char* str_copy = small_buf;
+	if (len >= std::size(small_buf))
+	{
+		large_buf = std::make_unique<char[]>(len + 1);
+		str_copy = large_buf.get();
+	}
+	std::memcpy(str_copy, str->c_str(), sizeof(char) * (len + 1));
+	str->clear();
+
+	size_t pos = 0;
+	while (pos < len)
+	{
+		char32_t ch;
+		pos += StringUtil::DecodeUTF8(str_copy + pos, pos - len, &ch);
+		ch = FileSystemCharacterIsSane(ch, strip_slashes) ? ch : U'_';
+		StringUtil::EncodeAndAppendUTF8(*str, ch);
+	}
+
+#ifdef _WIN32
+	// Windows: Can't end filename with a period.
+	if (str->length() > 0 && str->back() == '.')
+		str->back() = '_';
+#endif
+}
+
+bool Path::IsAbsolute(const std::string_view& path)
 {
 #ifdef _WIN32
 	return (path.length() >= 3 && ((path[0] >= 'A' && path[0] <= 'Z') || (path[0] >= 'a' && path[0] <= 'z')) &&
-			path[1] == ':' && (path[2] == '/' || path[2] == '\\'));
+			path[1] == ':' && (path[2] == '/' || path[2] == '\\')) || (path.length() >= 3 && path[0] == '\\' && path[1] == '\\');
 #else
 	return (path.length() >= 1 && path[0] == '/');
 #endif
 }
 
-std::string_view FileSystem::GetExtension(const std::string_view& path)
+std::string Path::ToNativePath(const std::string_view& path)
+{
+	std::string ret;
+	PathAppendString(ret, path);
+	
+	// remove trailing slashes
+	if (ret.length() > 1)
+	{
+		while (ret.back() == FS_OSPATH_SEPARATOR_CHARACTER)
+			ret.pop_back();
+	}
+
+	return ret;
+}
+
+void Path::ToNativePath(std::string* path)
+{
+	*path = Path::ToNativePath(*path);
+}
+
+std::string Path::Canonicalize(const std::string_view& path)
+{
+	std::vector<std::string_view> components = Path::SplitNativePath(path);
+	std::vector<std::string_view> new_components;
+	new_components.reserve(components.size());
+	for (const std::string_view& component : components)
+	{
+		if (component == ".")
+		{
+			// current directory, so it can be skipped, unless it's the only component
+			if (components.size() == 1)
+				new_components.push_back(std::move(component));
+		}
+		else if (component == "..")
+		{
+			// parent directory, pop one off if we're not at the beginning, otherwise preserve.
+			if (!new_components.empty())
+				new_components.pop_back();
+			else
+				new_components.push_back(std::move(component));
+		}
+		else
+		{
+			// anything else, preserve
+			new_components.push_back(std::move(component));
+		}
+	}
+
+	return Path::JoinNativePath(new_components);
+}
+
+void Path::Canonicalize(std::string* path)
+{
+	*path = Canonicalize(*path);
+}
+
+std::string Path::MakeRelative(const std::string_view& path, const std::string_view& relative_to)
+{
+	// simple algorithm, we just work on the components. could probably be better, but it'll do for now.
+	std::vector<std::string_view> path_components(SplitNativePath(path));
+	std::vector<std::string_view> relative_components(SplitNativePath(relative_to));
+	std::vector<std::string_view> new_components;
+
+	// both must be absolute paths
+	if (Path::IsAbsolute(path) && Path::IsAbsolute(relative_to))
+	{
+		// find the number of same components
+		size_t num_same = 0;
+		for (size_t i = 0; i < path_components.size() && i < relative_components.size(); i++)
+		{
+			if (path_components[i] == relative_components[i])
+				num_same++;
+			else
+				break;
+		}
+
+		// we need at least one same component
+		if (num_same > 0)
+		{
+			// from the relative_to directory, back up to the start of the common components
+			const size_t num_ups = relative_components.size() - num_same;
+			for (size_t i = 0; i < num_ups; i++)
+				new_components.emplace_back("..");
+
+			// and add the remainder of the path components
+			for (size_t i = num_same; i < path_components.size(); i++)
+				new_components.push_back(std::move(path_components[i]));
+		}
+		else
+		{
+			// no similarity
+			new_components = std::move(path_components);
+		}
+	}
+	else
+	{
+		// not absolute
+		new_components = std::move(path_components);
+	}
+
+	return JoinNativePath(new_components);
+}
+
+std::string_view Path::GetExtension(const std::string_view& path)
 {
 	const std::string_view::size_type pos = path.rfind('.');
 	if (pos == std::string_view::npos)
-		return path;
-
-	return path.substr(pos + 1);
+		return std::string_view();
+	else
+		return path.substr(pos + 1);
 }
 
-std::string_view FileSystem::StripExtension(const std::string_view& path)
+std::string_view Path::StripExtension(const std::string_view& path)
 {
 	const std::string_view::size_type pos = path.rfind('.');
 	if (pos == std::string_view::npos)
@@ -150,7 +319,7 @@ std::string_view FileSystem::StripExtension(const std::string_view& path)
 	return path.substr(0, pos);
 }
 
-std::string FileSystem::ReplaceExtension(const std::string_view& path, const std::string_view& new_extension)
+std::string Path::ReplaceExtension(const std::string_view& path, const std::string_view& new_extension)
 {
 	const std::string_view::size_type pos = path.rfind('.');
 	if (pos == std::string_view::npos)
@@ -183,10 +352,10 @@ static std::string_view::size_type GetLastSeperatorPosition(const std::string_vi
 
 std::string FileSystem::GetDisplayNameFromPath(const std::string_view& path)
 {
-	return std::string(GetFileNameFromPath(path));
+	return std::string(Path::GetFileName(path));
 }
 
-std::string_view FileSystem::GetPathDirectory(const std::string_view& path)
+std::string_view Path::GetDirectory(const std::string_view& path)
 {
 	const std::string::size_type pos = GetLastSeperatorPosition(path, false);
 	if (pos == std::string_view::npos)
@@ -195,7 +364,7 @@ std::string_view FileSystem::GetPathDirectory(const std::string_view& path)
 	return path.substr(0, pos);
 }
 
-std::string_view FileSystem::GetFileNameFromPath(const std::string_view& path)
+std::string_view Path::GetFileName(const std::string_view& path)
 {
 	const std::string_view::size_type pos = GetLastSeperatorPosition(path, true);
 	if (pos == std::string_view::npos)
@@ -204,9 +373,9 @@ std::string_view FileSystem::GetFileNameFromPath(const std::string_view& path)
 	return path.substr(pos);
 }
 
-std::string_view FileSystem::GetFileTitleFromPath(const std::string_view& path)
+std::string_view Path::GetFileTitle(const std::string_view& path)
 {
-	const std::string_view filename(GetFileNameFromPath(path));
+	const std::string_view filename(GetFileName(path));
 	const std::string::size_type pos = filename.rfind('.');
 	if (pos == std::string_view::npos)
 		return filename;
@@ -214,11 +383,167 @@ std::string_view FileSystem::GetFileTitleFromPath(const std::string_view& path)
 	return filename.substr(0, pos);
 }
 
+std::string Path::ChangeFileName(const std::string_view& path, const std::string_view& new_filename)
+{
+	std::string ret;
+	PathAppendString(ret, path);
+
+	const std::string_view::size_type pos = GetLastSeperatorPosition(ret, true);
+	if (pos == std::string_view::npos)
+	{
+		ret.clear();
+		PathAppendString(ret, new_filename);
+	}
+	else
+	{
+		if (!new_filename.empty())
+		{
+			ret.erase(pos);
+			PathAppendString(ret, new_filename);
+		}
+		else
+		{
+			ret.erase(pos - 1);
+		}
+	}
+
+	return ret;
+}
+
+void Path::ChangeFileName(std::string* path, const std::string_view& new_filename)
+{
+	*path = ChangeFileName(*path, new_filename);
+}
+
+std::string Path::AppendDirectory(const std::string_view& path, const std::string_view& new_dir)
+{
+	std::string ret;
+	if (!new_dir.empty())
+	{
+		const std::string_view::size_type pos = GetLastSeperatorPosition(path, true);
+
+		ret.reserve(path.length() + new_dir.length() + 1);
+		if (pos != std::string_view::npos)
+			PathAppendString(ret, path.substr(0, pos));
+
+		while (!ret.empty() && ret.back() == FS_OSPATH_SEPARATOR_CHARACTER)
+			ret.pop_back();
+
+		if (!ret.empty())
+			ret += FS_OSPATH_SEPARATOR_CHARACTER;
+
+		PathAppendString(ret, new_dir);
+
+		if (pos != std::string_view::npos)
+		{
+			const std::string_view filepart(path.substr(pos));
+			if (!filepart.empty())
+			{
+				ret += FS_OSPATH_SEPARATOR_CHARACTER;
+				PathAppendString(ret, filepart);
+			}
+		}
+		else if (!path.empty())
+		{
+			ret += FS_OSPATH_SEPARATOR_CHARACTER;
+			PathAppendString(ret, path);
+		}
+	}
+	else
+	{
+		PathAppendString(ret, path);
+	}
+
+	return ret;
+}
+
+void Path::AppendDirectory(std::string* path, const std::string_view& new_dir)
+{
+	*path = AppendDirectory(*path, new_dir);
+}
+
+std::vector<std::string_view> Path::SplitWindowsPath(const std::string_view& path)
+{
+	std::vector<std::string_view> parts;
+
+	std::string::size_type start = 0;
+	std::string::size_type pos = 0;
+
+	// preserve unc paths
+	if (path.size() > 2 && path[0] == '\\' && path[1] == '\\')
+		pos = 2;
+
+	while (pos < path.size())
+	{
+		if (path[pos] != '/' && path[pos] != '\\')
+		{
+			pos++;
+			continue;
+		}
+
+		// skip consecutive separators
+		if (pos != start)
+			parts.push_back(path.substr(start, pos - start));
+
+		pos++;
+		start = pos;
+	}
+
+	if (start != pos)
+		parts.push_back(path.substr(start));
+
+	return parts;
+}
+
+std::string Path::JoinWindowsPath(const std::vector<std::string_view>& components)
+{
+	return StringUtil::JoinString(components.begin(), components.end(), '\\');
+}
+
+std::vector<std::string_view> Path::SplitNativePath(const std::string_view& path)
+{
+#ifdef _WIN32
+	return SplitWindowsPath(path);
+#else
+	std::vector<std::string_view> parts;
+
+	std::string::size_type start = 0;
+	std::string::size_type pos = 0;
+	while (pos < path.size())
+	{
+		if (path[pos] != '/')
+		{
+			pos++;
+			continue;
+		}
+
+		// skip consecutive separators
+		// for unix, we create an empty element at the beginning when it's an absolute path
+		// that way, when it's re-joined later, we preserve the starting slash.
+		if (pos != start || pos == 0)
+			parts.push_back(path.substr(start, pos - start));
+
+		pos++;
+		start = pos;
+	}
+
+	if (start != pos)
+		parts.push_back(path.substr(start));
+
+	return parts;
+#endif
+}
+
+std::string Path::JoinNativePath(const std::vector<std::string_view>& components)
+{
+	return StringUtil::JoinString(components.begin(), components.end(), FS_OSPATH_SEPARATOR_CHARACTER);
+}
+
 std::vector<std::string> FileSystem::GetRootDirectoryList()
 {
 	std::vector<std::string> results;
 
-#if defined(_WIN32) && !defined(_UWP)
+#if defined(_WIN32)
 	char buf[256];
 	const DWORD size = GetLogicalDriveStringsA(sizeof(buf), buf);
 	if (size != 0 && size < (sizeof(buf) - 1))
@@ -231,28 +556,6 @@ std::vector<std::string> FileSystem::GetRootDirectoryList()
 			ptr += len + 1u;
 		}
 	}
-#elif defined(_UWP)
-	if (const auto install_location = winrt::Windows::ApplicationModel::Package::Current().InstalledLocation();
-		install_location)
-	{
-		if (const auto path = install_location.Path(); !path.empty())
-			results.push_back(StringUtil::WideStringToUTF8String(path));
-	}
-
-	if (const auto local_location = winrt::Windows::Storage::ApplicationData::Current().LocalFolder(); local_location)
-	{
-		if (const auto path = local_location.Path(); !path.empty())
-			results.push_back(StringUtil::WideStringToUTF8String(path));
-	}
-
-	const auto devices = winrt::Windows::Storage::KnownFolders::RemovableDevices();
-	const auto folders_task(devices.GetFoldersAsync());
-	for (const auto& storage_folder : folders_task.get())
-	{
-		const auto path = storage_folder.Path();
-		if (!path.empty())
-			results.push_back(StringUtil::WideStringToUTF8String(path));
-	}
 #else
 	const char* home_path = std::getenv("HOME");
 	if (home_path)
@@ -264,7 +567,7 @@ std::vector<std::string> FileSystem::GetRootDirectoryList()
 	return results;
 }
 
-std::string FileSystem::BuildRelativePath(const std::string_view& filename, const std::string_view& new_filename)
+std::string Path::BuildRelativePath(const std::string_view& filename, const std::string_view& new_filename)
 {
 	std::string new_string;
 
@@ -275,121 +578,22 @@ std::string FileSystem::BuildRelativePath(const std::string_view& filename, cons
 	return new_string;
 }
 
-std::string FileSystem::JoinPath(const std::string_view& base, const std::string_view& next)
+std::string Path::Combine(const std::string_view& base, const std::string_view& next)
 {
-	// TODO: Rewrite this natively when wxDirName is dropped.
-	return Path::CombineStdString(base, next);
+	std::string ret;
+	ret.reserve(base.length() + next.length() + 1);
+
+	PathAppendString(ret, base);
+	while (!ret.empty() && ret.back() == FS_OSPATH_SEPARATOR_CHARACTER)
+		ret.pop_back();
+
+	ret += FS_OSPATH_SEPARATOR_CHARACTER;
+	PathAppendString(ret, next);
+	while (!ret.empty() && ret.back() == FS_OSPATH_SEPARATOR_CHARACTER)
+		ret.pop_back();
+
+	return ret;
 }
-
-#ifdef _UWP
-static std::FILE* OpenCFileUWP(const wchar_t* wfilename, const wchar_t* mode)
-{
-	DWORD access = 0;
-	DWORD share = 0;
-	DWORD disposition = 0;
-
-	int flags = 0;
-	const wchar_t* tmode = mode;
-	while (*tmode)
-	{
-		if (*tmode == L'r' && *(tmode + 1) == L'+')
-		{
-			access = GENERIC_READ | GENERIC_WRITE;
-			share = 0;
-			disposition = OPEN_EXISTING;
-			flags |= _O_RDWR;
-			tmode += 2;
-		}
-		else if (*tmode == L'w' && *(tmode + 1) == L'+')
-		{
-			access = GENERIC_READ | GENERIC_WRITE;
-			share = 0;
-			disposition = CREATE_ALWAYS;
-			flags |= _O_RDWR | _O_CREAT | _O_TRUNC;
-			tmode += 2;
-		}
-		else if (*tmode == L'a' && *(tmode + 1) == L'+')
-		{
-			access = GENERIC_READ | GENERIC_WRITE;
-			share = 0;
-			disposition = CREATE_ALWAYS;
-			flags |= _O_RDWR | _O_APPEND | _O_CREAT | _O_TRUNC;
-			tmode += 2;
-		}
-		else if (*tmode == L'r')
-		{
-			access = GENERIC_READ;
-			share = 0;
-			disposition = OPEN_EXISTING;
-			flags |= _O_RDONLY;
-			tmode++;
-		}
-		else if (*tmode == L'w')
-		{
-			access = GENERIC_WRITE;
-			share = 0;
-			disposition = CREATE_ALWAYS;
-			flags |= _O_WRONLY | _O_CREAT | _O_TRUNC;
-			tmode++;
-		}
-		else if (*tmode == L'a')
-		{
-			access = GENERIC_READ | GENERIC_WRITE;
-			share = 0;
-			disposition = CREATE_ALWAYS;
-			flags |= _O_WRONLY | _O_APPEND | _O_CREAT | _O_TRUNC;
-			tmode++;
-		}
-		else if (*tmode == L'b')
-		{
-			flags |= _O_BINARY;
-			tmode++;
-		}
-		else if (*tmode == L'S')
-		{
-			flags |= _O_SEQUENTIAL;
-			tmode++;
-		}
-		else if (*tmode == L'R')
-		{
-			flags |= _O_RANDOM;
-			tmode++;
-		}
-		else
-		{
-			Log_ErrorPrintf("Unknown mode flags: '%s'", StringUtil::WideStringToUTF8String(mode).c_str());
-			return nullptr;
-		}
-	}
-
-	HANDLE hFile = CreateFileFromAppW(wfilename, access, share, nullptr, disposition, 0, nullptr);
-	if (hFile == INVALID_HANDLE_VALUE)
-		return nullptr;
-
-	if (flags & _O_APPEND && !SetFilePointerEx(hFile, LARGE_INTEGER{}, nullptr, FILE_END))
-	{
-		Log_ErrorPrintf("SetFilePointerEx() failed: %08X", GetLastError());
-		CloseHandle(hFile);
-		return nullptr;
-	}
-
-	int fd = _open_osfhandle(reinterpret_cast<intptr_t>(hFile), flags);
-	if (fd < 0)
-	{
-		CloseHandle(hFile);
-		return nullptr;
-	}
-
-	std::FILE* fp = _wfdopen(fd, mode);
-	if (!fp)
-	{
-		_close(fd);
-		return nullptr;
-	}
-
-	return fp;
-}
-#endif // _UWP
 
 std::FILE* FileSystem::OpenCFile(const char* filename, const char* mode)
 {
@@ -400,13 +604,7 @@ std::FILE* FileSystem::OpenCFile(const char* filename, const char* mode)
 	{
 		std::FILE* fp;
 		if (_wfopen_s(&fp, wfilename.c_str(), wmode.c_str()) != 0)
-		{
-#ifdef _UWP
-			return OpenCFileUWP(wfilename.c_str(), wmode.c_str());
-#else
 			return nullptr;
-#endif
-		}
 
 		return fp;
 	}
@@ -426,10 +624,7 @@ int FileSystem::OpenFDFile(const char* filename, int flags, int mode)
 #ifdef _WIN32
 	const std::wstring wfilename(StringUtil::UTF8StringToWideString(filename));
 	if (!wfilename.empty())
-	{
-		// TODO: UWP
 		return _wopen(wfilename.c_str(), flags, mode);
-	}
 
 	return -1;
 #else
@@ -440,6 +635,47 @@ int FileSystem::OpenFDFile(const char* filename, int flags, int mode)
 FileSystem::ManagedCFilePtr FileSystem::OpenManagedCFile(const char* filename, const char* mode)
 {
 	return ManagedCFilePtr(OpenCFile(filename, mode), [](std::FILE* fp) { std::fclose(fp); });
+}
+
+std::FILE* FileSystem::OpenSharedCFile(const char* filename, const char* mode, FileShareMode share_mode)
+{
+#ifdef _WIN32
+	const std::wstring wfilename(StringUtil::UTF8StringToWideString(filename));
+	const std::wstring wmode(StringUtil::UTF8StringToWideString(mode));
+	if (wfilename.empty() || wmode.empty())
+		return nullptr;
+
+	int share_flags = 0;
+	switch (share_mode)
+	{
+		case FileShareMode::DenyNone:
+			share_flags = _SH_DENYNO;
+			break;
+		case FileShareMode::DenyRead:
+			share_flags = _SH_DENYRD;
+			break;
+		case FileShareMode::DenyWrite:
+			share_flags = _SH_DENYWR;
+			break;
+		case FileShareMode::DenyReadWrite:
+		default:
+			share_flags = _SH_DENYRW;
+			break;
+	}
+
+	std::FILE* fp = _wfsopen(wfilename.c_str(), wmode.c_str(), share_flags);
+	if (fp)
+		return fp;
+
+	return nullptr;
+#else
+	return std::fopen(filename, mode);
+#endif
+}
+
+FileSystem::ManagedCFilePtr FileSystem::OpenManagedSharedCFile(const char* filename, const char* mode, FileShareMode share_mode)
+{
+	return ManagedCFilePtr(OpenSharedCFile(filename, mode, share_mode), [](std::FILE* fp) { std::fclose(fp); });
 }
 
 int FileSystem::FSeek64(std::FILE* fp, s64 offset, int whence)
@@ -504,7 +740,7 @@ std::optional<std::vector<u8>> FileSystem::ReadBinaryFile(const char* filename)
 std::optional<std::vector<u8>> FileSystem::ReadBinaryFile(std::FILE* fp)
 {
 	std::fseek(fp, 0, SEEK_END);
-	long size = std::ftell(fp);
+	const long size = std::ftell(fp);
 	std::fseek(fp, 0, SEEK_SET);
 	if (size < 0)
 		return std::nullopt;
@@ -528,13 +764,14 @@ std::optional<std::string> FileSystem::ReadFileToString(const char* filename)
 std::optional<std::string> FileSystem::ReadFileToString(std::FILE* fp)
 {
 	std::fseek(fp, 0, SEEK_END);
-	long size = std::ftell(fp);
+	const long size = std::ftell(fp);
 	std::fseek(fp, 0, SEEK_SET);
 	if (size < 0)
 		return std::nullopt;
 
 	std::string res;
 	res.resize(static_cast<size_t>(size));
+	// NOTE - assumes mode 'rb', for example, this will fail over missing Windows carriage return bytes
 	if (size > 0 && std::fread(res.data(), 1u, static_cast<size_t>(size), fp) != static_cast<size_t>(size))
 		return std::nullopt;
 
@@ -553,7 +790,7 @@ bool FileSystem::WriteBinaryFile(const char* filename, const void* data, size_t 
 	return true;
 }
 
-bool FileSystem::WriteFileToString(const char* filename, const std::string_view& sv)
+bool FileSystem::WriteStringToFile(const char* filename, const std::string_view& sv)
 {
 	ManagedCFilePtr fp = OpenManagedCFile(filename, "wb");
 	if (!fp)
@@ -563,6 +800,81 @@ bool FileSystem::WriteFileToString(const char* filename, const std::string_view&
 		return false;
 
 	return true;
+}
+
+bool FileSystem::EnsureDirectoryExists(const char* path, bool recursive)
+{
+	if (FileSystem::DirectoryExists(path))
+		return true;
+
+	// if it fails to create, we're not going to be able to use it anyway
+	return FileSystem::CreateDirectoryPath(path, recursive);
+}
+
+bool FileSystem::RecursiveDeleteDirectory(const char* path)
+{
+	FindResultsArray results;
+	if (FindFiles(path, "*", FILESYSTEM_FIND_FILES | FILESYSTEM_FIND_FOLDERS | FILESYSTEM_FIND_HIDDEN_FILES, &results))
+	{
+		for (const FILESYSTEM_FIND_DATA& fd : results)
+		{
+			if (fd.Attributes & FILESYSTEM_FILE_ATTRIBUTE_DIRECTORY)
+			{
+				if (!RecursiveDeleteDirectory(fd.FileName.c_str()))
+					return false;
+			}
+			else
+			{
+				if (!DeleteFilePath(fd.FileName.c_str()))
+					return false;
+			}
+		}
+	}
+
+	return DeleteDirectory(path);
+}
+
+bool FileSystem::CopyFilePath(const char* source, const char* destination, bool replace)
+{
+#ifndef _WIN32
+	// TODO: There's technically a race here between checking and opening the file..
+	// But fopen doesn't specify any way to say "don't create if it exists"...
+	if (!replace && FileExists(destination))
+		return false;
+
+	auto in_fp = OpenManagedCFile(source, "rb");
+	if (!in_fp)
+		return false;
+
+	auto out_fp = OpenManagedCFile(destination, "wb");
+	if (!out_fp)
+		return false;
+
+	u8 buf[4096];
+	while (!std::feof(in_fp.get()))
+	{
+		size_t bytes_in = std::fread(buf, 1, sizeof(buf), in_fp.get());
+		if ((bytes_in == 0 && !std::feof(in_fp.get())) ||
+			(bytes_in > 0 && std::fwrite(buf, 1, bytes_in, out_fp.get()) != bytes_in))
+		{
+			out_fp.reset();
+			DeleteFilePath(destination);
+			return false;
+		}
+	}
+
+	if (std::fflush(out_fp.get()) != 0)
+	{
+		out_fp.reset();
+		DeleteFilePath(destination);
+		return false;
+	}
+
+	return true;
+#else
+	return CopyFileW(StringUtil::UTF8StringToWideString(source).c_str(),
+		StringUtil::UTF8StringToWideString(destination).c_str(), !replace);
+#endif
 }
 
 #ifdef _WIN32
@@ -579,19 +891,6 @@ static u32 TranslateWin32Attributes(u32 Win32Attributes)
 		r |= FILESYSTEM_FILE_ATTRIBUTE_COMPRESSED;
 
 	return r;
-}
-
-static DWORD WrapGetFileAttributes(const wchar_t* path)
-{
-#ifndef _UWP
-	return GetFileAttributesW(path);
-#else
-	WIN32_FILE_ATTRIBUTE_DATA fad;
-	if (!GetFileAttributesExFromAppW(path, GetFileExInfoStandard, &fad))
-		return INVALID_FILE_ATTRIBUTES;
-
-	return fad.dwFileAttributes;
-#endif
 }
 
 static u32 RecursiveFindFiles(const char* origin_path, const char* parent_path, const char* path, const char* pattern,
@@ -615,13 +914,7 @@ static u32 RecursiveFindFiles(const char* origin_path, const char* parent_path, 
 	std::string utf8_filename;
 	utf8_filename.reserve((sizeof(wfd.cFileName) / sizeof(wfd.cFileName[0])) * 2);
 
-#ifndef _UWP
 	HANDLE hFind = FindFirstFileW(StringUtil::UTF8StringToWideString(tempStr).c_str(), &wfd);
-#else
-	HANDLE hFind = FindFirstFileExFromAppW(StringUtil::UTF8StringToWideString(tempStr).c_str(), FindExInfoBasic, &wfd,
-		FindExSearchNameMatch, nullptr, 0);
-#endif
-
 	if (hFind == INVALID_HANDLE_VALUE)
 		return 0;
 
@@ -717,6 +1010,7 @@ static u32 RecursiveFindFiles(const char* origin_path, const char* parent_path, 
 				outData.FileName = utf8_filename;
 		}
 
+		outData.CreationTime = ConvertFileTimeToUnixTime(wfd.ftCreationTime);
 		outData.ModificationTime = ConvertFileTimeToUnixTime(wfd.ftLastWriteTime);
 		outData.Size = (static_cast<u64>(wfd.nFileSizeHigh) << 32) | static_cast<u64>(wfd.nFileSizeLow);
 
@@ -802,7 +1096,6 @@ bool FileSystem::StatFile(const char* path, FILESYSTEM_STAT_DATA* sd)
 	if (wpath.empty())
 		return false;
 
-#ifndef _UWP
 	// determine attributes for the path. if it's a directory, things have to be handled differently..
 	DWORD fileAttributes = GetFileAttributesW(wpath.c_str());
 	if (fileAttributes == INVALID_FILE_ATTRIBUTES)
@@ -838,19 +1131,10 @@ bool FileSystem::StatFile(const char* path, FILESYSTEM_STAT_DATA* sd)
 
 	// fill in the stat data
 	sd->Attributes = TranslateWin32Attributes(bhfi.dwFileAttributes);
+	sd->CreationTime = ConvertFileTimeToUnixTime(bhfi.ftCreationTime);
 	sd->ModificationTime = ConvertFileTimeToUnixTime(bhfi.ftLastWriteTime);
 	sd->Size = static_cast<s64>(((u64)bhfi.nFileSizeHigh) << 32 | (u64)bhfi.nFileSizeLow);
 	return true;
-#else
-	WIN32_FILE_ATTRIBUTE_DATA fad;
-	if (!GetFileAttributesExFromAppW(wpath, GetFileExInfoStandard, &fad))
-		return false;
-
-	sd->Attributes = TranslateWin32Attributes(fad.dwFileAttributes);
-	sd->ModificationTime = ConvertFileTimeToUnixTime(fad.ftLastWriteTime);
-	sd->Size = static_cast<s64>(((u64)fad.nFileSizeHigh) << 32 | (u64)fad.nFileSizeLow);
-	return true;
-#endif
 }
 
 bool FileSystem::StatFile(std::FILE* fp, FILESYSTEM_STAT_DATA* sd)
@@ -864,6 +1148,7 @@ bool FileSystem::StatFile(std::FILE* fp, FILESYSTEM_STAT_DATA* sd)
 		return false;
 
 	// parse attributes
+	sd->CreationTime = st.st_ctime;
 	sd->ModificationTime = st.st_mtime;
 	sd->Attributes = 0;
 	if ((st.st_mode & _S_IFMT) == _S_IFDIR)
@@ -890,7 +1175,7 @@ bool FileSystem::FileExists(const char* path)
 		return false;
 
 	// determine attributes for the path. if it's a directory, things have to be handled differently..
-	DWORD fileAttributes = WrapGetFileAttributes(wpath.c_str());
+	DWORD fileAttributes = GetFileAttributesW(wpath.c_str());
 	if (fileAttributes == INVALID_FILE_ATTRIBUTES)
 		return false;
 
@@ -912,7 +1197,7 @@ bool FileSystem::DirectoryExists(const char* path)
 		return false;
 
 	// determine attributes for the path. if it's a directory, things have to be handled differently..
-	DWORD fileAttributes = WrapGetFileAttributes(wpath.c_str());
+	DWORD fileAttributes = GetFileAttributesW(wpath.c_str());
 	if (fileAttributes == INVALID_FILE_ATTRIBUTES)
 		return false;
 
@@ -920,6 +1205,33 @@ bool FileSystem::DirectoryExists(const char* path)
 		return true;
 	else
 		return false;
+}
+
+bool FileSystem::DirectoryIsEmpty(const char* path)
+{
+	std::wstring wpath(StringUtil::UTF8StringToWideString(path));
+	wpath += L"\\*";
+
+	WIN32_FIND_DATAW wfd;
+	HANDLE hFind = FindFirstFileW(wpath.c_str(), &wfd);
+
+	if (hFind == INVALID_HANDLE_VALUE)
+		return true;
+
+	do
+	{
+		if (wfd.cFileName[0] == L'.')
+		{
+			if (wfd.cFileName[1] == L'\0' || (wfd.cFileName[1] == L'.' && wfd.cFileName[2] == L'\0'))
+				continue;
+		}
+
+		FindClose(hFind);
+		return false;
+	} while (FindNextFileW(hFind, &wfd));
+
+	FindClose(hFind);
+	return true;
 }
 
 bool FileSystem::CreateDirectoryPath(const char* Path, bool Recursive)
@@ -930,14 +1242,9 @@ bool FileSystem::CreateDirectoryPath(const char* Path, bool Recursive)
 	if (wpath.empty())
 		return false;
 
-		// try just flat-out, might work if there's no other segments that have to be made
-#ifndef _UWP
+	// try just flat-out, might work if there's no other segments that have to be made
 	if (CreateDirectoryW(wpath.c_str(), nullptr))
 		return true;
-#else
-	if (CreateDirectoryFromAppW(wpath.c_str(), nullptr))
-		return true;
-#endif
 
 	if (!Recursive)
 		return false;
@@ -947,7 +1254,7 @@ bool FileSystem::CreateDirectoryPath(const char* Path, bool Recursive)
 	if (lastError == ERROR_ALREADY_EXISTS)
 	{
 		// check the attributes
-		u32 Attributes = WrapGetFileAttributes(wpath.c_str());
+		u32 Attributes = GetFileAttributesW(wpath.c_str());
 		if (Attributes != INVALID_FILE_ATTRIBUTES && Attributes & FILE_ATTRIBUTE_DIRECTORY)
 			return true;
 		else
@@ -966,11 +1273,7 @@ bool FileSystem::CreateDirectoryPath(const char* Path, bool Recursive)
 		{
 			if (wpath[i] == L'\\' || wpath[i] == L'/')
 			{
-#ifndef _UWP
 				const BOOL result = CreateDirectoryW(tempPath.c_str(), nullptr);
-#else
-				const BOOL result = CreateDirectoryFromAppW(tempPath.c_str(), nullptr);
-#endif
 				if (!result)
 				{
 					lastError = GetLastError();
@@ -990,11 +1293,7 @@ bool FileSystem::CreateDirectoryPath(const char* Path, bool Recursive)
 		// re-create the end if it's not a separator, check / as well because windows can interpret them
 		if (wpath[pathLength - 1] != L'\\' && wpath[pathLength - 1] != L'/')
 		{
-#ifndef _UWP
 			const BOOL result = CreateDirectoryW(wpath.c_str(), nullptr);
-#else
-			const BOOL result = CreateDirectoryFromAppW(wpath.c_str(), nullptr);
-#endif
 			if (!result)
 			{
 				lastError = GetLastError();
@@ -1019,47 +1318,31 @@ bool FileSystem::DeleteFilePath(const char* path)
 		return false;
 
 	const std::wstring wpath(StringUtil::UTF8StringToWideString(path));
-	const DWORD fileAttributes = WrapGetFileAttributes(wpath.c_str());
+	const DWORD fileAttributes = GetFileAttributesW(wpath.c_str());
 	if (fileAttributes == INVALID_FILE_ATTRIBUTES || fileAttributes & FILE_ATTRIBUTE_DIRECTORY)
 		return false;
 
-#ifndef _UWP
 	return (DeleteFileW(wpath.c_str()) == TRUE);
-#else
-	return (DeleteFileFromAppW(wpath.c_str()) == TRUE);
-#endif
 }
 
-bool FileSystem::RenamePath(const char* old_path, const char* new_patah)
+bool FileSystem::RenamePath(const char* old_path, const char* new_path)
 {
 	const std::wstring old_wpath(StringUtil::UTF8StringToWideString(old_path));
-	const std::wstring new_wpath(StringUtil::UTF8StringToWideString(new_patah));
+	const std::wstring new_wpath(StringUtil::UTF8StringToWideString(new_path));
 
-#ifndef _UWP
 	if (!MoveFileExW(old_wpath.c_str(), new_wpath.c_str(), MOVEFILE_REPLACE_EXISTING))
 	{
-		Console.Error("MoveFileEx('%s', '%s') failed: %08X", old_path, new_patah, GetLastError());
+		Console.Error("MoveFileEx('%s', '%s') failed: %08X", old_path, new_path, GetLastError());
 		return false;
 	}
-#else
-	// try moving if it doesn't exist, since ReplaceFile fails on non-existing destinations
-	if (WrapGetFileAttributes(new_wpath.c_str()) != INVALID_FILE_ATTRIBUTES)
-	{
-		if (!DeleteFileFromAppW(new_wpath.c_str()))
-		{
-			Log_ErrorPrintf("DeleteFileFromAppW('%s') failed: %08X", new_wpath.c_str(), GetLastError());
-			return false;
-		}
-	}
-
-	if (!MoveFileFromAppW(old_wpath.c_str(), new_wpath.c_str()))
-	{
-		Log_ErrorPrintf("MoveFileFromAppW('%s', '%s') failed: %08X", old_path, new_patah, GetLastError());
-		return false;
-	}
-#endif
 
 	return true;
+}
+
+bool FileSystem::DeleteDirectory(const char* path)
+{
+	const std::wstring wpath(StringUtil::UTF8StringToWideString(path));
+	return RemoveDirectoryW(wpath.c_str());
 }
 
 std::string FileSystem::GetProgramPath()
@@ -1069,10 +1352,8 @@ std::string FileSystem::GetProgramPath()
 
 	// Fall back to the main module if this fails.
 	HMODULE module = nullptr;
-#ifndef _UWP
 	GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
 		reinterpret_cast<LPCWSTR>(&GetProgramPath), &module);
-#endif
 
 	for (;;)
 	{
@@ -1109,6 +1390,45 @@ bool FileSystem::SetWorkingDirectory(const char* path)
 {
 	const std::wstring wpath(StringUtil::UTF8StringToWideString(path));
 	return (SetCurrentDirectoryW(wpath.c_str()) == TRUE);
+}
+
+bool FileSystem::SetPathCompression(const char* path, bool enable)
+{
+	const std::wstring wpath(StringUtil::UTF8StringToWideString(path));
+	const DWORD attrs = GetFileAttributesW(wpath.c_str());
+	if (attrs == INVALID_FILE_ATTRIBUTES)
+		return false;
+
+	const bool isCompressed = (attrs & FILE_ATTRIBUTE_COMPRESSED) != 0;
+	if (enable == isCompressed)
+	{
+		// already compressed/not compressed
+		return true;
+	}
+
+	const bool isFile = !(attrs & FILE_ATTRIBUTE_DIRECTORY);
+	const DWORD flags = isFile ? FILE_ATTRIBUTE_NORMAL : (FILE_FLAG_BACKUP_SEMANTICS | FILE_ATTRIBUTE_DIRECTORY);
+
+	const HANDLE handle = CreateFileW(wpath.c_str(),
+		FILE_GENERIC_WRITE | FILE_GENERIC_READ,
+		FILE_SHARE_READ | FILE_SHARE_DELETE,
+		nullptr,
+		OPEN_EXISTING,
+		flags,
+		nullptr);
+	if (handle == INVALID_HANDLE_VALUE)
+		return false;
+
+	DWORD bytesReturned = 0;
+	DWORD compressMode = enable ? COMPRESSION_FORMAT_DEFAULT : COMPRESSION_FORMAT_NONE;
+
+	bool result = DeviceIoControl(
+		handle, FSCTL_SET_COMPRESSION,
+		&compressMode, 2, nullptr, 0,
+		&bytesReturned, nullptr);
+
+	CloseHandle(handle);
+	return result;
 }
 
 #else
@@ -1206,6 +1526,7 @@ static u32 RecursiveFindFiles(const char* OriginPath, const char* ParentPath, co
 		}
 
 		outData.Size = static_cast<u64>(sDir.st_size);
+		outData.CreationTime = sDir.st_ctime;
 		outData.ModificationTime = sDir.st_mtime;
 
 		// match the filename
@@ -1260,7 +1581,7 @@ bool FileSystem::FindFiles(const char* Path, const char* Pattern, u32 Flags, Fin
 
 bool FileSystem::StatFile(const char* path, struct stat* st)
 {
-	return stat(path, st);
+	return stat(path, st) == 0;
 }
 
 bool FileSystem::StatFile(std::FILE* fp, struct stat* st)
@@ -1269,7 +1590,7 @@ bool FileSystem::StatFile(std::FILE* fp, struct stat* st)
 	if (fd < 0)
 		return false;
 
-	return fstat(fd, st);
+	return fstat(fd, st) == 0;
 }
 
 bool FileSystem::StatFile(const char* path, FILESYSTEM_STAT_DATA* sd)
@@ -1289,6 +1610,7 @@ bool FileSystem::StatFile(const char* path, FILESYSTEM_STAT_DATA* sd)
 		return false;
 
 	// parse attributes
+	sd->CreationTime = sysStatData.st_ctime;
 	sd->ModificationTime = sysStatData.st_mtime;
 	sd->Attributes = 0;
 	if (S_ISDIR(sysStatData.st_mode))
@@ -1321,6 +1643,7 @@ bool FileSystem::StatFile(std::FILE* fp, FILESYSTEM_STAT_DATA* sd)
 		return false;
 
 	// parse attributes
+	sd->CreationTime = sysStatData.st_ctime;
 	sd->ModificationTime = sysStatData.st_mtime;
 	sd->Attributes = 0;
 	if (S_ISDIR(sysStatData.st_mode))
@@ -1378,6 +1701,30 @@ bool FileSystem::DirectoryExists(const char* path)
 		return true;
 	else
 		return false;
+}
+
+bool FileSystem::DirectoryIsEmpty(const char* path)
+{
+	DIR* pDir = opendir(path);
+	if (pDir == nullptr)
+		return true;
+
+	// iterate results
+	struct dirent* pDirEnt;
+	while ((pDirEnt = readdir(pDir)) != nullptr)
+	{
+		if (pDirEnt->d_name[0] == '.')
+		{
+			if (pDirEnt->d_name[1] == '\0' || (pDirEnt->d_name[1] == '.' && pDirEnt->d_name[2] == '\0'))
+				continue;
+		}
+
+		closedir(pDir);
+		return false;
+	}
+
+	closedir(pDir);
+	return true;
 }
 
 bool FileSystem::CreateDirectoryPath(const char* path, bool recursive)
@@ -1475,6 +1822,18 @@ bool FileSystem::RenamePath(const char* old_path, const char* new_path)
 	return true;
 }
 
+bool FileSystem::DeleteDirectory(const char* path)
+{
+	if (path[0] == '\0')
+		return false;
+
+	struct stat sysStatData;
+	if (stat(path, &sysStatData) != 0 || !S_ISDIR(sysStatData.st_mode))
+		return false;
+
+	return (unlink(path) == 0);
+}
+
 std::string FileSystem::GetProgramPath()
 {
 #if defined(__linux__)
@@ -1564,6 +1923,11 @@ std::string FileSystem::GetWorkingDirectory()
 bool FileSystem::SetWorkingDirectory(const char* path)
 {
 	return (chdir(path) == 0);
+}
+
+bool FileSystem::SetPathCompression(const char* path, bool enable)
+{
+	return false;
 }
 
 #endif

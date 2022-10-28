@@ -139,12 +139,25 @@ void LayeredSettingsInterface::SetDoubleValue(const char* section, const char* k
 
 void LayeredSettingsInterface::SetBoolValue(const char* section, const char* key, bool value)
 {
-	pxFailRel("Attempt to call SetBoolValue() on layered settings interface"); 
+	pxFailRel("Attempt to call SetBoolValue() on layered settings interface");
 }
 
 void LayeredSettingsInterface::SetStringValue(const char* section, const char* key, const char* value)
 {
 	pxFailRel("Attempt to call SetStringValue() on layered settings interface");
+}
+
+bool LayeredSettingsInterface::ContainsValue(const char* section, const char* key) const
+{
+	for (u32 layer = FIRST_LAYER; layer <= LAST_LAYER; layer++)
+	{
+		if (SettingsInterface* sif = m_layers[layer]; sif != nullptr)
+		{
+			if (sif->ContainsValue(key, section))
+				return true;
+		}
+	}
+	return false;
 }
 
 void LayeredSettingsInterface::DeleteValue(const char* section, const char* key)
@@ -157,7 +170,7 @@ void LayeredSettingsInterface::ClearSection(const char* section)
 	pxFailRel("Attempt to call ClearSection() on layered settings interface");
 }
 
-std::vector<std::string> LayeredSettingsInterface::GetStringList(const char* section, const char* key)
+std::vector<std::string> LayeredSettingsInterface::GetStringList(const char* section, const char* key) const
 {
 	std::vector<std::string> ret;
 

@@ -15,9 +15,9 @@
 
 #pragma once
 #include <wx/wx.h>
-#include "common/PersistentThread.h"
 #include "DebugTools/DebugInterface.h"
 #include "DebugTools/DisassemblyManager.h"
+#include "gui/PersistentThread.h"
 
 enum class SEARCHTYPE
 {
@@ -87,7 +87,7 @@ private:
 
 	void Search(wxCommandEvent& evt);
 	const u8 SEARCHTYPEBITS[8] = {8,16,32,64,32,64,0};
-	
+
 	DebugInterface* cpu;
 	wxFont font, underlineFont;
 	wxTextCtrl* txtSearch;

@@ -16,6 +16,7 @@
 #pragma once
 
 #include <map> // used by BaseBlockEx
+#include "common/Assertions.h"
 
 // Every potential jump point in the PS2's addressable memory has a BASEBLOCK
 // associated with it. So that means a BASEBLOCK for every 4 bytes of PS2
@@ -255,8 +256,4 @@ static inline void recLUT_SetPage(uptr reclut[0x10000], u32 hwlut[0x10000],
 		hwlut[page] = 0u - (pagebase << 16);
 }
 
-#if defined(_M_X86_64)
 static_assert(sizeof(BASEBLOCK) == 8, "BASEBLOCK is not 8 bytes");
-#else
-static_assert(sizeof(BASEBLOCK) == 4, "BASEBLOCK is not 4 bytes");
-#endif

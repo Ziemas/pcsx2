@@ -134,8 +134,8 @@ void Panels::BiosSelectorPanel::Apply()
 	if (sel == wxNOT_FOUND)
 	{
 		throw Exception::CannotApplySettings(this)
-			.SetDiagMsg(L"User did not specify a valid BIOS selection.")
-			.SetUserMsg(pxE(L"Please select a valid BIOS.  If you are unable to make a valid selection then press Cancel to close the Configuration panel."));
+			.SetDiagMsg("User did not specify a valid BIOS selection.")
+			.SetUserMsg("Please select a valid BIOS.  If you are unable to make a valid selection then press Cancel to close the Configuration panel.");
 	}
 
 	g_Conf->EmuOptions.BaseFilenames.Bios = StringUtil::wxStringToUTF8String(wxFileName((*m_BiosList)[(sptr)m_ComboBox->GetClientData(sel)]).GetFullName());
@@ -214,7 +214,7 @@ void Panels::BiosSelectorPanel::OnEnumComplete(wxCommandEvent& evt)
 		if (currentBios == (*m_BiosList)[result.second])
 			m_ComboBox->SetSelection(sel);
 	}
-	// Select a bios if one isn't selected. 
+	// Select a bios if one isn't selected.
 	// This makes it so users don't _have_ to click on their bios,
 	// possibly reducing confusion.
 	if(m_ComboBox->GetSelection() == -1 && m_ComboBox->GetCount() > 0)

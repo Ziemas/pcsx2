@@ -38,6 +38,18 @@ const char* EnumToString(SSE_RoundMode sse)
 	}
 }
 
+SSE_MXCSR SSE_MXCSR::GetCurrent()
+{
+	SSE_MXCSR ret;
+	ret.bitmask = _mm_getcsr();
+	return ret;
+}
+
+void SSE_MXCSR::SetCurrent(const SSE_MXCSR& value)
+{
+	_mm_setcsr(value.bitmask);
+}
+
 SSE_RoundMode SSE_MXCSR::GetRoundMode() const
 {
 	return (SSE_RoundMode)RoundingControl;
@@ -93,9 +105,8 @@ namespace x86Emitter
 	//
 	__emitinline void SimdPrefix(u8 prefix, u16 opcode)
 	{
-#ifdef __M_X86_64
 		pxAssertMsg(prefix == 0, "REX prefix must be just before the opcode");
-#endif
+
 		const bool is16BitOpcode = ((opcode & 0xff) == 0x38) || ((opcode & 0xff) == 0x3a);
 
 		// If the lower byte is not a valid prefix and the upper byte is non-zero it

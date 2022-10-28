@@ -46,12 +46,6 @@ class GSSetupPrimCodeGenerator2 : public GSNewCodeGenerator
 
 	constexpr static int dsize = isXmm ? 4 : 8;
 
-	constexpr static int _32_args = 0;
-	constexpr static int _invalid = 0xaaaaaaaa;
-	constexpr static int _32_vertex = is64 ? _invalid : _32_args + 4;
-	constexpr static int _32_index  = is64 ? _invalid : _32_args + 8;
-	constexpr static int _32_dscan  = is64 ? _invalid : _32_args + 12;
-
 	GSScanlineSelector m_sel;
 	GSScanlineLocalData& m_local;
 	bool m_rip;
@@ -75,6 +69,8 @@ public:
 private:
 	/// Broadcast 128 bits of floats from memory to the whole register, whatever size that register might be
 	void broadcastf128(const XYm& reg, const Xbyak::Address& mem);
+	/// Broadcast a 32-bit float to the whole register, whatever size that register might be
+	void broadcastss(const XYm& reg, const Xbyak::Address& mem);
 
 	void Depth_XMM();
 	void Depth_YMM();

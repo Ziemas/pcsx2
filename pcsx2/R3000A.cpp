@@ -15,12 +15,21 @@
 
 
 #include "PrecompiledHeader.h"
-#include "IopCommon.h"
+#include "R3000A.h"
+#include "Common.h"
 
+#include "SPU2/SPU2.h"
 #include "Sio.h"
 #include "Sif.h"
 #include "DebugTools/Breakpoints.h"
 #include "R5900OpcodeTables.h"
+#include "IopSio2.h"
+#include "IopCounters.h"
+#include "IopBios.h"
+#include "IopHw.h"
+#include "IopDma.h"
+#include "CDVD/Ps1CD.h"
+#include "CDVD/CDVD.h"
 
 using namespace R3000A;
 
@@ -42,8 +51,6 @@ s32 iopBreak = 0;
 // tracks the IOP's current sync status with the EE.  When it dips below zero,
 // control is returned to the EE.
 s32 iopCycleEE = -1;
-
-bool iopBreakpoint = 0;
 
 // Used to signal to the EE when important actions that need IOP-attention have
 // happened (hsyncs, vsyncs, IOP exceptions, etc).  IOP runs code whenever this
@@ -76,7 +83,7 @@ void psxShutdown() {
 	//psxCpu->Shutdown();
 }
 
-void __fastcall psxException(u32 code, u32 bd)
+void psxException(u32 code, u32 bd)
 {
 //	PSXCPU_LOG("psxException %x: %x, %x", code, psxHu32(0x1070), psxHu32(0x1074));
 	//Console.WriteLn("!! psxException %x: %x, %x", code, psxHu32(0x1070), psxHu32(0x1074));
@@ -176,6 +183,8 @@ static __fi void _psxTestInterrupts()
 	IopTestEvent(IopEvt_SIF0,		sif0Interrupt);	// SIF0
 	IopTestEvent(IopEvt_SIF1,		sif1Interrupt);	// SIF1
 	IopTestEvent(IopEvt_SIF2,		sif2Interrupt);	// SIF2
+	IopTestEvent(IopEvt_SPU0DMA,	SPU::RunDMA4);	// SPU0
+	IopTestEvent(IopEvt_SPU1DMA,	SPU::RunDMA7);	// SPU1
 	// Originally controlled by a preprocessor define, now PSX dependent.
 	if (psxHu32(HW_ICFG) & (1 << 3)) IopTestEvent(IopEvt_SIO, sioInterruptR);
 	IopTestEvent(IopEvt_CdvdRead,	cdvdReadInterrupt);
