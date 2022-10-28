@@ -23,12 +23,16 @@
 #include "Voice.h"
 #include "Util.h"
 
+#include <immintrin.h>
+
 namespace SPU
 {
 	static constexpr u32 NUM_VOICES = 24;
 
 	class SPUCore
 	{
+		friend class Voice;
+
 	public:
 		enum class OutBuf
 		{
@@ -220,8 +224,8 @@ namespace SPU
 		VolumePair m_MVOL{};
 
 		PlainVolReg m_EVOL{0};
-        PlainVolReg m_AVOL{0};
-        PlainVolReg m_BVOL{0};
+		PlainVolReg m_AVOL{0};
+		PlainVolReg m_BVOL{0};
 
 		//u32 m_KeyOn{0};
 		//u32 m_KeyOff{0};
@@ -233,6 +237,49 @@ namespace SPU
 		Reg32 m_VMIXR{0};
 		Reg32 m_VMIXEL{0};
 		Reg32 m_VMIXER{0};
+
+		struct alignas(32) SPUVec
+		{
+			union
+			{
+				std::array<u16, NUM_VOICES> as_ushort;
+				std::array<s16, NUM_VOICES> as_short;
+				__m256i as_vec[2];
+			};
+
+			s16 sum()
+			{
+				__m256i ymm0 = _mm256_adds_epi16(as_vec[0], as_vec[1]);
+
+				__m128i xmm0 = _mm256_extractf128_si256(ymm0, 0);
+				__m128i xmm1 = _mm256_extractf128_si256(ymm0, 1);
+				xmm0 = _mm_adds_epi16(xmm0, xmm1);
+
+				xmm1 = _mm_shuffle_epi32(xmm0, 0x1b);
+				xmm0 = _mm_adds_epi16(xmm0, xmm1);
+
+				xmm1 = _mm_shuffle_epi32(xmm0, 0x1);
+				xmm0 = _mm_adds_epi16(xmm0, xmm1);
+
+				xmm1 = _mm_shufflelo_epi16(xmm0, 0x1);
+				xmm0 = _mm_adds_epi16(xmm0, xmm1);
+
+				return (s16)(_mm_cvtsi128_si32(xmm0) & 0xffff);
+			}
+		};
+
+		GSVector8i m_ENVX[2]{};
+		GSVector8i m_VC_OUT[2]{};
+
+		GSVector8i m_VC_VOLL[2]{};
+		GSVector8i m_VC_VOLR[2]{};
+
+		GSVector8i m_vMMIX[2]{};
+
+		GSVector8i m_vVMIXL[2]{};
+		GSVector8i m_vVMIXR[2]{};
+		GSVector8i m_vVMIXEL[2]{};
+		GSVector8i m_vVMIXER[2]{};
 
 		// clang-format off
 		std::array<Voice, NUM_VOICES> m_voices = {{

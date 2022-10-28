@@ -47,7 +47,7 @@ namespace SPU
 		for (double n : table)
 			sum += n;
 		double scale = 0x7f80 * 128 / sum;
-		for (double & n : table)
+		for (double& n : table)
 			n *= scale;
 		for (u32 phase = 0; phase < 256; phase++)
 		{
@@ -142,13 +142,13 @@ namespace SPU
 			m_LSA.full = m_NAX.full & ~0x7;
 	}
 
-	AudioSample Voice::GenSample()
+	void Voice::GenSample()
 	{
 		if (m_KeyOff)
 		{
 			m_KeyOff = false;
 			m_ADSR.Release();
-			Console.WriteLn("SPU[%d]:VOICE[%d] Key Off", m_SPU.m_Id, m_Id);
+			//Console.WriteLn("SPU[%d]:VOICE[%d] Key Off", m_SPU.m_Id, m_Id);
 		}
 		if (m_KeyOn)
 		{
@@ -164,7 +164,7 @@ namespace SPU
 			m_DecodeHist2 = 0;
 			m_DecodeBuf.Reset();
 			m_CustomLoop = false;
-			Console.WriteLn("SPU[%d]:VOICE[%d] Key On, SSA %08x", m_SPU.m_Id, m_Id, m_SSA);
+			//Console.WriteLn("SPU[%d]:VOICE[%d] Key On, SSA %08x", m_SPU.m_Id, m_Id, m_SSA);
 		}
 
 		DecodeSamples();
@@ -205,22 +205,16 @@ namespace SPU
 			m_DecodeBuf.Pop();
 		}
 
-		sample = ApplyVolume(sample, m_ADSR.Level());
+		s32 group = m_Id >> 4;
+		s32 index = m_Id - (group * 16);
 
-		m_Out = sample;
-
-		if (m_Id == 1)
-			m_SPU.MemOut(SPUCore::OutBuf::Voice1, sample);
-		if (m_Id == 3)
-			m_SPU.MemOut(SPUCore::OutBuf::Voice3, sample);
-
-		s16 left = ApplyVolume(sample, m_Volume.left.GetCurrent());
-		s16 right = ApplyVolume(sample, m_Volume.right.GetCurrent());
+		m_SPU.m_VC_OUT[group].I16[index] = sample;
+		m_SPU.m_ENVX[group].I16[index] = m_ADSR.Level();
+		m_SPU.m_VC_VOLL[group].I16[index] = m_Volume.left.GetCurrent();
+		m_SPU.m_VC_VOLR[group].I16[index] = m_Volume.right.GetCurrent();
 
 		m_ADSR.Run();
 		m_Volume.Run();
-
-		return AudioSample(left, right);
 	}
 
 	u16 Voice::Read(u32 addr) const

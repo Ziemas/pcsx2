@@ -17,28 +17,50 @@
 
 #include "common/Bitfield.h"
 #include "common/Pcsx2Types.h"
+#include "GS/GSVector.h"
 #include "Envelope.h"
 #include <algorithm>
 
 namespace SPU
 {
-	__fi static void SET_HIGH(u32& number, u32 upper) { number = (number & 0x0000FFFF) | upper << 16; }
-	__fi static void SET_LOW(u32& number, u32 low) { number = (number & 0xFFFF0000) | low; }
-	__fi static u32 GET_HIGH(u32 number) { return (number & 0xFFFF0000) >> 16; }
-	__fi static u32 GET_LOW(u32 number) { return number & 0x0000FFFF; }
-	__fi static u32 GET_BIT(u32 idx, u32 value) { return (value >> idx) & 1; }
-	__fi static void SET_BIT(u32& number, u32 idx) { number |= (1 << idx); }
+	static __fi void SET_HIGH(u32& number, u32 upper) { number = (number & 0x0000FFFF) | upper << 16; }
+	static __fi void SET_LOW(u32& number, u32 low) { number = (number & 0xFFFF0000) | low; }
+	static __fi u32 GET_HIGH(u32 number) { return (number & 0xFFFF0000) >> 16; }
+	static __fi u32 GET_LOW(u32 number) { return number & 0x0000FFFF; }
+	static __fi u32 GET_BIT(u32 idx, u32 value) { return (value >> idx) & 1; }
+	static __fi void SET_BIT(u32& number, u32 idx) { number |= (1 << idx); }
 
-	__fi static s16 ApplyVolume(s16 sample, s32 volume)
+	static __fi s16 ApplyVolume(s16 sample, s32 volume)
 	{
 		return (sample * volume) >> 15;
 	}
 
-    struct PlainVolReg
-    {
-        s16 left;
-        s16 right;
-    };
+	static __fi s16 hsum(GSVector8i& vec1, GSVector8i& vec2)
+	{
+
+		GSVector8i ymm0 = vec1.adds16(vec2);
+
+		GSVector4i xmm0 = ymm0.extract<0>();
+		GSVector4i xmm1 = ymm0.extract<1>();
+		xmm0 = xmm0.adds16(xmm1);
+
+		xmm1 = xmm0.wzyx();
+		xmm0 = xmm0.adds16(xmm1);
+
+		xmm1 = xmm0.yxxx();
+		xmm0 = xmm0.adds16(xmm1);
+
+		xmm1 = xmm0.yxxxl();
+		xmm0 = xmm0.adds16(xmm1);
+
+		return xmm0.I16[0];
+	}
+
+	struct PlainVolReg
+	{
+		s16 left;
+		s16 right;
+	};
 
 	struct AudioSample
 	{

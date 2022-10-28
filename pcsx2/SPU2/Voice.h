@@ -34,7 +34,7 @@ namespace SPU
 		{
 		}
 
-		AudioSample GenSample();
+		void GenSample();
 
 		[[nodiscard]] u16 Read(u32 addr) const;
 		void Write(u32 addr, u16 value);

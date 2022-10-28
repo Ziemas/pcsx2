@@ -21,7 +21,6 @@
 
 namespace SPU
 {
-
 	std::array<Reg32, 2> SPUCore::m_IRQA = {{{0}, {0}}};
 	std::array<SPUCore::AttrReg, 2> SPUCore::m_ATTR = {{{0}, {0}}};
 	SPUCore::IrqStat SPUCore::m_IRQ = {0};
@@ -34,26 +33,40 @@ namespace SPU
 		MemOut(OutBuf::SINL, input.left);
 		MemOut(OutBuf::SINR, input.right);
 
-		AudioSample VoicesDry(0, 0);
-		AudioSample VoicesWet(0, 0);
-
-		// TODO this is bit ugly isn't it
-		// tempting to do the union thing spu2x does
-		u32 vDryL = m_VMIXL.full;
-		u32 vDryR = m_VMIXR.full;
-		u32 vWetL = m_VMIXEL.full;
-		u32 vWetR = m_VMIXER.full;
 		for (auto& v : m_voices)
 		{
-			auto sample = v.GenSample();
-			VoicesDry.Mix(sample, vDryL & 1, vDryR & 1);
-			VoicesWet.Mix(sample, vWetL & 1, vWetR & 1);
-
-			vDryL >>= 1;
-			vDryR >>= 1;
-			vWetL >>= 1;
-			vWetR >>= 1;
+			v.GenSample();
 		}
+
+		GSVector8i samples[2];
+		samples[0] = m_VC_OUT[0].mul16hrs(m_ENVX[0]);
+		samples[1] = m_VC_OUT[1].mul16hrs(m_ENVX[1]);
+
+		MemOut(OutBuf::Voice1, samples[0].I16[1]);
+		MemOut(OutBuf::Voice3, samples[0].I16[3]);
+
+		GSVector8i left[2], right[2];
+		left[0] = samples[0].mul16hrs(m_VC_VOLL[0]);
+		left[1] = samples[1].mul16hrs(m_VC_VOLL[1]);
+		right[0] = samples[0].mul16hrs(m_VC_VOLR[0]);
+		right[1] = samples[1].mul16hrs(m_VC_VOLR[1]);
+
+		GSVector8i vc_dry_l[2], vc_dry_r[2], vc_wet_l[2], vc_wet_r[2];
+		vc_dry_l[0] = left[0] & m_vVMIXL[0];
+		vc_dry_l[1] = left[1] & m_vVMIXL[1];
+		vc_dry_r[0] = right[0] & m_vVMIXR[0];
+		vc_dry_r[1] = right[1] & m_vVMIXR[1];
+
+		vc_wet_l[0] = left[0] & m_vVMIXEL[0];
+		vc_wet_l[1] = left[1] & m_vVMIXEL[1];
+		vc_wet_r[0] = right[0] & m_vVMIXER[0];
+		vc_wet_r[1] = right[1] & m_vVMIXER[1];
+
+		//GSVector8i core;
+		//core.I16[9] = hsum(vc_dry_l[0], vc_dry_l[1]);
+
+		AudioSample VoicesDry(hsum(vc_dry_l[0], vc_dry_l[1]), hsum(vc_dry_r[0], vc_dry_r[1]));
+		AudioSample VoicesWet(hsum(vc_wet_l[0], vc_wet_l[1]), hsum(vc_wet_r[0], vc_wet_r[1]));
 
 		Dry.Mix(VoicesDry, m_MMIX.VoiceL, m_MMIX.VoiceR);
 		Wet.Mix(VoicesWet, m_MMIX.VoiceWetL, m_MMIX.VoiceWetR);
@@ -532,31 +545,66 @@ namespace SPU
 				}
 				break;
 			case 0x188:
-				// TODO verify hi/lo order of all of these
+				for (int i = 0; i < 16; i++)
+				{
+					m_vVMIXL[0].U16[i] = GET_BIT(i, value) ? 0xffff : 0;
+				}
 				m_VMIXL.lo = value;
 				break;
 			case 0x18A:
+				for (int i = 0; i < 8; i++)
+				{
+					m_vVMIXL[1].U16[i] = GET_BIT(i, value) ? 0xffff : 0;
+				}
 				m_VMIXL.hi = value;
 				break;
 			case 0x18C:
+				for (int i = 0; i < 16; i++)
+				{
+					m_vVMIXEL[0].U16[i] = GET_BIT(i, value) ? 0xffff : 0;
+				}
 				m_VMIXEL.lo = value;
 				break;
 			case 0x18E:
+				for (int i = 0; i < 8; i++)
+				{
+					m_vVMIXEL[1].U16[i] = GET_BIT(i, value) ? 0xffff : 0;
+				}
 				m_VMIXEL.hi = value;
 				break;
 			case 0x190:
+				for (int i = 0; i < 16; i++)
+				{
+					m_vVMIXR[0].U16[i] = GET_BIT(i, value) ? 0xffff : 0;
+				}
 				m_VMIXR.lo = value;
 				break;
 			case 0x192:
+				for (int i = 0; i < 8; i++)
+				{
+					m_vVMIXR[1].U16[i] = GET_BIT(i, value) ? 0xffff : 0;
+				}
 				m_VMIXR.hi = value;
 				break;
 			case 0x194:
+				for (int i = 0; i < 16; i++)
+				{
+					m_vVMIXER[0].U16[i] = GET_BIT(i, value) ? 0xffff : 0;
+				}
 				m_VMIXER.lo = value;
 				break;
 			case 0x196:
+				for (int i = 0; i < 8; i++)
+				{
+					m_vVMIXER[1].U16[i] = GET_BIT(i, value) ? 0xffff : 0;
+				}
 				m_VMIXER.hi = value;
 				break;
 			case 0x198:
+				for (int i = 0; i < 16; i++)
+				{
+					m_vMMIX[0].U16[i] = GET_BIT(i, value) ? 0xffff : 0;
+				}
 				m_MMIX.bits = value;
 				break;
 			case 0x19A:
