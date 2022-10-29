@@ -62,24 +62,13 @@ namespace SPU
 		vc_wet_r[0] = right[0] & m_vVMIXER[0];
 		vc_wet_r[1] = right[1] & m_vVMIXER[1];
 
-		//GSVector8i core;
-		//core.I16[9] = hsum(vc_dry_l[0], vc_dry_l[1]);
-
 		AudioSample VoicesDry(hsum(vc_dry_l[0], vc_dry_l[1]), hsum(vc_dry_r[0], vc_dry_r[1]));
 		AudioSample VoicesWet(hsum(vc_wet_l[0], vc_wet_l[1]), hsum(vc_wet_r[0], vc_wet_r[1]));
 
-		Dry.Mix(VoicesDry, m_MMIX.VoiceL, m_MMIX.VoiceR);
-		Wet.Mix(VoicesWet, m_MMIX.VoiceWetL, m_MMIX.VoiceWetR);
-
 		MemOut(OutBuf::MemOutEL, VoicesWet.left);
 		MemOut(OutBuf::MemOutER, VoicesWet.right);
-
-		input.Volume(m_AVOL);
-		Dry.Mix(input, m_MMIX.SinL, m_MMIX.SinR);
-		Wet.Mix(input, m_MMIX.SinWetL, m_MMIX.SinWetR);
-
-		MemOut(OutBuf::MemOutL, Dry.left);
-		MemOut(OutBuf::MemOutR, Dry.right);
+		MemOut(OutBuf::MemOutL, VoicesDry.left);
+		MemOut(OutBuf::MemOutR, VoicesDry.right);
 
 		AudioSample MemIn(0, 0);
 
@@ -88,10 +77,34 @@ namespace SPU
 		auto raddress = static_cast<u32>(InBuf::MeminR) + displacement;
 		MemIn.left = static_cast<s16>(m_RAM[laddress]);
 		MemIn.right = static_cast<s16>(m_RAM[raddress]);
-		MemIn.Volume(m_BVOL);
 
-		Dry.Mix(MemIn, m_MMIX.MeminL, m_MMIX.MeminR);
-		Wet.Mix(MemIn, m_MMIX.MeminWetL, m_MMIX.MeminWetR);
+		GSVector8i core;
+		core.I16[SINL] = input.left;
+		core.I16[SINR] = input.right;
+		core.I16[SINEL] = input.left;
+		core.I16[SINER] = input.right;
+
+		core.I16[MINL] = MemIn.left;
+		core.I16[MINR] = MemIn.right;
+		core.I16[MINEL] = MemIn.left;
+		core.I16[MINER] = MemIn.right;
+
+		core.I16[MSNDL] = VoicesDry.left;
+		core.I16[MSNDR] = VoicesDry.right;
+		core.I16[MSNDEL] = VoicesWet.left;
+		core.I16[MSNDER] = VoicesWet.right;
+
+		core &= m_vMMIX;
+		core = core.mul16hrs(m_VOL);
+
+		Dry.Mix(VoicesDry);
+		Wet.Mix(VoicesWet);
+
+		Dry.Mix(input);
+		Wet.Mix(input);
+
+		Dry.Mix(MemIn);
+		Wet.Mix(MemIn);
 
 		auto EOut = m_Reverb.Run(Wet);
 		EOut.Volume(m_EVOL);
@@ -603,7 +616,7 @@ namespace SPU
 			case 0x198:
 				for (int i = 0; i < 16; i++)
 				{
-					m_vMMIX[0].U16[i] = GET_BIT(i, value) ? 0xffff : 0;
+					m_vMMIX.U16[i] = GET_BIT(i, value) ? 0xffff : 0;
 				}
 				m_MMIX.bits = value;
 				break;
@@ -841,15 +854,23 @@ namespace SPU
 				break;
 			case 0x768:
 				m_AVOL.left = static_cast<s16>(value);
+				m_VOL.I16[SINL] = m_AVOL.left;
+				m_VOL.I16[SINEL] = m_AVOL.left;
 				break;
 			case 0x76A:
 				m_AVOL.right = static_cast<s16>(value);
+				m_VOL.I16[SINR] = m_AVOL.right;
+				m_VOL.I16[SINEL] = m_AVOL.right;
 				break;
 			case 0x76C:
 				m_BVOL.left = static_cast<s16>(value);
+				m_VOL.I16[MINL] = m_AVOL.left;
+				m_VOL.I16[MINEL] = m_AVOL.left;
 				break;
 			case 0x76E:
 				m_BVOL.right = static_cast<s16>(value);
+				m_VOL.I16[MINR] = m_AVOL.right;
+				m_VOL.I16[MINER] = m_AVOL.right;
 				break;
 			case 0x774:
 				m_Reverb.vIIR = static_cast<int16_t>(value);

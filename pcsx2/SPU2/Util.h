@@ -74,7 +74,7 @@ namespace SPU
 		s16 left{0};
 		s16 right{0};
 
-		void Mix(AudioSample src, bool lgate, bool rgate)
+		__fi void Mix(AudioSample src, bool lgate, bool rgate)
 		{
 			if (lgate)
 				left = static_cast<s16>(std::clamp<s32>(left + src.left, INT16_MIN, INT16_MAX));
@@ -82,13 +82,19 @@ namespace SPU
 				right = static_cast<s16>(std::clamp<s32>(right + src.right, INT16_MIN, INT16_MAX));
 		}
 
-		void Volume(PlainVolReg vol)
+		__fi void Mix(AudioSample src)
+		{
+			left = static_cast<s16>(std::clamp<s32>(left + src.left, INT16_MIN, INT16_MAX));
+			right = static_cast<s16>(std::clamp<s32>(right + src.right, INT16_MIN, INT16_MAX));
+		}
+
+		__fi void Volume(PlainVolReg vol)
 		{
 			left = ApplyVolume(left, vol.left);
 			right = ApplyVolume(right, vol.right);
 		}
 
-		void Volume(VolumePair vol)
+		__fi void Volume(VolumePair vol)
 		{
 			left = ApplyVolume(left, vol.left.GetCurrent());
 			right = ApplyVolume(right, vol.right.GetCurrent());
