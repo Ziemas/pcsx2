@@ -142,11 +142,6 @@ namespace SPU
 		m_Level = 0;
 	}
 
-	s16 ADSR::Level() const
-	{
-		return static_cast<u16>(m_Level);
-	}
-
 	void Volume::Run()
 	{
 		if (!m_Sweep.EnableSweep)
@@ -186,13 +181,4 @@ namespace SPU
 		Console.WriteLn(Color_Red, "Current level %08x", m_Level);
 	}
 
-	u16 Volume::Get() const
-	{
-		return m_Sweep.bits;
-	}
-
-	s16 Volume::GetCurrent() const
-	{
-		return static_cast<s16>(m_Level);
-	}
 } // namespace SPU

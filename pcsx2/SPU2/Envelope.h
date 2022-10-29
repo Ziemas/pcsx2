@@ -86,7 +86,7 @@ namespace SPU
 		void Attack();
 		void Release();
 		void Stop();
-		[[nodiscard]] s16 Level() const;
+		[[nodiscard]] s16 Level() const { return static_cast<short>(m_Level); };
 		void SetLevel(s16 value) { m_Level = value; }
 		void UpdateSettings();
 		ADSRReg m_Reg{0};
@@ -115,8 +115,8 @@ namespace SPU
 	public:
 		void Run();
 		void Set(u16 volume);
-		[[nodiscard]] u16 Get() const;
-		[[nodiscard]] s16 GetCurrent() const;
+		[[nodiscard]] u16 Get() const { return m_Sweep.bits; }
+		[[nodiscard]] s16 GetCurrent() const { return static_cast<s16>(m_Level); }
 
 		void Reset()
 		{
