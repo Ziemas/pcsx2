@@ -91,14 +91,14 @@ namespace SPU
 		core &= m_vMMIX;
 		core = core.mul16hrs(m_VOL);
 
-		Dry.Mix(VoicesDry);
-		Wet.Mix(VoicesWet);
+		Dry.Mix({core.I16[MSNDL], core.I16[MSNDR]});
+		Wet.Mix({core.I16[MSNDEL], core.I16[MSNDER]});
 
-		Dry.Mix(input);
-		Wet.Mix(input);
+		Dry.Mix({core.I16[SINL], core.I16[SINR]});
+		Wet.Mix({core.I16[SINEL], core.I16[SINER]});
 
-		Dry.Mix(In);
-		Wet.Mix(In);
+		Dry.Mix({core.I16[MINL], core.I16[MINR]});
+		Wet.Mix({core.I16[MINEL], core.I16[MINER]});
 
 		auto EOut = m_Reverb.Run(Wet);
 		EOut.Volume(m_EVOL);
