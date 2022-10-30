@@ -84,6 +84,14 @@ namespace SPU
 		static void TestIrq(u32 start, u32 end);
 		[[nodiscard]] s16 NoiseLevel() const { return m_Noise.Get(); }
 
+		[[nodiscard]] AudioSample MemIn() const
+		{
+			auto displacement = (m_CurrentBuffer * BufSize) + m_BufPos + (m_Id * InBufOffset);
+			auto laddress = static_cast<u32>(InBuf::MeminL) + displacement;
+			auto raddress = static_cast<u32>(InBuf::MeminR) + displacement;
+			return {static_cast<s16>(m_RAM[laddress]), static_cast<s16>(m_RAM[raddress])};
+		}
+
 		void Reset();
 
 	private:

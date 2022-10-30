@@ -70,13 +70,7 @@ namespace SPU
 		MemOut(OutBuf::MemOutL, VoicesDry.left);
 		MemOut(OutBuf::MemOutR, VoicesDry.right);
 
-		AudioSample MemIn(0, 0);
-
-		auto displacement = (m_CurrentBuffer * BufSize) + m_BufPos + (m_Id * InBufOffset);
-		auto laddress = static_cast<u32>(InBuf::MeminL) + displacement;
-		auto raddress = static_cast<u32>(InBuf::MeminR) + displacement;
-		MemIn.left = static_cast<s16>(m_RAM[laddress]);
-		MemIn.right = static_cast<s16>(m_RAM[raddress]);
+		AudioSample In(MemIn());
 
 		GSVector8i core;
 		core.I16[SINL] = input.left;
@@ -84,10 +78,10 @@ namespace SPU
 		core.I16[SINEL] = input.left;
 		core.I16[SINER] = input.right;
 
-		core.I16[MINL] = MemIn.left;
-		core.I16[MINR] = MemIn.right;
-		core.I16[MINEL] = MemIn.left;
-		core.I16[MINER] = MemIn.right;
+		core.I16[MINL] = In.left;
+		core.I16[MINR] = In.right;
+		core.I16[MINEL] = In.left;
+		core.I16[MINER] = In.right;
 
 		core.I16[MSNDL] = VoicesDry.left;
 		core.I16[MSNDR] = VoicesDry.right;
@@ -103,8 +97,8 @@ namespace SPU
 		Dry.Mix(input);
 		Wet.Mix(input);
 
-		Dry.Mix(MemIn);
-		Wet.Mix(MemIn);
+		Dry.Mix(In);
+		Wet.Mix(In);
 
 		auto EOut = m_Reverb.Run(Wet);
 		EOut.Volume(m_EVOL);
