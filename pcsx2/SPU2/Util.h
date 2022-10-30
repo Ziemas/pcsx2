@@ -20,6 +20,7 @@
 #include "GS/GSVector.h"
 #include "Envelope.h"
 #include <algorithm>
+#include "gcem.hpp"
 
 namespace SPU
 {
@@ -34,6 +35,81 @@ namespace SPU
 	{
 		return (sample * volume) >> 15;
 	}
+
+
+	template <typename Tp, size_t Nm>
+	class SampleFifo
+	{
+		static constexpr size_t Sz = (1 << static_cast<size_t>(gcem::ceil(gcem::log2(Nm))));
+
+	public:
+		Tp Pop() { return m_Buffer[mask(m_Rpos++)]; }
+		void PopN(size_t n) { m_Rpos += n; }
+
+		void Push(Tp val)
+		{
+			m_Buffer[mask(m_Wpos) | 0x0] = val;
+			m_Buffer[mask(m_Wpos) | Sz] = val;
+			m_Wpos++;
+		}
+
+		Tp Peek() { return m_Buffer[mask(m_Rpos + 1)]; }
+		Tp Peek(size_t offset) { return m_Buffer[mask(m_Rpos + offset)]; }
+
+		size_t Size() { return m_Wpos - m_Rpos; }
+		bool Full() { return Size() == Sz; }
+		bool Empty() { return m_Rpos == m_Wpos; }
+
+		Tp* Get()
+		{
+			return &m_Buffer[mask(m_Rpos)];
+		}
+
+		void Reset()
+		{
+			m_Buffer.fill(Tp{});
+			m_Rpos = 0;
+			m_Wpos = 0;
+		}
+
+	private:
+		alignas(32) std::array<Tp, Sz << 1> m_Buffer{};
+		size_t mask(size_t val) { return val & (Sz - 1); }
+		size_t m_Rpos{0};
+		size_t m_Wpos{0};
+	};
+
+	template <typename Tp, size_t Nm>
+	class SampleBuffer
+	{
+		static constexpr size_t Sz = (1 << static_cast<size_t>(gcem::ceil(gcem::log2(Nm))));
+
+	public:
+		void Push(Tp sample)
+		{
+			m_Pos = mask(m_Pos + 1);
+			m_Buffer[mask(m_Pos + Nm) | 0x0] = sample;
+			m_Buffer[mask(m_Pos + Nm) | Sz] = sample;
+		}
+
+		Tp* Get()
+		{
+			return &m_Buffer[mask(m_Pos)];
+		}
+
+		void Reset()
+		{
+			m_Buffer.fill(Tp{});
+			m_Pos = 0;
+		}
+
+	private:
+		alignas(32) std::array<Tp, Sz << 1> m_Buffer{};
+
+		size_t mask(size_t val) { return val & (Sz - 1); }
+		size_t m_Pos{0};
+	};
+
 
 	static __fi s16 hsum(GSVector8i vec1)
 	{

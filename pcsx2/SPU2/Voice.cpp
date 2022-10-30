@@ -177,10 +177,13 @@ namespace SPU
 		else
 		{
 			u32 index = (m_Counter & 0x0FF0) >> 4;
-			sample = static_cast<s16>(sample + ((m_DecodeBuf.Peek(0) * gaussianTable[index][0]) >> 15));
-			sample = static_cast<s16>(sample + ((m_DecodeBuf.Peek(1) * gaussianTable[index][1]) >> 15));
-			sample = static_cast<s16>(sample + ((m_DecodeBuf.Peek(2) * gaussianTable[index][2]) >> 15));
-			sample = static_cast<s16>(sample + ((m_DecodeBuf.Peek(3) * gaussianTable[index][3]) >> 15));
+			GSVector4i samp(GSVector4i::load<false>(m_DecodeBuf.Get()));
+			GSVector4i filt(GSVector4i::load<false>(gaussianTable[index].data()));
+			samp = samp.mul16hrs(filt);
+			samp = samp.adds16(samp.wzyxl());
+			samp = samp.adds16(samp.yxxxl());
+
+			sample = samp.I16[0];
 		}
 
 		s32 step = m_Pitch;
@@ -198,12 +201,7 @@ namespace SPU
 
 		auto steps = m_Counter >> 12;
 		m_Counter &= 0xFFF;
-
-		while (steps > 0)
-		{
-			steps--;
-			m_DecodeBuf.Pop();
-		}
+		m_DecodeBuf.PopN(steps);
 
 		s32 group = m_Id >> 4;
 		s32 index = m_Id - (group * 16);

@@ -90,7 +90,7 @@ namespace SPU
 		SPUCore& m_SPU;
 		s32 m_Id{0};
 
-		FIFO<s16, 0x20> m_DecodeBuf{};
+		SampleFifo<s16, 0x20> m_DecodeBuf{};
 		s16 m_DecodeHist1{0};
 		s16 m_DecodeHist2{0};
 		u32 m_Counter{0};
