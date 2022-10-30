@@ -35,13 +35,10 @@ namespace SPU
 		return (sample * volume) >> 15;
 	}
 
-	static __fi s16 hsum(GSVector8i& vec1, GSVector8i& vec2)
+	static __fi s16 hsum(GSVector8i vec1)
 	{
-
-		GSVector8i ymm0 = vec1.adds16(vec2);
-
-		GSVector4i xmm0 = ymm0.extract<0>();
-		GSVector4i xmm1 = ymm0.extract<1>();
+		GSVector4i xmm0 = vec1.extract<0>();
+		GSVector4i xmm1 = vec1.extract<1>();
 		xmm0 = xmm0.adds16(xmm1);
 
 		xmm1 = xmm0.wzyx();
@@ -54,6 +51,14 @@ namespace SPU
 		xmm0 = xmm0.adds16(xmm1);
 
 		return xmm0.I16[0];
+	}
+
+	static __fi s16 hsum(GSVector8i vec1, GSVector8i vec2)
+	{
+
+		GSVector8i ymm0 = vec1.adds16(vec2);
+
+		return hsum(ymm0);
 	}
 
 	struct PlainVolReg
