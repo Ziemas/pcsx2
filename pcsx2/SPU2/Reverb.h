@@ -102,25 +102,25 @@ namespace SPU
 
 		SPUCore& m_SPU;
 
-		template <size_t len>
 		struct SampleBuffer
 		{
 			u32 m_Pos{0};
-			std::array<AudioSample, len> m_Buffer{};
+			alignas(32) std::array<s16, 0x40 << 1> m_Buffer{};
 
-			void Push(AudioSample sample)
+			void Push(s16 sample)
 			{
-				m_Pos = (m_Pos + 1) % len;
-				m_Buffer[m_Pos] = sample;
+				m_Pos = (m_Pos + 1) & 0x3f;
+				m_Buffer[((m_Pos + NUM_TAPS) & 0x3f) | 0x0] = sample;
+				m_Buffer[((m_Pos + NUM_TAPS) & 0x3f) | 0x40] = sample;
 			}
 
-			[[nodiscard]] const AudioSample& Get(u32 index) const
+			[[nodiscard]] const s16* Get() const
 			{
-				return m_Buffer[(m_Pos + index + 1) % len];
+				return &m_Buffer[(m_Pos) & 0x3f];
 			}
 		};
-		SampleBuffer<NUM_TAPS> m_ReverbIn{};
-		SampleBuffer<NUM_TAPS> m_ReverbOut{};
+		std::array<SampleBuffer, 2> m_ReverbIn{};
+		std::array<SampleBuffer, 2> m_ReverbOut{};
 
 		s16 DownSample(AudioSample in);
 		AudioSample UpSample(s16 in);

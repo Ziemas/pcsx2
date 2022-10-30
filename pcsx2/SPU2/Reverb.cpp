@@ -19,91 +19,97 @@
 namespace SPU
 {
 	static constexpr u32 NUM_TAPS = 39;
-	static constexpr std::array<s32, NUM_TAPS> FilterCoefficients = {
-		-1,
-		0,
-		2,
-		0,
-		-10,
-		0,
-		35,
-		0,
-		-103,
-		0,
-		266,
-		0,
-		-616,
-		0,
-		1332,
-		0,
-		-2960,
-		0,
-		10246,
-		16384,
-		10246,
-		0,
-		-2960,
-		0,
-		1332,
-		0,
-		-616,
-		0,
-		266,
-		0,
-		-103,
-		0,
-		35,
-		0,
-		-10,
-		0,
-		2,
-		0,
-		-1,
-	};
+	alignas(32) static const union
+	{
+		std::array<GSVector8i, 3> vec;
+		std::array<s16, NUM_TAPS> array = {
+			-1,
+			0,
+			2,
+			0,
+			-10,
+			0,
+			35,
+			0,
+			-103,
+			0,
+			266,
+			0,
+			-616,
+			0,
+			1332,
+			0,
+			-2960,
+			0,
+			10246,
+			16384,
+			10246,
+			0,
+			-2960,
+			0,
+			1332,
+			0,
+			-616,
+			0,
+			266,
+			0,
+			-103,
+			0,
+			35,
+			0,
+			-10,
+			0,
+			2,
+			0,
+			-1,
+		};
+	} FilterCoefficients{};
 
 	s16 Reverb::DownSample(AudioSample in)
 	{
-		m_ReverbIn.Push(in);
+		m_ReverbIn[0].Push(in.left);
+		m_ReverbIn[1].Push(in.right);
 
-		s32 down{0};
-		for (u32 i = 0; i < NUM_TAPS; i++)
-		{
-			auto s = m_ReverbIn.Get(i);
-			if (m_Phase)
-				down += s.right * FilterCoefficients[i];
-			else
-				down += s.left * FilterCoefficients[i];
-		}
+		const s16* samples = m_ReverbIn[m_Phase].Get();
+		std::array<GSVector8i, 3> vec{GSVector8i::load<false>(&samples[0]), GSVector8i::load<false>(&samples[16]), GSVector8i::load<false>(&samples[32])};
 
-		down >>= 15;
-		return static_cast<s16>(std::clamp<s32>(down, INT16_MIN, INT16_MAX));
+		vec[0] = vec[0].mul16hrs(FilterCoefficients.vec[0]);
+		vec[1] = vec[1].mul16hrs(FilterCoefficients.vec[1]);
+		vec[2] = vec[2].mul16hrs(FilterCoefficients.vec[2]);
+		vec[0] = vec[0].adds16(vec[1].adds16(vec[2]));
+
+		return hsum(vec[0]);
 	}
 
 	AudioSample Reverb::UpSample(s16 in)
 	{
-		AudioSample up(0, 0);
 
-		if (m_Phase)
-			up.right = in;
-		else
-			up.left = in;
+		m_ReverbOut[0].Push(m_Phase ? in : 0);
+		m_ReverbOut[1].Push(m_Phase ? 0 : in);
 
-		m_ReverbOut.Push(up);
+		const s16* left_samples = m_ReverbOut[0].Get();
+		const s16* right_samples = m_ReverbOut[1].Get();
+		std::array<GSVector8i, 3> lvec{GSVector8i::load<false>(&left_samples[0]), GSVector8i::load<false>(&left_samples[16]), GSVector8i::load<false>(&left_samples[32])};
+		std::array<GSVector8i, 3> rvec{GSVector8i::load<false>(&right_samples[0]), GSVector8i::load<false>(&right_samples[16]), GSVector8i::load<false>(&right_samples[32])};
 
-		s32 left{0}, right{0};
-		for (u32 i = 0; i < NUM_TAPS; i++)
-		{
-			left += m_ReverbOut.Get(i).left * FilterCoefficients[i];
-			right += m_ReverbOut.Get(i).right * FilterCoefficients[i];
-		}
+		lvec[0] = lvec[0].mul16hrs(FilterCoefficients.vec[0]);
+		lvec[1] = lvec[1].mul16hrs(FilterCoefficients.vec[1]);
+		lvec[2] = lvec[2].mul16hrs(FilterCoefficients.vec[2]);
 
-		left >>= 14;
-		right >>= 14;
+		rvec[0] = rvec[0].mul16hrs(FilterCoefficients.vec[0]);
+		rvec[1] = rvec[1].mul16hrs(FilterCoefficients.vec[1]);
+		rvec[2] = rvec[2].mul16hrs(FilterCoefficients.vec[2]);
 
-		AudioSample out(static_cast<s16>(std::clamp<s32>(left, INT16_MIN, INT16_MAX)),
-			static_cast<s16>(std::clamp<s32>(right, INT16_MIN, INT16_MAX)));
+		lvec[0] = lvec[0].adds16(lvec[1]);
+		lvec[0] = lvec[0].adds16(lvec[2]);
 
-		return out;
+		rvec[0] = rvec[0].adds16(rvec[1]);
+		rvec[0] = rvec[0].adds16(rvec[2]);
+
+		// Multiply to maintain same level of gain
+		return {
+			static_cast<s16>(std::clamp<s32>(hsum(lvec[0]) * 2, INT16_MIN, INT16_MAX)),
+			static_cast<s16>(std::clamp<s32>(hsum(rvec[0]) * 2, INT16_MIN, INT16_MAX))};
 	}
 
 	static s32 IIASM(const s16 vIIR, const s16 sample)
