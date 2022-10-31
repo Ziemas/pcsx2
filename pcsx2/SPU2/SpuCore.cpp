@@ -842,13 +842,13 @@ namespace SPU
 				break;
 			case 0x76C:
 				m_BVOL.left = static_cast<s16>(value);
-				m_VOL.I16[MINL] = m_AVOL.left;
-				m_VOL.I16[MINEL] = m_AVOL.left;
+				m_VOL.I16[MINL] = m_BVOL.left;
+				m_VOL.I16[MINEL] = m_BVOL.left;
 				break;
 			case 0x76E:
 				m_BVOL.right = static_cast<s16>(value);
-				m_VOL.I16[MINR] = m_AVOL.right;
-				m_VOL.I16[MINER] = m_AVOL.right;
+				m_VOL.I16[MINR] = m_BVOL.right;
+				m_VOL.I16[MINER] = m_BVOL.right;
 				break;
 			case 0x774:
 				m_Reverb.vIIR = static_cast<int16_t>(value);
