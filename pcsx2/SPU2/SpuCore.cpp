@@ -38,9 +38,20 @@ namespace SPU
 			v.GenSample();
 		}
 
-		GSVector8i samples[2];
-		samples[0] = m_VC_OUT[0].mul16hrs(m_ENVX[0]);
-		samples[1] = m_VC_OUT[1].mul16hrs(m_ENVX[1]);
+		GSVector8i noise[2]{GSVector8i::load(m_Noise.Get()).broadcast16(), GSVector8i::load(m_Noise.Get()).broadcast16()};
+		noise[0] = noise[0] & m_vNON[0];
+		noise[1] = noise[1] & m_vNON[1];
+
+		GSVector8i samples[2]{m_VC_OUT[0].andnot(m_vNON[0]), m_VC_OUT[1].andnot(m_vNON[1])};
+
+		samples[0] |= noise[0];
+		samples[0] |= noise[1];
+
+		samples[0] = samples[0].mul16hrs(m_ENVX[0]);
+		samples[1] = samples[1].mul16hrs(m_ENVX[1]);
+
+		m_VC_OUTX[0] = samples[0];
+		m_VC_OUTX[1] = samples[1];
 
 		MemOut(OutBuf::Voice1, samples[0].I16[1]);
 		MemOut(OutBuf::Voice3, samples[0].I16[3]);
@@ -340,25 +351,9 @@ namespace SPU
 				return GET_HIGH(ret);
 			}
 			case 0x184:
-			{
-				u32 ret = 0;
-				for (int i = 0; i < 24; i++)
-				{
-					if (m_voices[i].m_Noise)
-						SET_BIT(ret, i);
-				}
-				return GET_LOW(ret);
-			}
+				return m_NON.lo.GetValue();
 			case 0x186:
-			{
-				u32 ret = 0;
-				for (int i = 0; i < 24; i++)
-				{
-					if (m_voices[i].m_Noise)
-						SET_BIT(ret, i);
-				}
-				return GET_HIGH(ret);
-			}
+				return m_NON.hi.GetValue();
 			case 0x188:
 				return m_VMIXL.lo.GetValue();
 			case 0x18A:
@@ -540,72 +535,34 @@ namespace SPU
 				}
 				break;
 			case 0x184:
-				for (int i = 0; i < 16; i++)
-				{
-					m_voices[i].m_Noise = GET_BIT(i, value);
-				}
+				ExpandVoiceBitfield(value, m_NON, m_vNON[0], false);
 				break;
 			case 0x186:
-				for (int i = 0; i < 8; i++)
-				{
-					m_voices[i + 16].m_Noise = GET_BIT(i, value);
-				}
+				ExpandVoiceBitfield(value, m_NON, m_vNON[1], true);
 				break;
 			case 0x188:
-				for (int i = 0; i < 16; i++)
-				{
-					m_vVMIXL[0].U16[i] = GET_BIT(i, value) ? 0xffff : 0;
-				}
-				m_VMIXL.lo = value;
+				ExpandVoiceBitfield(value, m_VMIXL, m_vVMIXL[0], false);
 				break;
 			case 0x18A:
-				for (int i = 0; i < 8; i++)
-				{
-					m_vVMIXL[1].U16[i] = GET_BIT(i, value) ? 0xffff : 0;
-				}
-				m_VMIXL.hi = value;
+				ExpandVoiceBitfield(value, m_VMIXL, m_vVMIXL[1], true);
 				break;
 			case 0x18C:
-				for (int i = 0; i < 16; i++)
-				{
-					m_vVMIXEL[0].U16[i] = GET_BIT(i, value) ? 0xffff : 0;
-				}
-				m_VMIXEL.lo = value;
+				ExpandVoiceBitfield(value, m_VMIXEL, m_vVMIXEL[0], false);
 				break;
 			case 0x18E:
-				for (int i = 0; i < 8; i++)
-				{
-					m_vVMIXEL[1].U16[i] = GET_BIT(i, value) ? 0xffff : 0;
-				}
-				m_VMIXEL.hi = value;
+				ExpandVoiceBitfield(value, m_VMIXEL, m_vVMIXEL[1], true);
 				break;
 			case 0x190:
-				for (int i = 0; i < 16; i++)
-				{
-					m_vVMIXR[0].U16[i] = GET_BIT(i, value) ? 0xffff : 0;
-				}
-				m_VMIXR.lo = value;
+				ExpandVoiceBitfield(value, m_VMIXR, m_vVMIXR[0], false);
 				break;
 			case 0x192:
-				for (int i = 0; i < 8; i++)
-				{
-					m_vVMIXR[1].U16[i] = GET_BIT(i, value) ? 0xffff : 0;
-				}
-				m_VMIXR.hi = value;
+				ExpandVoiceBitfield(value, m_VMIXR, m_vVMIXR[1], true);
 				break;
 			case 0x194:
-				for (int i = 0; i < 16; i++)
-				{
-					m_vVMIXER[0].U16[i] = GET_BIT(i, value) ? 0xffff : 0;
-				}
-				m_VMIXER.lo = value;
+				ExpandVoiceBitfield(value, m_VMIXER, m_vVMIXER[0], false);
 				break;
 			case 0x196:
-				for (int i = 0; i < 8; i++)
-				{
-					m_vVMIXER[1].U16[i] = GET_BIT(i, value) ? 0xffff : 0;
-				}
-				m_VMIXER.hi = value;
+				ExpandVoiceBitfield(value, m_VMIXER, m_vVMIXER[1], true);
 				break;
 			case 0x198:
 				for (int i = 0; i < 16; i++)

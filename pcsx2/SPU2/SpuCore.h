@@ -252,7 +252,7 @@ namespace SPU
 		//u32 m_KeyOn{0};
 		//u32 m_KeyOff{0};
 		//u32 m_PitchMod{0};
-		//u32 m_Noise{0};
+		Reg32 m_NON{0};
 
 		MMIX m_MMIX{0};
 		Reg32 m_VMIXL{0};
@@ -261,7 +261,9 @@ namespace SPU
 		Reg32 m_VMIXER{0};
 
 		GSVector8i m_ENVX[2]{};
+		GSVector8i m_vNON[2]{};
 		GSVector8i m_VC_OUT[2]{};
+		GSVector8i m_VC_OUTX[2]{};
 
 		GSVector8i m_VC_VOLL[2]{};
 		GSVector8i m_VC_VOLR[2]{};

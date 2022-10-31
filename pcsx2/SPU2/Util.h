@@ -36,7 +36,6 @@ namespace SPU
 		return (sample * volume) >> 15;
 	}
 
-
 	template <typename Tp, size_t Nm>
 	class SampleFifo
 	{
@@ -189,4 +188,19 @@ namespace SPU
 		BitField<u32, u16, 16, 16> hi;
 		BitField<u32, u16, 0, 16> lo;
 	};
+
+	static __fi void ExpandVoiceBitfield(u16 value, Reg32& reg, GSVector8i& vec, bool hi)
+	{
+		u16 prev = hi ? reg.hi.GetValue() : reg.lo.GetValue();
+		if (value != prev)
+		{
+			s32 limit = hi ? 8 : 16;
+			for (int i = 0; i < limit; i++)
+			{
+				vec.U16[i] = GET_BIT(i, value) != 0U ? 0xffff : 0;
+			}
+
+			hi ? reg.hi.SetValue(value) : reg.lo.SetValue(value);
+		}
+	}
 } // namespace SPU

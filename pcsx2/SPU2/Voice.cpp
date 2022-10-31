@@ -126,7 +126,9 @@ namespace SPU
 				{
 					// Need to inhibit stopping here in noise is on
 					// seems to result in the right thing but would like to verify
-					if (!m_Noise)
+					s32 group = m_Id >> 4;
+					s32 index = m_Id - (group * 16);
+					if (m_SPU.m_vNON[group].I16[index] == 0)
 						m_ADSR.Stop();
 				}
 			}
@@ -169,27 +171,19 @@ namespace SPU
 
 		DecodeSamples();
 
-		s16 sample = 0;
-		if (m_Noise)
-		{
-			sample = m_SPU.NoiseLevel();
-		}
-		else
-		{
-			u32 index = (m_Counter & 0x0FF0) >> 4;
-			GSVector4i samp(GSVector4i::load<false>(m_DecodeBuf.Get()));
-			GSVector4i filt(GSVector4i::load<false>(gaussianTable[index].data()));
-			samp = samp.mul16hrs(filt);
-			samp = samp.adds16(samp.wzyxl());
-			samp = samp.adds16(samp.yxxxl());
-
-			sample = samp.I16[0];
-		}
+		u32 interp_index = (m_Counter & 0x0FF0) >> 4;
+		GSVector4i sample(GSVector4i::load<false>(m_DecodeBuf.Get()));
+		GSVector4i filter(GSVector4i::load<false>(gaussianTable[interp_index].data()));
+		sample = sample.mul16hrs(filter);
+		sample = sample.adds16(sample.wzyxl());
+		sample = sample.adds16(sample.yxxxl());
 
 		s32 step = m_Pitch;
 		if (m_PitchMod && m_Id > 0)
 		{
-			s32 factor = m_SPU.GetVoice(m_Id - 1).Out();
+			s32 pgroup = (m_Id - 1) >> 4;
+			s32 pindex = (m_Id - 1) - (pgroup * 16);
+			s32 factor = m_SPU.m_VC_OUTX[pgroup].I16[pindex];
 			factor += 0x8000;
 			step = (step << 16) >> 16;
 			step = (step * factor) >> 15;
@@ -198,15 +192,13 @@ namespace SPU
 
 		step = std::min(step, 0x3FFF);
 		m_Counter += step;
-
-		auto steps = m_Counter >> 12;
+		m_DecodeBuf.PopN(m_Counter >> 12);
 		m_Counter &= 0xFFF;
-		m_DecodeBuf.PopN(steps);
 
 		s32 group = m_Id >> 4;
 		s32 index = m_Id - (group * 16);
 
-		m_SPU.m_VC_OUT[group].I16[index] = sample;
+		m_SPU.m_VC_OUT[group].I16[index] = sample.I16[0];
 		m_SPU.m_ENVX[group].I16[index] = m_ADSR.Level();
 		m_SPU.m_VC_VOLL[group].I16[index] = m_Volume.left.GetCurrent();
 		m_SPU.m_VC_VOLR[group].I16[index] = m_Volume.right.GetCurrent();

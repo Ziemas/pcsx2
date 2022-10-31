@@ -43,11 +43,8 @@ namespace SPU
 		[[nodiscard]] u16 ReadAddr(u32 addr) const;
 		void WriteAddr(u32 addr, u16 value);
 
-		[[nodiscard]] s16 Out() const { return m_Out; }
-
 		void Reset()
 		{
-			m_Noise = false;
 			m_PitchMod = false;
 			m_KeyOn = false;
 			m_KeyOff = false;
@@ -67,7 +64,6 @@ namespace SPU
 			m_Volume.Reset();
 		}
 
-		bool m_Noise{false};
 		bool m_PitchMod{false};
 		bool m_KeyOn{false};
 		bool m_KeyOff{false};
