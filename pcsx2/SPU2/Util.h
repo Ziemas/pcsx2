@@ -36,6 +36,26 @@ namespace SPU
 		return (sample * volume) >> 15;
 	}
 
+	union Reg32
+	{
+		u32 full;
+
+		BitField<u32, u16, 16, 16> hi;
+		BitField<u32, u16, 0, 16> lo;
+	};
+
+	union AddrVec
+	{
+		std::array<Reg32, 24> arr;
+		std::array<GSVector8i, 3> vec;
+	};
+
+	union VoiceVec
+	{
+		std::array<s16, 24> arr;
+		std::array<GSVector8i, 2> vec;
+	};
+
 	template <typename Tp, size_t Nm>
 	class SampleFifo
 	{
@@ -179,14 +199,6 @@ namespace SPU
 			left = ApplyVolume(left, vol.left.GetCurrent());
 			right = ApplyVolume(right, vol.right.GetCurrent());
 		}
-	};
-
-	union Reg32
-	{
-		u32 full;
-
-		BitField<u32, u16, 16, 16> hi;
-		BitField<u32, u16, 0, 16> lo;
 	};
 
 	static __fi void ExpandVoiceBitfield(u16 value, Reg32& reg, GSVector8i& vec, bool hi)

@@ -70,8 +70,6 @@ namespace SPU
 
 	void Voice::DecodeSamples()
 	{
-		SPUCore::TestIrq(m_NAX.full);
-
 		// The block header (and thus LSA) updates every spu cycle
 		UpdateBlockHeader();
 
@@ -92,7 +90,7 @@ namespace SPU
 		}
 		else
 		{
-			u32 data = m_SPU.Ram(m_NAX.full);
+			u32 data = m_SPU.Ram(m_SPU.m_vNAX.arr[m_Id].full);
 			for (int i = 0; i < 4; i++)
 			{
 				s32 sample = (s16)((data & 0xF) << 12);
@@ -113,35 +111,32 @@ namespace SPU
 			}
 		}
 
-		m_NAX.full++;
+		m_SPU.m_vNAX.arr[m_Id].full++;
 
-		if ((m_NAX.full & 0x7) == 0)
+		if ((m_SPU.m_vNAX.arr[m_Id].full & 0x7) == 0)
 		{
 			if (m_CurHeader.LoopEnd)
 			{
-				m_NAX.full = m_LSA.full;
+				m_SPU.m_vNAX.arr[m_Id].full = m_LSA.full;
 				m_ENDX = true;
 
 				if (!m_CurHeader.LoopRepeat)
 				{
 					// Need to inhibit stopping here in noise is on
 					// seems to result in the right thing but would like to verify
-					s32 group = m_Id >> 4;
-					s32 index = m_Id - (group * 16);
-					if (m_SPU.m_vNON[group].I16[index] == 0)
+					if ((m_SPU.m_NON.full & (1 << m_Id)) == 0U)
 						m_ADSR.Stop();
 				}
 			}
 
-			m_NAX.full++;
+			m_SPU.m_vNAX.arr[m_Id].full++;
 		}
 	}
 	void Voice::UpdateBlockHeader()
 	{
-		SPUCore::TestIrq(m_NAX.full & ~0x7);
-		m_CurHeader.bits = m_SPU.Ram(m_NAX.full & ~0x7);
+		m_CurHeader.bits = m_SPU.Ram(m_SPU.m_vNAX.arr[m_Id].full & ~0x7);
 		if (m_CurHeader.LoopStart && !m_CustomLoop)
-			m_LSA.full = m_NAX.full & ~0x7;
+			m_LSA.full = m_SPU.m_vNAX.arr[m_Id].full & ~0x7;
 	}
 
 	void Voice::GenSample()
@@ -156,8 +151,8 @@ namespace SPU
 		{
 			m_KeyOn = false;
 
-			m_NAX.full = m_SSA.full;
-			m_NAX.full++;
+			m_SPU.m_vNAX.arr[m_Id].full = m_SSA.full;
+			m_SPU.m_vNAX.arr[m_Id].full++;
 
 			m_ENDX = false;
 			m_ADSR.Attack();
@@ -181,9 +176,7 @@ namespace SPU
 		s32 step = m_Pitch;
 		if (m_PitchMod && m_Id > 0)
 		{
-			s32 pgroup = (m_Id - 1) >> 4;
-			s32 pindex = (m_Id - 1) - (pgroup * 16);
-			s32 factor = m_SPU.m_VC_OUTX[pgroup].I16[pindex];
+			s32 factor = m_SPU.m_VC_OUTX.arr[m_Id - 1];
 			factor += 0x8000;
 			step = (step << 16) >> 16;
 			step = (step * factor) >> 15;
@@ -195,13 +188,10 @@ namespace SPU
 		m_DecodeBuf.PopN(m_Counter >> 12);
 		m_Counter &= 0xFFF;
 
-		s32 group = m_Id >> 4;
-		s32 index = m_Id - (group * 16);
-
-		m_SPU.m_VC_OUT[group].I16[index] = sample.I16[0];
-		m_SPU.m_ENVX[group].I16[index] = m_ADSR.Level();
-		m_SPU.m_VC_VOLL[group].I16[index] = m_Volume.left.GetCurrent();
-		m_SPU.m_VC_VOLR[group].I16[index] = m_Volume.right.GetCurrent();
+		m_SPU.m_VC_OUT.arr[m_Id] = sample.I16[0];
+		m_SPU.m_ENVX.arr[m_Id] = m_ADSR.Level();
+		m_SPU.m_VC_VOLL.arr[m_Id] = m_Volume.left.GetCurrent();
+		m_SPU.m_VC_VOLR.arr[m_Id] = m_Volume.right.GetCurrent();
 
 		m_ADSR.Run();
 		m_Volume.Run();
@@ -247,9 +237,9 @@ namespace SPU
 			case 6:
 				return m_LSA.lo.GetValue();
 			case 8:
-				return m_NAX.hi.GetValue();
+				return m_SPU.m_vNAX.arr[m_Id].hi.GetValue();
 			case 10:
-				return m_NAX.lo.GetValue();
+				return m_SPU.m_vNAX.arr[m_Id].lo.GetValue();
 			default:
 				Console.WriteLn("UNHANDLED SPU[%d]:VOICE[%d] ReadAddr ---- <- %04x", m_SPU.m_Id, m_Id, addr);
 				pxAssertMsg(false, "Unhandled SPU Write");
@@ -311,10 +301,10 @@ namespace SPU
 				m_CustomLoop = true;
 				return;
 			case 8:
-				m_NAX.hi = value & 0xF;
+				m_SPU.m_vNAX.arr[m_Id].hi = value & 0xF;
 				return;
 			case 10:
-				m_NAX.lo = value;
+				m_SPU.m_vNAX.arr[m_Id].lo = value;
 				return;
 			default:
 				Console.WriteLn("UNHANDLED SPU[%d]:VOICE[%d] WriteAddr %04x -> %04x", m_SPU.m_Id, m_Id, value, addr);

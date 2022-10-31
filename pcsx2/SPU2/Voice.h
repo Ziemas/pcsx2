@@ -56,7 +56,6 @@ namespace SPU
 			m_Counter = 0;
 			m_Pitch = 0;
 			m_SSA.full = 0;
-			m_NAX.full = 0;
 			m_LSA.full = 0;
 			m_CustomLoop = false;
 			m_CurHeader.bits = 0;
@@ -95,7 +94,6 @@ namespace SPU
 		s16 m_Out{0};
 
 		Reg32 m_SSA{0};
-		Reg32 m_NAX{0};
 		Reg32 m_LSA{0};
 		bool m_CustomLoop{false};
 

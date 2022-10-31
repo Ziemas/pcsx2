@@ -255,25 +255,25 @@ namespace SPU
 		Reg32 m_NON{0};
 
 		MMIX m_MMIX{0};
+		GSVector8i m_vMMIX{};
+
 		Reg32 m_VMIXL{0};
 		Reg32 m_VMIXR{0};
 		Reg32 m_VMIXEL{0};
 		Reg32 m_VMIXER{0};
 
-		GSVector8i m_ENVX[2]{};
-		GSVector8i m_vNON[2]{};
-		GSVector8i m_VC_OUT[2]{};
-		GSVector8i m_VC_OUTX[2]{};
+		VoiceVec m_ENVX{};
+		VoiceVec m_vNON{};
+		VoiceVec m_VC_OUT{};
+		VoiceVec m_VC_OUTX{};
+		VoiceVec m_VC_VOLL{};
+		VoiceVec m_VC_VOLR{};
+		VoiceVec m_vVMIXL{};
+		VoiceVec m_vVMIXR{};
+		VoiceVec m_vVMIXEL{};
+		VoiceVec m_vVMIXER{};
 
-		GSVector8i m_VC_VOLL[2]{};
-		GSVector8i m_VC_VOLR[2]{};
-
-		GSVector8i m_vMMIX{};
-
-		GSVector8i m_vVMIXL[2]{};
-		GSVector8i m_vVMIXR[2]{};
-		GSVector8i m_vVMIXEL[2]{};
-		GSVector8i m_vVMIXER[2]{};
+		AddrVec m_vNAX{};
 
 		// clang-format off
 		std::array<Voice, NUM_VOICES> m_voices = {{

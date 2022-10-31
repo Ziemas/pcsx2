@@ -33,45 +33,72 @@ namespace SPU
 		MemOut(OutBuf::SINL, input.left);
 		MemOut(OutBuf::SINR, input.right);
 
+		GSVector8i mask(GSVector8i(~0x7).broadcast32());
+		GSVector8i irqa[2]{GSVector8i(m_IRQA[0].full).broadcast32(), GSVector8i(m_IRQA[1].full).broadcast32()};
+		for (int i = 0; i < 2; i++)
+		{
+			if (m_ATTR[i].IRQEnable)
+			{
+				auto res = m_vNAX.vec[0] == irqa[i];
+				res |= m_vNAX.vec[1] == irqa[i];
+				res |= m_vNAX.vec[2] == irqa[i];
+
+
+				res |= (m_vNAX.vec[0] & mask) == irqa[i];
+				res |= (m_vNAX.vec[1] & mask) == irqa[i];
+				res |= (m_vNAX.vec[2] & mask) == irqa[i];
+
+				if (!res.allfalse())
+				{
+					if (i == 0)
+						m_IRQ.CauseC0 = true;
+					if (i == 1)
+						m_IRQ.CauseC1 = true;
+
+					spu2Irq();
+				}
+			}
+		}
+
 		for (auto& v : m_voices)
 		{
 			v.GenSample();
 		}
 
 		GSVector8i noise[2]{GSVector8i::load(m_Noise.Get()).broadcast16(), GSVector8i::load(m_Noise.Get()).broadcast16()};
-		noise[0] = noise[0] & m_vNON[0];
-		noise[1] = noise[1] & m_vNON[1];
+		noise[0] = noise[0] & m_vNON.vec[0];
+		noise[1] = noise[1] & m_vNON.vec[1];
 
-		GSVector8i samples[2]{m_VC_OUT[0].andnot(m_vNON[0]), m_VC_OUT[1].andnot(m_vNON[1])};
+		GSVector8i samples[2]{m_VC_OUT.vec[0].andnot(m_vNON.vec[0]), m_VC_OUT.vec[1].andnot(m_vNON.vec[1])};
 
 		samples[0] |= noise[0];
-		samples[0] |= noise[1];
+		samples[1] |= noise[1];
 
-		samples[0] = samples[0].mul16hrs(m_ENVX[0]);
-		samples[1] = samples[1].mul16hrs(m_ENVX[1]);
+		samples[0] = samples[0].mul16hrs(m_ENVX.vec[0]);
+		samples[1] = samples[1].mul16hrs(m_ENVX.vec[1]);
 
-		m_VC_OUTX[0] = samples[0];
-		m_VC_OUTX[1] = samples[1];
+		m_VC_OUTX.vec[0] = samples[0];
+		m_VC_OUTX.vec[1] = samples[1];
 
 		MemOut(OutBuf::Voice1, samples[0].I16[1]);
 		MemOut(OutBuf::Voice3, samples[0].I16[3]);
 
 		GSVector8i left[2], right[2];
-		left[0] = samples[0].mul16hrs(m_VC_VOLL[0]);
-		left[1] = samples[1].mul16hrs(m_VC_VOLL[1]);
-		right[0] = samples[0].mul16hrs(m_VC_VOLR[0]);
-		right[1] = samples[1].mul16hrs(m_VC_VOLR[1]);
+		left[0] = samples[0].mul16hrs(m_VC_VOLL.vec[0]);
+		left[1] = samples[1].mul16hrs(m_VC_VOLL.vec[1]);
+		right[0] = samples[0].mul16hrs(m_VC_VOLR.vec[0]);
+		right[1] = samples[1].mul16hrs(m_VC_VOLR.vec[1]);
 
 		GSVector8i vc_dry_l[2], vc_dry_r[2], vc_wet_l[2], vc_wet_r[2];
-		vc_dry_l[0] = left[0] & m_vVMIXL[0];
-		vc_dry_l[1] = left[1] & m_vVMIXL[1];
-		vc_dry_r[0] = right[0] & m_vVMIXR[0];
-		vc_dry_r[1] = right[1] & m_vVMIXR[1];
+		vc_dry_l[0] = left[0] & m_vVMIXL.vec[0];
+		vc_dry_l[1] = left[1] & m_vVMIXL.vec[1];
+		vc_dry_r[0] = right[0] & m_vVMIXR.vec[0];
+		vc_dry_r[1] = right[1] & m_vVMIXR.vec[1];
 
-		vc_wet_l[0] = left[0] & m_vVMIXEL[0];
-		vc_wet_l[1] = left[1] & m_vVMIXEL[1];
-		vc_wet_r[0] = right[0] & m_vVMIXER[0];
-		vc_wet_r[1] = right[1] & m_vVMIXER[1];
+		vc_wet_l[0] = left[0] & m_vVMIXEL.vec[0];
+		vc_wet_l[1] = left[1] & m_vVMIXEL.vec[1];
+		vc_wet_r[0] = right[0] & m_vVMIXER.vec[0];
+		vc_wet_r[1] = right[1] & m_vVMIXER.vec[1];
 
 		AudioSample VoicesDry(hsum(vc_dry_l[0], vc_dry_l[1]), hsum(vc_dry_r[0], vc_dry_r[1]));
 		AudioSample VoicesWet(hsum(vc_wet_l[0], vc_wet_l[1]), hsum(vc_wet_r[0], vc_wet_r[1]));
@@ -535,34 +562,34 @@ namespace SPU
 				}
 				break;
 			case 0x184:
-				ExpandVoiceBitfield(value, m_NON, m_vNON[0], false);
+				ExpandVoiceBitfield(value, m_NON, m_vNON.vec[0], false);
 				break;
 			case 0x186:
-				ExpandVoiceBitfield(value, m_NON, m_vNON[1], true);
+				ExpandVoiceBitfield(value, m_NON, m_vNON.vec[1], true);
 				break;
 			case 0x188:
-				ExpandVoiceBitfield(value, m_VMIXL, m_vVMIXL[0], false);
+				ExpandVoiceBitfield(value, m_VMIXL, m_vVMIXL.vec[0], false);
 				break;
 			case 0x18A:
-				ExpandVoiceBitfield(value, m_VMIXL, m_vVMIXL[1], true);
+				ExpandVoiceBitfield(value, m_VMIXL, m_vVMIXL.vec[1], true);
 				break;
 			case 0x18C:
-				ExpandVoiceBitfield(value, m_VMIXEL, m_vVMIXEL[0], false);
+				ExpandVoiceBitfield(value, m_VMIXEL, m_vVMIXEL.vec[0], false);
 				break;
 			case 0x18E:
-				ExpandVoiceBitfield(value, m_VMIXEL, m_vVMIXEL[1], true);
+				ExpandVoiceBitfield(value, m_VMIXEL, m_vVMIXEL.vec[1], true);
 				break;
 			case 0x190:
-				ExpandVoiceBitfield(value, m_VMIXR, m_vVMIXR[0], false);
+				ExpandVoiceBitfield(value, m_VMIXR, m_vVMIXR.vec[0], false);
 				break;
 			case 0x192:
-				ExpandVoiceBitfield(value, m_VMIXR, m_vVMIXR[1], true);
+				ExpandVoiceBitfield(value, m_VMIXR, m_vVMIXR.vec[1], true);
 				break;
 			case 0x194:
-				ExpandVoiceBitfield(value, m_VMIXER, m_vVMIXER[0], false);
+				ExpandVoiceBitfield(value, m_VMIXER, m_vVMIXER.vec[0], false);
 				break;
 			case 0x196:
-				ExpandVoiceBitfield(value, m_VMIXER, m_vVMIXER[1], true);
+				ExpandVoiceBitfield(value, m_VMIXER, m_vVMIXER.vec[1], true);
 				break;
 			case 0x198:
 				for (int i = 0; i < 16; i++)
