@@ -68,7 +68,7 @@ namespace SPU
 
 	static constexpr std::array<std::array<s16, 4>, 256> gaussianTable = gaussianConstructTable();
 
-	void Voice::DecodeSamples()
+	__fi void Voice::DecodeSamples()
 	{
 		// The block header (and thus LSA) updates every spu cycle
 		UpdateBlockHeader();
@@ -134,7 +134,8 @@ namespace SPU
 			m_SPU.m_vNAX.arr[m_Id].full++;
 		}
 	}
-	void Voice::UpdateBlockHeader()
+
+	__fi void Voice::UpdateBlockHeader()
 	{
 		m_CurHeader.bits = m_SPU.Ram(m_SPU.m_vNAX.arr[m_Id].full & ~0x7);
 		if (m_CurHeader.LoopStart && !m_CustomLoop)
