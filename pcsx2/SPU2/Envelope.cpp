@@ -25,7 +25,7 @@ namespace SPU
 		// arbitrary number of bits, this is probably incorrect for the
 		// "reserved" and infinite duration values
 		// test hw or copy mednafen instead?
-		u32 cStep = 0x800000;
+		u32 cStep = 0x8000;
 
 		s32 shift = m_Shift - 11;
 		if (shift > 0)
@@ -44,7 +44,7 @@ namespace SPU
 
 		m_Counter += cStep;
 
-		if (m_Counter >= 0x800000)
+		if (m_Counter >= 0x8000)
 		{
 			m_Counter = 0;
 			m_Level = std::clamp<s32>(m_Level + step, 0, INT16_MAX);
