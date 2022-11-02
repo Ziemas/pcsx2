@@ -20,7 +20,27 @@
 class Noise
 {
 public:
-	void Run();
+	void Run()
+	{
+		u32 level = 0x8000 >> (m_Clock >> 2);
+		level <<= 16;
+		m_Count += 0x10000;
+		m_Count += noise_freq_add[m_Clock & 3];
+
+		if ((m_Count & 0xFFFF) >= noise_freq_add[m_Clock & 3])
+		{
+			m_Count += 0x10000;
+			m_Count -= noise_freq_add[m_Clock & 3];
+		}
+
+		if (m_Count >= level)
+		{
+			while (m_Count >= level)
+				m_Count -= level;
+
+			m_Value = (m_Value << 1) | noise_add[(m_Value >> 10) & 63];
+		}
+	}
 	void SetClock(u8 clock) { m_Clock = clock; }
 	[[nodiscard]] s16 Get() const { return static_cast<s16>(m_Value); }
 	void Reset()
@@ -31,6 +51,20 @@ public:
 	}
 
 private:
+	static constexpr std::array<s8, 64> noise_add = {
+		1, 0, 0, 1, 0, 1, 1, 0,
+		1, 0, 0, 1, 0, 1, 1, 0,
+		1, 0, 0, 1, 0, 1, 1, 0,
+		1, 0, 0, 1, 0, 1, 1, 0,
+		0, 1, 1, 0, 1, 0, 0, 1,
+		0, 1, 1, 0, 1, 0, 0, 1,
+		0, 1, 1, 0, 1, 0, 0, 1,
+		0, 1, 1, 0, 1, 0, 0, 1};
+
+	static constexpr std::array<u8, 5> noise_freq_add = {
+		0, 84, 140, 180, 210};
+
+
 	u32 m_Value{0};
 	u32 m_Count{0};
 	u8 m_Clock{0};
