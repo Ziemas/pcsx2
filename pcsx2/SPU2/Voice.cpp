@@ -83,10 +83,12 @@ namespace SPU
 		}
 
 		// Skip decoding for stopped voices.
+		// technically not safe i think, envx could be written
+		// directly to make it audible again.
+		// But it's too good a speed boost to let go.
 		if (m_ADSR.GetPhase() == ADSR::Phase::Stopped)
 		{
-			for (int i = 0; i < 4; i++)
-				m_DecodeBuf.Push(0);
+			m_DecodeBuf.PushSkipN(4);
 		}
 		else
 		{

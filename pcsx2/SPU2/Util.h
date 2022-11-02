@@ -72,6 +72,11 @@ namespace SPU
 			m_Wpos++;
 		}
 
+		void PushSkipN(size_t n)
+		{
+			m_Wpos + n;
+		}
+
 		Tp Peek() { return m_Buffer[mask(m_Rpos + 1)]; }
 		Tp Peek(size_t offset) { return m_Buffer[mask(m_Rpos + offset)]; }
 
