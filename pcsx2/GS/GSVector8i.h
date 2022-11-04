@@ -91,6 +91,12 @@ public:
 	{
 	}
 
+	__forceinline GSVector8i(u64 x, u64 y, u64 z, u64 w)
+		: U64{x, y, z, w}
+	{
+	}
+
+
 	__forceinline GSVector8i(__m128i m0, __m128i m1)
 	{
 #if 0 // _MSC_VER >= 1700
