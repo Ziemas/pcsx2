@@ -33,16 +33,21 @@ namespace SPU
 		MemOut(OutBuf::SINL, input.left);
 		MemOut(OutBuf::SINR, input.right);
 
-		for (auto& v : m_voices)
+		if (m_share.KeyOn.full != 0 || m_share.KeyOff.full != 0)
 		{
-			v.ProcessKonKoff();
+			for (auto& v : m_voices)
+			{
+				v.ProcessKonKoff();
+			}
+
+			m_share.KeyOff.full = 0;
+			m_share.KeyOn.full = 0;
 		}
 
-
-		GSVector8i mask(GSVector8i(~0x7).broadcast32());
 		GSVector8i irqa[2]{
 			GSVector8i(m_IRQA[0].full).broadcast32(),
 			GSVector8i(m_IRQA[1].full).broadcast32()};
+		GSVector8i mask(GSVector8i(~0x7).broadcast32());
 
 		for (int i = 0; i < 2; i++)
 		{
@@ -78,10 +83,10 @@ namespace SPU
 		for (int i = 0; i < 6; i++)
 		{
 			GSVector8i dec(
-				m_voices[voice + 0].m_DecodeBuf.GetU64(),
-				m_voices[voice + 1].m_DecodeBuf.GetU64(),
-				m_voices[voice + 2].m_DecodeBuf.GetU64(),
-				m_voices[voice + 3].m_DecodeBuf.GetU64());
+				*(u64*)m_voices[voice + 0].m_DecodeBuf.Get(),
+				*(u64*)m_voices[voice + 1].m_DecodeBuf.Get(),
+				*(u64*)m_voices[voice + 2].m_DecodeBuf.Get(),
+				*(u64*)m_voices[voice + 3].m_DecodeBuf.Get());
 			GSVector8i interp(
 				*(u64*)gaussianTable[(m_voices[voice + 0].m_Counter & 0xff0) >> 4].data(),
 				*(u64*)gaussianTable[(m_voices[voice + 1].m_Counter & 0xff0) >> 4].data(),
@@ -412,25 +417,9 @@ namespace SPU
 		switch (addr)
 		{
 			case 0x180:
-			{
-				u32 ret = 0;
-				for (int i = 0; i < 24; i++)
-				{
-					if (m_voices[i].m_PitchMod)
-						SET_BIT(ret, i);
-				}
-				return GET_LOW(ret);
-			}
+				return m_share.PitchMod.lo.GetValue();
 			case 0x182:
-			{
-				u32 ret = 0;
-				for (int i = 0; i < 24; i++)
-				{
-					if (m_voices[i].m_PitchMod)
-						SET_BIT(ret, i);
-				}
-				return GET_HIGH(ret);
-			}
+				return m_share.PitchMod.hi.GetValue();
 			case 0x184:
 				return m_share.NON.lo.GetValue();
 			case 0x186:
@@ -460,45 +449,13 @@ namespace SPU
 			case 0x19E:
 				return m_IRQA[m_Id].lo.GetValue();
 			case 0x1A0:
-			{
-				u32 ret = 0;
-				for (int i = 0; i < 24; i++)
-				{
-					if (m_voices[i].m_KeyOn)
-						SET_BIT(ret, i);
-				}
-				return GET_LOW(ret);
-			}
+				return m_share.KeyOn.lo.GetValue();
 			case 0x1A2:
-			{
-				u32 ret = 0;
-				for (int i = 0; i < 24; i++)
-				{
-					if (m_voices[i].m_KeyOn)
-						SET_BIT(ret, i);
-				}
-				return GET_HIGH(ret);
-			}
+				return m_share.KeyOn.hi.GetValue();
 			case 0x1A4:
-			{
-				u32 ret = 0;
-				for (int i = 0; i < 24; i++)
-				{
-					if (m_voices[i].m_KeyOff)
-						SET_BIT(ret, i);
-				}
-				return GET_LOW(ret);
-			}
+				return m_share.KeyOff.lo.GetValue();
 			case 0x1A6:
-			{
-				u32 ret = 0;
-				for (int i = 0; i < 24; i++)
-				{
-					if (m_voices[i].m_KeyOff)
-						SET_BIT(ret, i);
-				}
-				return GET_HIGH(ret);
-			}
+				return m_share.KeyOff.hi.GetValue();
 			case 0x1A8:
 				return m_TSA.hi.GetValue();
 			case 0x1AA:
@@ -512,25 +469,9 @@ namespace SPU
 			case 0x33c:
 				return m_Reverb.m_EEA.hi.GetValue();
 			case 0x340:
-			{
-				u32 ret = 0;
-				for (int i = 0; i < 24; i++)
-				{
-					if (m_voices[i].m_ENDX)
-						SET_BIT(ret, i);
-				}
-				return GET_LOW(ret);
-			}
+				return m_share.ENDX.lo.GetValue();
 			case 0x342:
-			{
-				u32 ret = 0;
-				for (int i = 0; i < 24; i++)
-				{
-					if (m_voices[i].m_ENDX)
-						SET_BIT(ret, i);
-				}
-				return GET_HIGH(ret);
-			}
+				return m_share.ENDX.hi.GetValue();
 			case 0x344:
 				return m_Stat.bits;
 			case 0x760:
@@ -604,16 +545,10 @@ namespace SPU
 		switch (addr)
 		{
 			case 0x180:
-				for (int i = 0; i < 16; i++)
-				{
-					m_voices[i].m_PitchMod = GET_BIT(i, value);
-				}
+				m_share.PitchMod.lo.SetValue(value);
 				break;
 			case 0x182:
-				for (int i = 0; i < 8; i++)
-				{
-					m_voices[i + 16].m_PitchMod = GET_BIT(i, value);
-				}
+				m_share.PitchMod.hi.SetValue(value);
 				break;
 			case 0x184:
 				ExpandVoiceBitfield(value, m_share.NON, m_vNON.vec[0], false);
@@ -677,28 +612,16 @@ namespace SPU
 				m_Adma.bits = value;
 				break;
 			case 0x1A0:
-				for (int i = 0; i < 16; i++)
-				{
-					m_voices[i].m_KeyOn = GET_BIT(i, value);
-				}
+				m_share.KeyOn.lo.SetValue(value);
 				break;
 			case 0x1A2:
-				for (int i = 0; i < 8; i++)
-				{
-					m_voices[i + 16].m_KeyOn = GET_BIT(i, value);
-				}
+				m_share.KeyOn.hi.SetValue(value);
 				break;
 			case 0x1A4:
-				for (int i = 0; i < 16; i++)
-				{
-					m_voices[i].m_KeyOff = GET_BIT(i, value);
-				}
+				m_share.KeyOff.lo.SetValue(value);
 				break;
 			case 0x1A6:
-				for (int i = 0; i < 8; i++)
-				{
-					m_voices[i + 16].m_KeyOff = GET_BIT(i, value);
-				}
+				m_share.KeyOff.hi.SetValue(value);
 				break;
 			case 0x1A8:
 				m_TSA.hi = value & 0xF;
@@ -858,16 +781,10 @@ namespace SPU
 				m_Reverb.m_EEA.lo = 0xFFFF;
 				break;
 			case 0x340:
-				for (int i = 0; i < 16; i++)
-				{
-					m_voices[i].m_ENDX = GET_BIT(i, value);
-				}
+				m_share.ENDX.lo.SetValue(value);
 				break;
 			case 0x342:
-				for (int i = 0; i < 8; i++)
-				{
-					m_voices[i + 16].m_ENDX = GET_BIT(i, value);
-				}
+				m_share.ENDX.hi.SetValue(value);
 				break;
 			//case 0x344:
 			//	// SPU Status R/O

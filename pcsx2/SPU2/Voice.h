@@ -66,6 +66,10 @@ namespace SPU
 	{
 		u32 SPU_ID;
 		u16* RAM{nullptr};
+		Reg32 KeyOn{0};
+		Reg32 KeyOff{0};
+		Reg32 PitchMod{0};
+		Reg32 ENDX{0};
 		Reg32 NON{0};
 		AddrVec vNAX{};
 		VoiceVec VC_OUT{};
@@ -86,20 +90,17 @@ namespace SPU
 
 		void ProcessKonKoff()
 		{
-			if (m_KeyOff)
+			if (m_Share.KeyOff.full & (1 << m_Id))
 			{
-				m_KeyOff = false;
 				m_ADSR.Release();
 				//Console.WriteLn("SPU[%d]:VOICE[%d] Key Off", m_SPU.m_Id, m_Id);
 			}
-			if (m_KeyOn)
+			if (m_Share.KeyOn.full & (1 << m_Id))
 			{
-				m_KeyOn = false;
-
 				m_Share.vNAX.arr[m_Id].full = m_SSA.full;
 				m_Share.vNAX.arr[m_Id].full++;
 
-				m_ENDX = false;
+				m_Share.ENDX.full &= ~(1 << m_Id);
 				m_ADSR.Attack();
 				m_Counter = 0;
 				m_DecodeHist1 = 0;
@@ -164,7 +165,7 @@ namespace SPU
 				if (m_CurHeader.LoopEnd)
 				{
 					m_Share.vNAX.arr[m_Id].full = m_LSA.full;
-					m_ENDX = true;
+					m_Share.ENDX.full |= (1 << m_Id);
 
 					if (!m_CurHeader.LoopRepeat)
 					{
@@ -182,8 +183,9 @@ namespace SPU
 		void UpdateCounter()
 		{
 			s32 step = m_Pitch;
-			if (m_PitchMod && m_Id > 0)
+			if ((m_Share.PitchMod.full & (1 << m_Id)) && m_Id > 0)
 			{
+				Console.WriteLn("eat dick");
 				s32 factor = m_Share.VC_OUTX.arr[m_Id - 1];
 				factor += 0x8000;
 				step = (step << 16) >> 16;
@@ -322,11 +324,6 @@ namespace SPU
 
 		void Reset()
 		{
-			m_PitchMod = false;
-			m_KeyOn = false;
-			m_KeyOff = false;
-			m_ENDX = false;
-
 			m_DecodeBuf.Reset();
 			m_DecodeHist1 = 0;
 			m_DecodeHist2 = 0;
@@ -339,11 +336,6 @@ namespace SPU
 			m_ADSR.Reset();
 			m_Volume.Reset();
 		}
-
-		bool m_PitchMod{false};
-		bool m_KeyOn{false};
-		bool m_KeyOff{false};
-		bool m_ENDX{false};
 
 		SampleFifo<s16, 0x20> m_DecodeBuf{};
 		u32 m_Counter{0};

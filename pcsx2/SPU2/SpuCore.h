@@ -251,10 +251,6 @@ namespace SPU
 		PlainVolReg m_BVOL{0};
 		GSVector8i m_VOL{GSVector8i(INT16_MAX).broadcast16()};
 
-		//u32 m_KeyOn{0};
-		//u32 m_KeyOff{0};
-		//u32 m_PitchMod{0};
-
 		MMIX m_MMIX{0};
 		GSVector8i m_vMMIX{};
 
