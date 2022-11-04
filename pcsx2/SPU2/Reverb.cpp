@@ -22,47 +22,17 @@ namespace SPU
 	alignas(32) static const union
 	{
 		std::array<GSVector8i, 3> vec;
+		// clang-format off
 		std::array<s16, NUM_TAPS> array = {
-			-1,
-			0,
-			2,
-			0,
-			-10,
-			0,
-			35,
-			0,
-			-103,
-			0,
-			266,
-			0,
-			-616,
-			0,
-			1332,
-			0,
-			-2960,
-			0,
-			10246,
-			16384,
-			10246,
-			0,
-			-2960,
-			0,
-			1332,
-			0,
-			-616,
-			0,
-			266,
-			0,
-			-103,
-			0,
-			35,
-			0,
-			-10,
-			0,
-			2,
-			0,
-			-1,
-		};
+			-1,		0,		2,		0,		-10,
+			0,		35,		0,		-103,	0,
+			266,	0,		-616,	0,		1332,
+			0,		-2960,	0,		10246,	16384,
+			10246,	0,		-2960,	0,		1332,
+			0,		-616,	0,		266,	0,
+			-103,	0,		35,		0,		-10,
+			0,		2,		0,		-1,		};
+		// clang-format on
 	} FilterCoefficients{};
 
 	s16 Reverb::DownSample(AudioSample in)
@@ -70,8 +40,11 @@ namespace SPU
 		m_ReverbIn[0].Push(in.left);
 		m_ReverbIn[1].Push(in.right);
 
-		const s16* samples = m_ReverbIn[m_Phase].Get();
-		std::array<GSVector8i, 3> vec{GSVector8i::load<false>(&samples[0]), GSVector8i::load<false>(&samples[16]), GSVector8i::load<false>(&samples[32])};
+		const s16* const samples = m_ReverbIn[m_Phase].Get();
+		std::array<GSVector8i, 3> vec{
+			GSVector8i::load<false>(&samples[0]),
+			GSVector8i::load<false>(&samples[16]),
+			GSVector8i::load<false>(&samples[32])};
 
 		vec[0] = vec[0].mul16hrs(FilterCoefficients.vec[0]);
 		vec[1] = vec[1].mul16hrs(FilterCoefficients.vec[1]);
@@ -83,14 +56,19 @@ namespace SPU
 
 	AudioSample Reverb::UpSample(s16 in)
 	{
-
 		m_ReverbOut[0].Push(m_Phase ? in : 0);
 		m_ReverbOut[1].Push(m_Phase ? 0 : in);
 
-		const s16* left_samples = m_ReverbOut[0].Get();
-		const s16* right_samples = m_ReverbOut[1].Get();
-		std::array<GSVector8i, 3> lvec{GSVector8i::load<false>(&left_samples[0]), GSVector8i::load<false>(&left_samples[16]), GSVector8i::load<false>(&left_samples[32])};
-		std::array<GSVector8i, 3> rvec{GSVector8i::load<false>(&right_samples[0]), GSVector8i::load<false>(&right_samples[16]), GSVector8i::load<false>(&right_samples[32])};
+		const s16* const left_samples = m_ReverbOut[0].Get();
+		const s16* const right_samples = m_ReverbOut[1].Get();
+		std::array<GSVector8i, 3> lvec{
+			GSVector8i::load<false>(&left_samples[0]),
+			GSVector8i::load<false>(&left_samples[16]),
+			GSVector8i::load<false>(&left_samples[32])};
+		std::array<GSVector8i, 3> rvec{
+			GSVector8i::load<false>(&right_samples[0]),
+			GSVector8i::load<false>(&right_samples[16]),
+			GSVector8i::load<false>(&right_samples[32])};
 
 		lvec[0] = lvec[0].mul16hrs(FilterCoefficients.vec[0]);
 		lvec[1] = lvec[1].mul16hrs(FilterCoefficients.vec[1]);
@@ -118,8 +96,8 @@ namespace SPU
 		{
 			if (sample == INT16_MIN)
 				return 0;
-			else
-				return sample * -0x10000;
+
+			return sample * -0x10000;
 		}
 
 		return sample * (INT16_MAX - vIIR);
