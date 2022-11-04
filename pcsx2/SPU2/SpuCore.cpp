@@ -135,6 +135,10 @@ namespace SPU
 		samples[1] = samples[1].mul16hrs(m_share.ENVX.vec[1]);
 
 		// Save to OUTX (needs to be kept for later due to pitch mod)
+		// offset it so it lines up with the voice using the data
+		//GSVector8i::store<false>(&m_share.VC_OUTX.arr[1], samples[0]);
+		//GSVector8i::store<false>(&m_share.VC_OUTX.arr[17], samples[1]);
+
 		m_share.VC_OUTX.vec[0] = samples[0];
 		m_share.VC_OUTX.vec[1] = samples[1];
 
