@@ -54,7 +54,10 @@ namespace SPU
 	{
 		std::array<s16, 24> arr;
 		std::array<u16, 24> uarr;
-		std::array<GSVector8i, 2> vec;
+
+		// lets fit in 3 of these so we have room to write
+		// outx with an offset
+		std::array<GSVector8i, 3> vec;
 	};
 
 	template <typename Tp, size_t Nm>
