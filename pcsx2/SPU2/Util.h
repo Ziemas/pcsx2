@@ -62,28 +62,18 @@ namespace SPU
 		static constexpr size_t Sz = (1 << static_cast<size_t>(gcem::ceil(gcem::log2(Nm))));
 
 	public:
-		Tp Pop() { return m_Buffer[mask(m_Rpos++)]; }
 		void PopN(size_t n) { m_Rpos += n; }
-
 		void Push(Tp val)
 		{
 			m_Buffer[mask(m_Wpos) | 0x0] = val;
 			m_Buffer[mask(m_Wpos) | Sz] = val;
 			m_Wpos++;
 		}
-
 		void PushSkipN(size_t n)
 		{
 			m_Wpos + n;
 		}
-
-		Tp Peek() { return m_Buffer[mask(m_Rpos + 1)]; }
-		Tp Peek(size_t offset) { return m_Buffer[mask(m_Rpos + offset)]; }
-
 		size_t Size() { return m_Wpos - m_Rpos; }
-		bool Full() { return Size() == Sz; }
-		bool Empty() { return m_Rpos == m_Wpos; }
-
 		Tp* Get()
 		{
 			return &m_Buffer[mask(m_Rpos)];
