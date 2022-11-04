@@ -33,20 +33,29 @@ namespace SPU
 		MemOut(OutBuf::SINL, input.left);
 		MemOut(OutBuf::SINR, input.right);
 
+		for (auto& v : m_voices)
+		{
+			v.ProcessKonKoff();
+		}
+
+
 		GSVector8i mask(GSVector8i(~0x7).broadcast32());
-		GSVector8i irqa[2]{GSVector8i(m_IRQA[0].full).broadcast32(), GSVector8i(m_IRQA[1].full).broadcast32()};
+		GSVector8i irqa[2]{
+			GSVector8i(m_IRQA[0].full).broadcast32(),
+			GSVector8i(m_IRQA[1].full).broadcast32()};
+
 		for (int i = 0; i < 2; i++)
 		{
 			if (m_ATTR[i].IRQEnable)
 			{
-				auto res = m_vNAX.vec[0] == irqa[i];
-				res |= m_vNAX.vec[1] == irqa[i];
-				res |= m_vNAX.vec[2] == irqa[i];
+				auto res = m_share.vNAX.vec[0] == irqa[i];
+				res |= m_share.vNAX.vec[1] == irqa[i];
+				res |= m_share.vNAX.vec[2] == irqa[i];
 
 
-				res |= (m_vNAX.vec[0] & mask) == irqa[i];
-				res |= (m_vNAX.vec[1] & mask) == irqa[i];
-				res |= (m_vNAX.vec[2] & mask) == irqa[i];
+				res |= (m_share.vNAX.vec[0] & mask) == irqa[i];
+				res |= (m_share.vNAX.vec[1] & mask) == irqa[i];
+				res |= (m_share.vNAX.vec[2] & mask) == irqa[i];
 
 				if (!res.allfalse())
 				{
@@ -62,32 +71,77 @@ namespace SPU
 
 		for (auto& v : m_voices)
 		{
-			v.GenSample();
+			v.DecodeSamples();
 		}
 
-		GSVector8i noise[2]{GSVector8i::load(m_Noise.Get()).broadcast16(), GSVector8i::load(m_Noise.Get()).broadcast16()};
+		int voice = 0;
+		for (int i = 0; i < 6; i++)
+		{
+			GSVector8i dec(
+				m_voices[voice + 0].m_DecodeBuf.GetU64(),
+				m_voices[voice + 1].m_DecodeBuf.GetU64(),
+				m_voices[voice + 2].m_DecodeBuf.GetU64(),
+				m_voices[voice + 3].m_DecodeBuf.GetU64());
+			GSVector8i interp(
+				*(u64*)gaussianTable[(m_voices[voice + 0].m_Counter & 0xff0) >> 4].data(),
+				*(u64*)gaussianTable[(m_voices[voice + 1].m_Counter & 0xff0) >> 4].data(),
+				*(u64*)gaussianTable[(m_voices[voice + 2].m_Counter & 0xff0) >> 4].data(),
+				*(u64*)gaussianTable[(m_voices[voice + 3].m_Counter & 0xff0) >> 4].data());
+
+			dec = dec.mul16hrs(interp);
+			dec = dec.adds16(dec.yyww());
+			auto lo = dec.adds16(dec.yxxxl());
+			auto hi = dec.adds16(dec.yxxxh());
+
+			m_share.VC_OUT.arr[voice + 0] = lo.I16[0];
+			m_share.VC_OUT.arr[voice + 1] = hi.I16[4];
+			m_share.VC_OUT.arr[voice + 2] = lo.I16[8];
+			m_share.VC_OUT.arr[voice + 3] = hi.I16[12];
+
+			voice += 4;
+		}
+
+		for (auto& v : m_voices)
+		{
+			// Could be vectorized if not for pitch mod
+			v.UpdateCounter();
+		}
+
+		// Load noise into all elements
+		GSVector8i noise[2]{
+			GSVector8i::load(m_Noise.Get()).broadcast16(),
+			GSVector8i::load(m_Noise.Get()).broadcast16()};
+
+		// & with NON to only keep it for voices with noise selected
 		noise[0] = noise[0] & m_vNON.vec[0];
 		noise[1] = noise[1] & m_vNON.vec[1];
 
-		GSVector8i samples[2]{m_VC_OUT.vec[0].andnot(m_vNON.vec[0]), m_VC_OUT.vec[1].andnot(m_vNON.vec[1])};
+		// Load voice output, exclude voices with active noise
+		GSVector8i samples[2]{
+			m_share.VC_OUT.vec[0].andnot(m_vNON.vec[0]),
+			m_share.VC_OUT.vec[1].andnot(m_vNON.vec[1])};
 
+		// mix in noise
 		samples[0] |= noise[0];
 		samples[1] |= noise[1];
 
-		samples[0] = samples[0].mul16hrs(m_ENVX.vec[0]);
-		samples[1] = samples[1].mul16hrs(m_ENVX.vec[1]);
+		// Apply ADSR volume
+		samples[0] = samples[0].mul16hrs(m_share.ENVX.vec[0]);
+		samples[1] = samples[1].mul16hrs(m_share.ENVX.vec[1]);
 
-		m_VC_OUTX.vec[0] = samples[0];
-		m_VC_OUTX.vec[1] = samples[1];
+		// Save to OUTX (needs to be kept for later due to pitch mod)
+		m_share.VC_OUTX.vec[0] = samples[0];
+		m_share.VC_OUTX.vec[1] = samples[1];
 
 		MemOut(OutBuf::Voice1, samples[0].I16[1]);
 		MemOut(OutBuf::Voice3, samples[0].I16[3]);
 
+		// Split to streo and apply l/r volume
 		GSVector8i left[2], right[2];
-		left[0] = samples[0].mul16hrs(m_VC_VOLL.vec[0]);
-		left[1] = samples[1].mul16hrs(m_VC_VOLL.vec[1]);
-		right[0] = samples[0].mul16hrs(m_VC_VOLR.vec[0]);
-		right[1] = samples[1].mul16hrs(m_VC_VOLR.vec[1]);
+		left[0] = samples[0].mul16hrs(m_share.VC_VOLL.vec[0]);
+		left[1] = samples[1].mul16hrs(m_share.VC_VOLL.vec[1]);
+		right[0] = samples[0].mul16hrs(m_share.VC_VOLR.vec[0]);
+		right[1] = samples[1].mul16hrs(m_share.VC_VOLR.vec[1]);
 
 		GSVector8i vc_dry_l[2], vc_dry_r[2], vc_wet_l[2], vc_wet_r[2];
 		vc_dry_l[0] = left[0] & m_vVMIXL.vec[0];
@@ -378,9 +432,9 @@ namespace SPU
 				return GET_HIGH(ret);
 			}
 			case 0x184:
-				return m_NON.lo.GetValue();
+				return m_share.NON.lo.GetValue();
 			case 0x186:
-				return m_NON.hi.GetValue();
+				return m_share.NON.hi.GetValue();
 			case 0x188:
 				return m_VMIXL.lo.GetValue();
 			case 0x18A:
@@ -562,10 +616,10 @@ namespace SPU
 				}
 				break;
 			case 0x184:
-				ExpandVoiceBitfield(value, m_NON, m_vNON.vec[0], false);
+				ExpandVoiceBitfield(value, m_share.NON, m_vNON.vec[0], false);
 				break;
 			case 0x186:
-				ExpandVoiceBitfield(value, m_NON, m_vNON.vec[1], true);
+				ExpandVoiceBitfield(value, m_share.NON, m_vNON.vec[1], true);
 				break;
 			case 0x188:
 				ExpandVoiceBitfield(value, m_VMIXL, m_vVMIXL.vec[0], false);

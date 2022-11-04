@@ -63,6 +63,8 @@ namespace SPU
 			: m_Id(id)
 			, m_RAM(ram)
 		{
+			m_share.RAM = m_RAM;
+			m_share.SPU_ID = m_Id;
 		}
 
 		u32 m_Id{0};
@@ -252,7 +254,6 @@ namespace SPU
 		//u32 m_KeyOn{0};
 		//u32 m_KeyOff{0};
 		//u32 m_PitchMod{0};
-		Reg32 m_NON{0};
 
 		MMIX m_MMIX{0};
 		GSVector8i m_vMMIX{};
@@ -262,27 +263,22 @@ namespace SPU
 		Reg32 m_VMIXEL{0};
 		Reg32 m_VMIXER{0};
 
-		VoiceVec m_ENVX{};
 		VoiceVec m_vNON{};
-		VoiceVec m_VC_OUT{};
-		VoiceVec m_VC_OUTX{};
-		VoiceVec m_VC_VOLL{};
-		VoiceVec m_VC_VOLR{};
 		VoiceVec m_vVMIXL{};
 		VoiceVec m_vVMIXR{};
 		VoiceVec m_vVMIXEL{};
 		VoiceVec m_vVMIXER{};
 
-		AddrVec m_vNAX{};
+		SharedData m_share{};
 
 		// clang-format off
 		std::array<Voice, NUM_VOICES> m_voices = {{
-			{*this, 0},  {*this, 1},  {*this, 2},  {*this, 3},
-			{*this, 4},  {*this, 5},  {*this, 6},  {*this, 7},
-			{*this, 8},  {*this, 9},  {*this, 10}, {*this, 11},
-			{*this, 12}, {*this, 13}, {*this, 14}, {*this, 15},
-			{*this, 16}, {*this, 17}, {*this, 18}, {*this, 19},
-			{*this, 20}, {*this, 21}, {*this, 22}, {*this, 23},
+			{m_share, 0},  {m_share, 1},  {m_share, 2},  {m_share, 3},
+			{m_share, 4},  {m_share, 5},  {m_share, 6},  {m_share, 7},
+			{m_share, 8},  {m_share, 9},  {m_share, 10}, {m_share, 11},
+			{m_share, 12}, {m_share, 13}, {m_share, 14}, {m_share, 15},
+			{m_share, 16}, {m_share, 17}, {m_share, 18}, {m_share, 19},
+			{m_share, 20}, {m_share, 21}, {m_share, 22}, {m_share, 23},
 		}};
 		// clang-format on
 	};

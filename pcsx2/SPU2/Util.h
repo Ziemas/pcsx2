@@ -88,7 +88,10 @@ namespace SPU
 		{
 			return &m_Buffer[mask(m_Rpos)];
 		}
-
+		u64 GetU64()
+		{
+			return *(u64*)&m_Buffer[mask(m_Rpos)];
+		}
 		void Reset()
 		{
 			m_Buffer.fill(Tp{});
