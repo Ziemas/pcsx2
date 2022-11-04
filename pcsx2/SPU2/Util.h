@@ -53,6 +53,7 @@ namespace SPU
 	union VoiceVec
 	{
 		std::array<s16, 24> arr;
+		std::array<u16, 24> uarr;
 		std::array<GSVector8i, 2> vec;
 	};
 

@@ -260,6 +260,7 @@ namespace SPU
 		Reg32 m_VMIXER{0};
 
 		VoiceVec m_vNON{};
+		VoiceVec m_vPMON{};
 		VoiceVec m_vVMIXL{};
 		VoiceVec m_vVMIXR{};
 		VoiceVec m_vVMIXEL{};

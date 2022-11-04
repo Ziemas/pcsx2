@@ -72,9 +72,10 @@ namespace SPU
 		Reg32 ENDX{0};
 		Reg32 NON{0};
 		AddrVec vNAX{};
-		VoiceVec VC_OUTX{};
-		VoiceVec VC_VOLL{};
-		VoiceVec VC_VOLR{};
+		VoiceVec PITCH{};
+		VoiceVec OUTX{};
+		VoiceVec VOLL{};
+		VoiceVec VOLR{};
 		VoiceVec ENVX{};
 	};
 
@@ -182,10 +183,9 @@ namespace SPU
 		void UpdateCounter()
 		{
 			s32 step = m_Pitch;
-			if ((m_Share.PitchMod.full & (1 << m_Id)) && m_Id > 0)
+			if ((m_Share.PitchMod.full & (1 << m_Id)))
 			{
-				s32 factor = m_Share.VC_OUTX.arr[m_Id];
-				factor += 0x8000;
+				s32 factor = m_Share.OUTX.uarr[m_Id];
 				step = (step << 16) >> 16;
 				step = (step * factor) >> 15;
 				step &= 0xFFFF;
@@ -198,8 +198,8 @@ namespace SPU
 
 
 			m_Share.ENVX.arr[m_Id] = m_ADSR.Level();
-			m_Share.VC_VOLL.arr[m_Id] = m_Volume.left.GetCurrent();
-			m_Share.VC_VOLR.arr[m_Id] = m_Volume.right.GetCurrent();
+			m_Share.VOLL.arr[m_Id] = m_Volume.left.GetCurrent();
+			m_Share.VOLR.arr[m_Id] = m_Volume.right.GetCurrent();
 
 			m_ADSR.Run();
 			m_Volume.Run();

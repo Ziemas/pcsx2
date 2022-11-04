@@ -138,18 +138,18 @@ namespace SPU
 
 		// Save to OUTX (needs to be kept for later due to pitch mod)
 		// offset it so it lines up with the voice using the data
-		GSVector8i::store<false>(&m_share.VC_OUTX.arr[1], samples[0]);
-		GSVector8i::store<false>(&m_share.VC_OUTX.arr[17], samples[1]);
+		GSVector8i::store<false>(&m_share.OUTX.arr[1], samples[0].add16(GSVector8i(0x8000).broadcast16()));
+		GSVector8i::store<false>(&m_share.OUTX.arr[17], samples[1].add16(GSVector8i(0x8000).broadcast16()));
 
 		MemOut(OutBuf::Voice1, samples[0].I16[1]);
 		MemOut(OutBuf::Voice3, samples[0].I16[3]);
 
 		// Split to streo and apply l/r volume
 		GSVector8i left[2], right[2];
-		left[0] = samples[0].mul16hrs(m_share.VC_VOLL.vec[0]);
-		left[1] = samples[1].mul16hrs(m_share.VC_VOLL.vec[1]);
-		right[0] = samples[0].mul16hrs(m_share.VC_VOLR.vec[0]);
-		right[1] = samples[1].mul16hrs(m_share.VC_VOLR.vec[1]);
+		left[0] = samples[0].mul16hrs(m_share.VOLL.vec[0]);
+		left[1] = samples[1].mul16hrs(m_share.VOLL.vec[1]);
+		right[0] = samples[0].mul16hrs(m_share.VOLR.vec[0]);
+		right[1] = samples[1].mul16hrs(m_share.VOLR.vec[1]);
 
 		GSVector8i vc_dry_l[2], vc_dry_r[2], vc_wet_l[2], vc_wet_r[2];
 		vc_dry_l[0] = left[0] & m_vVMIXL.vec[0];
@@ -548,10 +548,10 @@ namespace SPU
 		switch (addr)
 		{
 			case 0x180:
-				m_share.PitchMod.lo.SetValue(value);
+				ExpandVoiceBitfield(value & ~1, m_share.PitchMod, m_vPMON.vec[0], false);
 				break;
 			case 0x182:
-				m_share.PitchMod.hi.SetValue(value);
+				ExpandVoiceBitfield(value, m_share.PitchMod, m_vPMON.vec[1], true);
 				break;
 			case 0x184:
 				ExpandVoiceBitfield(value, m_share.NON, m_vNON.vec[0], false);
