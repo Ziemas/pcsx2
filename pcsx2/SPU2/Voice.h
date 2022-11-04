@@ -72,7 +72,6 @@ namespace SPU
 		Reg32 ENDX{0};
 		Reg32 NON{0};
 		AddrVec vNAX{};
-		VoiceVec VC_OUT{};
 		VoiceVec VC_OUTX{};
 		VoiceVec VC_VOLL{};
 		VoiceVec VC_VOLR{};
@@ -185,8 +184,7 @@ namespace SPU
 			s32 step = m_Pitch;
 			if ((m_Share.PitchMod.full & (1 << m_Id)) && m_Id > 0)
 			{
-				Console.WriteLn("eat dick");
-				s32 factor = m_Share.VC_OUTX.arr[m_Id - 1];
+				s32 factor = m_Share.VC_OUTX.arr[m_Id];
 				factor += 0x8000;
 				step = (step << 16) >> 16;
 				step = (step * factor) >> 15;

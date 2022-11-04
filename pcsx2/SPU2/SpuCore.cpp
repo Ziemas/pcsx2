@@ -79,6 +79,8 @@ namespace SPU
 			v.DecodeSamples();
 		}
 
+
+		VoiceVec interp_out{};
 		int voice = 0;
 		for (int i = 0; i < 6; i++)
 		{
@@ -98,10 +100,10 @@ namespace SPU
 			auto lo = dec.adds16(dec.yxxxl());
 			auto hi = dec.adds16(dec.yxxxh());
 
-			m_share.VC_OUT.arr[voice + 0] = lo.I16[0];
-			m_share.VC_OUT.arr[voice + 1] = hi.I16[4];
-			m_share.VC_OUT.arr[voice + 2] = lo.I16[8];
-			m_share.VC_OUT.arr[voice + 3] = hi.I16[12];
+			interp_out.arr[voice + 0] = lo.I16[0];
+			interp_out.arr[voice + 1] = hi.I16[4];
+			interp_out.arr[voice + 2] = lo.I16[8];
+			interp_out.arr[voice + 3] = hi.I16[12];
 
 			voice += 4;
 		}
@@ -123,8 +125,8 @@ namespace SPU
 
 		// Load voice output, exclude voices with active noise
 		GSVector8i samples[2]{
-			m_share.VC_OUT.vec[0].andnot(m_vNON.vec[0]),
-			m_share.VC_OUT.vec[1].andnot(m_vNON.vec[1])};
+			interp_out.vec[0].andnot(m_vNON.vec[0]),
+			interp_out.vec[1].andnot(m_vNON.vec[1])};
 
 		// mix in noise
 		samples[0] |= noise[0];
@@ -136,11 +138,8 @@ namespace SPU
 
 		// Save to OUTX (needs to be kept for later due to pitch mod)
 		// offset it so it lines up with the voice using the data
-		//GSVector8i::store<false>(&m_share.VC_OUTX.arr[1], samples[0]);
-		//GSVector8i::store<false>(&m_share.VC_OUTX.arr[17], samples[1]);
-
-		m_share.VC_OUTX.vec[0] = samples[0];
-		m_share.VC_OUTX.vec[1] = samples[1];
+		GSVector8i::store<false>(&m_share.VC_OUTX.arr[1], samples[0]);
+		GSVector8i::store<false>(&m_share.VC_OUTX.arr[17], samples[1]);
 
 		MemOut(OutBuf::Voice1, samples[0].I16[1]);
 		MemOut(OutBuf::Voice3, samples[0].I16[3]);
