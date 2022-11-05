@@ -15,7 +15,9 @@
 
 #include "Output.h"
 #include "common/Console.h"
+#include <algorithm>
 #include <cstdarg>
+#include <cstring>
 
 namespace SPU
 {
@@ -143,22 +145,20 @@ namespace SPU
 			S16Out filter_in{};
 			S16Out filter_out{};
 
-			if (avail)
+			if (avail != 0)
 			{
 				size_t idx = buf->read.fetch_add(1, std::memory_order_relaxed);
 				filter_in = buf->buffer[idx & 0x1FFF];
 				avail--;
 			}
 
-			//filter_in.left *= 0.8;
-			//filter_in.right *= 0.8;
-
 			// DC filtering
-			filter_out.left = static_cast<s16>(std::clamp<double>(filter_in.left - buf->oldFilterIn.left + 0.995 * buf->oldFilterOut.left, INT16_MIN, INT16_MAX));
-			filter_out.right = static_cast<s16>(std::clamp<double>(filter_in.right - buf->oldFilterIn.right + 0.995 * buf->oldFilterOut.right, INT16_MIN, INT16_MAX));
+			s32 fll = (filter_in.left - buf->oldFilterIn.left + std::clamp<s32>((0x7f5c * buf->oldFilterOut.left) >> 15, INT16_MIN, INT16_MAX));
+			s32 flr = (filter_in.right - buf->oldFilterIn.right + std::clamp<s32>((0x7f5c * buf->oldFilterOut.right) >> 15, INT16_MIN, INT16_MAX));
+			filter_out.left = static_cast<s16>(std::clamp<s32>((fll * 0x7f00) >> 15, INT16_MIN, INT16_MAX));
+			filter_out.right = static_cast<s16>(std::clamp<s32>((flr * 0x7f00) >> 15, INT16_MIN, INT16_MAX));
 			buf->oldFilterIn = filter_in;
 			buf->oldFilterOut = filter_out;
-
 
 			*out++ = filter_out;
 		}
