@@ -204,8 +204,8 @@ namespace SPU
 		EOut.Volume(m_EVOL);
 
 		AudioSample Out(0, 0);
-		Out.Mix(Dry, true, true);
-		Out.Mix(EOut, true, true);
+		Out.Mix(Dry);
+		Out.Mix(EOut);
 
 		m_BufPos++;
 		if (m_BufPos == 0x50)
