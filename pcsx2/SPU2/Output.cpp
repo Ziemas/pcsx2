@@ -150,8 +150,8 @@ namespace SPU
 				avail--;
 			}
 
-			filter_in.left *= 0.8;
-			filter_in.right *= 0.8;
+			//filter_in.left *= 0.8;
+			//filter_in.right *= 0.8;
 
 			// DC filtering
 			filter_out.left = static_cast<s16>(std::clamp<double>(filter_in.left - buf->oldFilterIn.left + 0.995 * buf->oldFilterOut.left, INT16_MIN, INT16_MAX));
