@@ -75,7 +75,7 @@ namespace SPU
 		}
 		void PushSkipN(size_t n)
 		{
-			m_Wpos + n;
+			m_Wpos += n;
 		}
 		size_t Size() { return m_Wpos - m_Rpos; }
 		Tp* Get()
