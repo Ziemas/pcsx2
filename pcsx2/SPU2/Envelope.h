@@ -59,33 +59,24 @@ namespace SPU
 	public:
 		void Step()
 		{
-			// arbitrary number of bits, this is probably incorrect for the
-			// "reserved" and infinite duration values
-			// test hw or copy mednafen instead?
-
-			u32 cStep = 0x8000;
-
-			s32 shift = m_Shift - 11;
-			if (shift > 0)
-				cStep >>= shift;
-
-			s16 step = static_cast<s16>(m_Step << std::max(0, 11 - m_Shift));
+			u32 counter_inc = 0x8000 >> std::max(0, m_Shift - 11);
+			s16 level_inc = static_cast<s16>(m_Step << std::max(0, 11 - m_Shift));
 
 			if (m_Exp)
 			{
 				if (!m_Decrease && m_Level > 0x6000)
-					cStep >>= 2;
+					counter_inc >>= 2;
 
 				if (m_Decrease)
-					step = static_cast<s16>((step * m_Level) >> 15);
+					level_inc = static_cast<s16>((level_inc * m_Level) >> 15);
 			}
 
-			m_Counter += cStep;
+			m_Counter += counter_inc;
 
 			if (m_Counter >= 0x8000)
 			{
 				m_Counter = 0;
-				m_Level = std::clamp<s32>(m_Level + step, 0, INT16_MAX);
+				m_Level = std::clamp<s32>(m_Level + level_inc, 0, INT16_MAX);
 			}
 		}
 
