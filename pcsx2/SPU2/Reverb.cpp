@@ -111,7 +111,7 @@ namespace SPU
 	static s16 ReverbNeg(s16 sample)
 	{
 		if (sample == INT16_MIN)
-			return 0x7FFF;
+			return INT16_MAX;
 
 		return static_cast<s16>(-sample);
 	}
