@@ -60,5 +60,6 @@ namespace SPU
 	s32 Init();
 	void SetOutputPaused(bool paused);
 	void SetDeviceSampleRateMultiplier(double multiplier);
+	extern const char* const* GetOutputModuleBackends(const char* omodid);
 
 } // namespace SPU

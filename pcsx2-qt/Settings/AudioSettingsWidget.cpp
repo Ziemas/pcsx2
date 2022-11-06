@@ -18,7 +18,7 @@
 #include <QtWidgets/QMessageBox>
 #include <algorithm>
 
-#include "pcsx2/SPU2/Global.h"
+#include "pcsx2/SPU2/SPU2.h"
 
 #include "AudioSettingsWidget.h"
 #include "QtHost.h"
@@ -128,7 +128,7 @@ void AudioSettingsWidget::expansionModeChanged()
 void AudioSettingsWidget::outputModuleChanged()
 {
 	const std::string module_name(m_dialog->getEffectiveStringValue("SPU2/Output", "OutputModule", DEFAULT_OUTPUT_MODULE));
-	const char* const* backend_names = GetOutputModuleBackends(module_name.c_str());
+	const char* const* backend_names = SPU::GetOutputModuleBackends(module_name.c_str());
 
 	const std::string backend_name(m_dialog->getEffectiveStringValue("SPU2/Output", "BackendName", ""));
 

@@ -219,4 +219,7 @@ namespace SPU
 	void SetOutputPaused(bool paused) {}
 
 	void SetDeviceSampleRateMultiplier(double multiplier) {}
+
+	const char* const* GetOutputModuleBackends(const char* omodid) { return nullptr; }
+
 } // namespace SPU
