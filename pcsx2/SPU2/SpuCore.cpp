@@ -87,15 +87,15 @@ namespace SPU
 		for (int i = 0; i < 6; i++)
 		{
 			GSVector8i dec(
-				*(u64*)m_voices[voice + 0].m_DecodeBuf.Get(),
-				*(u64*)m_voices[voice + 1].m_DecodeBuf.Get(),
-				*(u64*)m_voices[voice + 2].m_DecodeBuf.Get(),
-				*(u64*)m_voices[voice + 3].m_DecodeBuf.Get());
+				*(u64*)m_voices[voice + 0].Get(),
+				*(u64*)m_voices[voice + 1].Get(),
+				*(u64*)m_voices[voice + 2].Get(),
+				*(u64*)m_voices[voice + 3].Get());
 			GSVector8i interp(
-				*(u64*)gaussianTable[(m_voices[voice + 0].m_Counter & 0xff0) >> 4].data(),
-				*(u64*)gaussianTable[(m_voices[voice + 1].m_Counter & 0xff0) >> 4].data(),
-				*(u64*)gaussianTable[(m_voices[voice + 2].m_Counter & 0xff0) >> 4].data(),
-				*(u64*)gaussianTable[(m_voices[voice + 3].m_Counter & 0xff0) >> 4].data());
+				*(u64*)gaussianTable[(m_share.Counter.uarr[voice + 0] & 0xff0) >> 4].data(),
+				*(u64*)gaussianTable[(m_share.Counter.uarr[voice + 1] & 0xff0) >> 4].data(),
+				*(u64*)gaussianTable[(m_share.Counter.uarr[voice + 2] & 0xff0) >> 4].data(),
+				*(u64*)gaussianTable[(m_share.Counter.uarr[voice + 3] & 0xff0) >> 4].data());
 
 			dec = dec.mul16hrs(interp);
 			dec = dec.adds16(dec.yyww());

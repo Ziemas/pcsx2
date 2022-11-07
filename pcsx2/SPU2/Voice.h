@@ -72,7 +72,8 @@ namespace SPU
 		Reg32 ENDX{0};
 		Reg32 NON{0};
 		AddrVec vNAX{};
-		VoiceVec PITCH{};
+		VoiceVec Pitch{};
+		VoiceVec Counter{};
 		VoiceVec OUTX{};
 		VoiceVec VOLL{};
 		VoiceVec VOLR{};
@@ -102,10 +103,12 @@ namespace SPU
 
 				m_Share.ENDX.full &= ~(1 << m_Id);
 				m_ADSR.Attack();
-				m_Counter = 0;
+				m_Share.Counter.uarr[m_Id] = 0;
 				m_DecodeHist1 = 0;
 				m_DecodeHist2 = 0;
-				m_DecodeBuf.Reset();
+				m_Buffer = {};
+				m_Rpos = 0;
+				m_Wpos = 0;
 				m_CustomLoop = false;
 				//Console.WriteLn("SPU[%d]:VOICE[%d] Key On, SSA %08x", m_SPU.m_Id, m_Id, m_SSA);
 			}
@@ -121,7 +124,7 @@ namespace SPU
 			// This doesn't exactly match the real behaviour,
 			// it seems to initially decode a bigger chunk
 			// and then decode more data after a bit has drained
-			if (m_DecodeBuf.Size() >= 16)
+			if (Size() >= 16)
 			{
 				// sufficient data buffered
 				return;
@@ -133,7 +136,7 @@ namespace SPU
 			// But it's too good a speed boost to let go.
 			if (m_ADSR.GetPhase() == ADSR::Phase::Stopped)
 			{
-				m_DecodeBuf.PushSkipN(4);
+				PushSkipN(4);
 			}
 			else
 			{
@@ -153,7 +156,7 @@ namespace SPU
 					m_DecodeHist2 = m_DecodeHist1;
 					m_DecodeHist1 = static_cast<s16>(sample);
 
-					m_DecodeBuf.Push(static_cast<s16>(sample));
+					Push(static_cast<s16>(sample));
 					data >>= 4;
 				}
 			}
@@ -182,8 +185,8 @@ namespace SPU
 
 		void UpdateCounter()
 		{
-			s32 step = m_Pitch;
-			if ((m_Share.PitchMod.full & (1 << m_Id)))
+			s32 step = m_Share.Pitch.uarr[m_Id];
+			if ((m_Share.PitchMod.full & (1 << m_Id)) != 0U)
 			{
 				s32 factor = m_Share.OUTX.uarr[m_Id];
 				step = (step << 16) >> 16;
@@ -192,10 +195,9 @@ namespace SPU
 			}
 
 			step = std::min(step, 0x3FFF);
-			m_Counter += step;
-			m_DecodeBuf.PopN(m_Counter >> 12);
-			m_Counter &= 0xFFF;
-
+			m_Share.Counter.uarr[m_Id] += step;
+			PopN(m_Share.Counter.uarr[m_Id] >> 12);
+			m_Share.Counter.uarr[m_Id] &= 0xFFF;
 
 			m_Share.ENVX.arr[m_Id] = m_ADSR.Level();
 			m_Share.VOLL.arr[m_Id] = m_Volume.left.GetCurrent();
@@ -214,7 +216,7 @@ namespace SPU
 				case 2:
 					return m_Volume.right.Get();
 				case 4:
-					return m_Pitch;
+					return m_Share.Pitch.uarr[m_Id];
 				case 6:
 					return m_ADSR.m_Reg.lo.GetValue();
 				case 8:
@@ -243,7 +245,7 @@ namespace SPU
 					m_Volume.right.Set(value);
 					return;
 				case 4:
-					m_Pitch = value;
+					m_Share.Pitch.uarr[m_Id] = value;
 					return;
 				case 6:
 					m_ADSR.m_Reg.lo = value;
@@ -322,21 +324,39 @@ namespace SPU
 
 		void Reset()
 		{
-			m_DecodeBuf.Reset();
 			m_DecodeHist1 = 0;
 			m_DecodeHist2 = 0;
-			m_Counter = 0;
-			m_Pitch = 0;
 			m_SSA.full = 0;
 			m_LSA.full = 0;
 			m_CustomLoop = false;
 			m_CurHeader.bits = 0;
 			m_ADSR.Reset();
 			m_Volume.Reset();
+
+			m_Buffer.fill({});
+			m_Rpos = 0;
+			m_Wpos = 0;
 		}
 
-		SampleFifo<s16, 0x20> m_DecodeBuf{};
-		u32 m_Counter{0};
+		void PopN(size_t n) { m_Rpos += n; }
+		void Push(s16 val)
+		{
+			m_Buffer[(m_Wpos & 0x1f) | 0x0] = val;
+			m_Buffer[(m_Wpos & 0x1f) | 0x20] = val;
+			m_Wpos++;
+		}
+
+		void PushSkipN(size_t n)
+		{
+			m_Wpos += n;
+		}
+
+		size_t Size() { return m_Wpos - m_Rpos; }
+
+		s16* Get()
+		{
+			return &m_Buffer[m_Rpos & 0x1f];
+		}
 
 	private:
 		union ADPCMHeader
@@ -358,13 +378,16 @@ namespace SPU
 			{122, -60},
 		};
 
+		alignas(32) std::array<s16, 0x20 << 1> m_Buffer{};
+
+		u16 m_Rpos{0};
+		u16 m_Wpos{0};
+
 		SharedData& m_Share;
 		s32 m_Id{0};
 
 		s16 m_DecodeHist1{0};
 		s16 m_DecodeHist2{0};
-
-		u16 m_Pitch{0};
 
 		Reg32 m_SSA{0};
 		Reg32 m_LSA{0};

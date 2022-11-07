@@ -61,42 +61,6 @@ namespace SPU
 	};
 
 	template <typename Tp, size_t Nm>
-	class SampleFifo
-	{
-		static constexpr size_t Sz = (1 << static_cast<size_t>(gcem::ceil(gcem::log2(Nm))));
-
-	public:
-		void PopN(size_t n) { m_Rpos += n; }
-		void Push(Tp val)
-		{
-			m_Buffer[mask(m_Wpos) | 0x0] = val;
-			m_Buffer[mask(m_Wpos) | Sz] = val;
-			m_Wpos++;
-		}
-		void PushSkipN(size_t n)
-		{
-			m_Wpos += n;
-		}
-		size_t Size() { return m_Wpos - m_Rpos; }
-		Tp* Get()
-		{
-			return &m_Buffer[mask(m_Rpos)];
-		}
-		void Reset()
-		{
-			m_Buffer.fill(Tp{});
-			m_Rpos = 0;
-			m_Wpos = 0;
-		}
-
-	private:
-		alignas(32) std::array<Tp, Sz << 1> m_Buffer{};
-		size_t mask(size_t val) { return val & (Sz - 1); }
-		size_t m_Rpos{0};
-		size_t m_Wpos{0};
-	};
-
-	template <typename Tp, size_t Nm>
 	class SampleBuffer
 	{
 		static constexpr size_t Sz = (1 << static_cast<size_t>(gcem::ceil(gcem::log2(Nm))));
