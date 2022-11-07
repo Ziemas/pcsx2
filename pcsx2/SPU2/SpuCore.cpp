@@ -48,6 +48,7 @@ namespace SPU
 			GSVector8i(m_IRQA[0].full).broadcast32(),
 			GSVector8i(m_IRQA[1].full).broadcast32()};
 		GSVector8i mask(GSVector8i(~0x7).broadcast32());
+		GSVector8i buf_addrs(GSVector8i(m_CurrentBuffer * BufSize + m_BufPos + m_Id * OutBufCoreOffset).broadcast32() + OutBufVec);
 
 		for (int i = 0; i < 2; i++)
 		{
@@ -57,10 +58,11 @@ namespace SPU
 				res |= m_share.vNAX.vec[1] == irqa[i];
 				res |= m_share.vNAX.vec[2] == irqa[i];
 
-
 				res |= (m_share.vNAX.vec[0] & mask) == irqa[i];
 				res |= (m_share.vNAX.vec[1] & mask) == irqa[i];
 				res |= (m_share.vNAX.vec[2] & mask) == irqa[i];
+
+				res |= buf_addrs == irqa[i];
 
 				if (!res.allfalse())
 				{
@@ -398,7 +400,8 @@ namespace SPU
 	{
 		auto displacement = (m_CurrentBuffer * BufSize) + m_BufPos;
 		auto address = static_cast<u32>(buffer) + (m_Id * OutBufCoreOffset);
-		TestIrq(address + displacement);
+		// Irq is tested together with voice irqs
+		//TestIrq(address + displacement);
 		WriteMem(address + displacement, value);
 	}
 

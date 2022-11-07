@@ -28,37 +28,11 @@
 
 namespace SPU
 {
-	static constexpr u32 NUM_VOICES = 24;
-	static constexpr u32 SINER = 0;
-	static constexpr u32 SINEL = 1;
-	static constexpr u32 SINR = 2;
-	static constexpr u32 SINL = 3;
-	static constexpr u32 MINER = 4;
-	static constexpr u32 MINEL = 5;
-	static constexpr u32 MINR = 6;
-	static constexpr u32 MINL = 7;
-	static constexpr u32 MSNDER = 8;
-	static constexpr u32 MSNDEL = 9;
-	static constexpr u32 MSNDR = 10;
-	static constexpr u32 MSNDL = 11;
-
 	class SPUCore
 	{
 		friend class Voice;
 
 	public:
-		enum class OutBuf
-		{
-			SINL = 0x0,
-			SINR = 0x200,
-			Voice1 = 0x400,
-			Voice3 = 0x600,
-			MemOutL = 0x1000,
-			MemOutR = 0x1200,
-			MemOutEL = 0x1400,
-			MemOutER = 0x1600,
-		};
-
 		SPUCore(u16* ram, u32 id)
 			: m_Id(id)
 			, m_RAM(ram)
@@ -81,7 +55,6 @@ namespace SPU
 		void DmaRead(u16* madr, u32 size);
 		u16 Ram(u32 address) { return m_RAM[address & 0xFFFFF]; }
 		Voice& GetVoice(int n) { return m_voices[n]; }
-		void MemOut(OutBuf buffer, s16 value);
 		static void TestIrq(u32 address);
 		static void TestIrq(u32 start, u32 end);
 		[[nodiscard]] s16 NoiseLevel() const { return m_Noise.Get(); }
@@ -97,6 +70,32 @@ namespace SPU
 		void Reset();
 
 	private:
+		static constexpr u32 NUM_VOICES = 24;
+		static constexpr u32 SINER = 0;
+		static constexpr u32 SINEL = 1;
+		static constexpr u32 SINR = 2;
+		static constexpr u32 SINL = 3;
+		static constexpr u32 MINER = 4;
+		static constexpr u32 MINEL = 5;
+		static constexpr u32 MINR = 6;
+		static constexpr u32 MINL = 7;
+		static constexpr u32 MSNDER = 8;
+		static constexpr u32 MSNDEL = 9;
+		static constexpr u32 MSNDR = 10;
+		static constexpr u32 MSNDL = 11;
+
+		enum class OutBuf
+		{
+			SINL = 0x0,
+			SINR = 0x200,
+			Voice1 = 0x400,
+			Voice3 = 0x600,
+			MemOutL = 0x1000,
+			MemOutR = 0x1200,
+			MemOutEL = 0x1400,
+			MemOutER = 0x1600,
+		};
+
 		static constexpr u32 DmaFifoSize = 0x20;
 		static constexpr u32 BufSize = 0x100;
 		static constexpr u32 OutBufCoreOffset = 0x800;
@@ -216,12 +215,22 @@ namespace SPU
 
 		void RunADMA();
 		[[nodiscard]] bool AdmaActive() const { return m_Id ? m_Adma.Core2.GetValue() : m_Adma.Core1.GetValue(); };
+		void MemOut(OutBuf buffer, s16 value);
 
 		u16* m_RAM;
 
 		static std::array<Reg32, 2> m_IRQA;
 		static std::array<AttrReg, 2> m_ATTR;
 		static IrqStat m_IRQ;
+		static constexpr GSVector8i OutBufVec = GSVector8i::cxpr(
+			static_cast<s32>(OutBuf::SINL),
+			static_cast<s32>(OutBuf::SINR),
+			static_cast<s32>(OutBuf::Voice1),
+			static_cast<s32>(OutBuf::Voice3),
+			static_cast<s32>(OutBuf::MemOutL),
+			static_cast<s32>(OutBuf::MemOutR),
+			static_cast<s32>(OutBuf::MemOutEL),
+			static_cast<s32>(OutBuf::MemOutER));
 
 		SpdifConfig m_SPDIFConf{0};
 		SpdifMedia m_SPDIFMedia{0};
