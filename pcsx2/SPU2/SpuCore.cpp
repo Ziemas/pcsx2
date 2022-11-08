@@ -111,32 +111,27 @@ namespace SPU
 			v.UpdateVolume();
 		}
 
-		GSVector8i pmod_mask(GSVector8i(0xffff).broadcast32());
-		GSVector8i factors[2]{m_share.OUTX.vec[0], m_share.OUTX.vec[1]};
-		GSVector8i steps[2]{m_share.Pitch.vec[0].andnot(m_vPMON.vec[0]), m_share.Pitch.vec[1].andnot(m_vPMON.vec[1])};
-
 		for (int i = 0; i < 2; i++)
 		{
+			GSVector8i steps{m_share.Pitch.vec[i].andnot(m_vPMON.vec[i])};
+			GSVector8i factors{m_share.OUTX.vec[i]};
 			auto pitch_lo = GSVector8i::i16to32(GSVector4i::cast(m_share.Pitch.vec[i]));
-			auto factor_lo = GSVector8i::u16to32(GSVector4i::cast(factors[i]));
+			auto factor_lo = GSVector8i::u16to32(GSVector4i::cast(factors));
 			auto pitch_hi = GSVector8i::i16to32(GSVector4i::cast(m_share.Pitch.vec[i].cddd()));
-			auto factor_hi = GSVector8i::u16to32(GSVector4i::cast(factors[i].cddd()));
+			auto factor_hi = GSVector8i::u16to32(GSVector4i::cast(factors.cddd()));
 
+			GSVector8i pmod_mask(GSVector8i(0xffff).broadcast32());
 			auto reslo = pitch_lo.mul32lo(factor_lo).sra32(15) & pmod_mask;
 			auto reshi = pitch_hi.mul32lo(factor_hi).sra32(15) & pmod_mask;
-			steps[i] |= reslo.pu32(reshi).acbd() & m_vPMON.vec[i];
+			steps |= reslo.pu32(reshi).acbd() & m_vPMON.vec[i];
+
+			GSVector8i step_limit(GSVector8i(0x3fff).broadcast16());
+			steps = m_share.Counter.vec[i].add16(steps.min_u16(step_limit));
+
+			GSVector8i counter_mask(GSVector8i(0xfff).broadcast16());
+			m_share.Counter.vec[i] = steps & counter_mask;
+			m_share.SamplePos.vec[i] = m_share.SamplePos.vec[i].add16(steps.srl16(12));
 		}
-
-		GSVector8i step_limit(GSVector8i(0x3fff).broadcast16());
-		steps[0] = m_share.Counter.vec[0].add16(steps[0].min_u16(step_limit));
-		steps[1] = m_share.Counter.vec[1].add16(steps[1].min_u16(step_limit));
-
-		GSVector8i counter_mask(GSVector8i(0xfff).broadcast16());
-		m_share.Counter.vec[0] = steps[0] & counter_mask;
-		m_share.Counter.vec[1] = steps[1] & counter_mask;
-
-		m_share.SamplePos.vec[0] = m_share.SamplePos.vec[0].add16(steps[0].srl16(12));
-		m_share.SamplePos.vec[1] = m_share.SamplePos.vec[1].add16(steps[1].srl16(12));
 
 		// Load noise into all elements
 		GSVector8i noise[2]{
