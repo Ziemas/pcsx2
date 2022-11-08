@@ -74,6 +74,7 @@ namespace SPU
 		AddrVec vNAX{};
 		VoiceVec Pitch{};
 		VoiceVec Counter{};
+		VoiceVec SamplePos{};
 		VoiceVec OUTX{};
 		VoiceVec VOLL{};
 		VoiceVec VOLR{};
@@ -107,7 +108,7 @@ namespace SPU
 				m_DecodeHist1 = 0;
 				m_DecodeHist2 = 0;
 				m_Buffer = {};
-				m_Rpos = 0;
+				m_Share.SamplePos.uarr[m_Id] = 0;
 				m_Wpos = 0;
 				m_CustomLoop = false;
 				//Console.WriteLn("SPU[%d]:VOICE[%d] Key On, SSA %08x", m_SPU.m_Id, m_Id, m_SSA);
@@ -185,19 +186,19 @@ namespace SPU
 
 		void UpdateCounter()
 		{
-			s32 step = m_Share.Pitch.uarr[m_Id];
-			if ((m_Share.PitchMod.full & (1 << m_Id)) != 0U)
-			{
-				s32 factor = m_Share.OUTX.uarr[m_Id];
-				step = (step << 16) >> 16;
-				step = (step * factor) >> 15;
-				step &= 0xFFFF;
-			}
+			//s32 step = m_Share.Pitch.uarr[m_Id];
+			//if ((m_Share.PitchMod.full & (1 << m_Id)) != 0U)
+			//{
+			//	s32 factor = m_Share.OUTX.uarr[m_Id];
+			//	step = (step << 16) >> 16;
+			//	step = (step * factor) >> 15;
+			//	step &= 0xFFFF;
+			//}
 
-			step = std::min(step, 0x3FFF);
-			m_Share.Counter.uarr[m_Id] += step;
-			PopN(m_Share.Counter.uarr[m_Id] >> 12);
-			m_Share.Counter.uarr[m_Id] &= 0xFFF;
+			//step = std::min(step, 0x3FFF);
+			//m_Share.Counter.uarr[m_Id] += step;
+			//PopN(m_Share.Counter.uarr[m_Id] >> 12);
+			//m_Share.Counter.uarr[m_Id] &= 0xFFF;
 
 			m_Share.ENVX.arr[m_Id] = m_ADSR.Level();
 			m_Share.VOLL.arr[m_Id] = m_Volume.left.GetCurrent();
@@ -334,11 +335,11 @@ namespace SPU
 			m_Volume.Reset();
 
 			m_Buffer.fill({});
-			m_Rpos = 0;
+			m_Share.SamplePos.uarr[m_Id] = 0;
 			m_Wpos = 0;
 		}
 
-		void PopN(size_t n) { m_Rpos += n; }
+		void PopN(size_t n) { m_Share.SamplePos.uarr[m_Id] += n; }
 		void Push(s16 val)
 		{
 			m_Buffer[(m_Wpos & 0x1f) | 0x0] = val;
@@ -351,11 +352,11 @@ namespace SPU
 			m_Wpos += n;
 		}
 
-		u16 Size() { return static_cast<u16>(m_Wpos - m_Rpos); }
+		u16 Size() { return static_cast<u16>(m_Wpos - m_Share.SamplePos.uarr[m_Id]); }
 
 		s16* Get()
 		{
-			return &m_Buffer[m_Rpos & 0x1f];
+			return &m_Buffer[m_Share.SamplePos.uarr[m_Id] & 0x1f];
 		}
 
 	private:
@@ -380,7 +381,6 @@ namespace SPU
 
 		alignas(32) std::array<s16, 0x20 << 1> m_Buffer{};
 
-		u16 m_Rpos{0};
 		u16 m_Wpos{0};
 
 		SharedData& m_Share;

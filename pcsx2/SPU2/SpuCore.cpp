@@ -83,32 +83,42 @@ namespace SPU
 
 
 		VoiceVec interp_out{};
-		int voice = 0;
-		for (int i = 0; i < 6; i++)
+		for (int i = 0; i < 24; i += 4)
 		{
 			GSVector8i dec(
-				*(u64*)m_voices[voice + 0].Get(),
-				*(u64*)m_voices[voice + 1].Get(),
-				*(u64*)m_voices[voice + 2].Get(),
-				*(u64*)m_voices[voice + 3].Get());
+				*(u64*)m_voices[i + 0].Get(),
+				*(u64*)m_voices[i + 1].Get(),
+				*(u64*)m_voices[i + 2].Get(),
+				*(u64*)m_voices[i + 3].Get());
 			GSVector8i interp(
-				*(u64*)gaussianTable[(m_share.Counter.uarr[voice + 0] & 0xff0) >> 4].data(),
-				*(u64*)gaussianTable[(m_share.Counter.uarr[voice + 1] & 0xff0) >> 4].data(),
-				*(u64*)gaussianTable[(m_share.Counter.uarr[voice + 2] & 0xff0) >> 4].data(),
-				*(u64*)gaussianTable[(m_share.Counter.uarr[voice + 3] & 0xff0) >> 4].data());
+				*(u64*)gaussianTable[(m_share.Counter.uarr[i + 0] & 0xff0) >> 4].data(),
+				*(u64*)gaussianTable[(m_share.Counter.uarr[i + 1] & 0xff0) >> 4].data(),
+				*(u64*)gaussianTable[(m_share.Counter.uarr[i + 2] & 0xff0) >> 4].data(),
+				*(u64*)gaussianTable[(m_share.Counter.uarr[i + 3] & 0xff0) >> 4].data());
 
 			dec = dec.mul16hrs(interp);
 			dec = dec.adds16(dec.yyww());
 			auto lo = dec.adds16(dec.yxxxl());
 			auto hi = dec.adds16(dec.yxxxh());
 
-			interp_out.arr[voice + 0] = lo.I16[0];
-			interp_out.arr[voice + 1] = hi.I16[4];
-			interp_out.arr[voice + 2] = lo.I16[8];
-			interp_out.arr[voice + 3] = hi.I16[12];
-
-			voice += 4;
+			interp_out.arr[i + 0] = lo.I16[0];
+			interp_out.arr[i + 1] = hi.I16[4];
+			interp_out.arr[i + 2] = lo.I16[8];
+			interp_out.arr[i + 3] = hi.I16[12];
 		}
+
+		GSVector8i step_limit(GSVector8i(0x3fff).broadcast16());
+		GSVector8i counter_mask(GSVector8i(0xfff).broadcast16());
+		GSVector8i factors[2]{m_share.OUTX.vec[0], m_share.OUTX.vec[1]};
+		GSVector8i steps[2]{m_share.Pitch.vec[0], m_share.Pitch.vec[1]};
+
+
+		steps[0] = m_share.Counter.vec[0].add16(steps[0].min_u16(step_limit));
+		steps[1] = m_share.Counter.vec[1].add16(steps[1].min_u16(step_limit));
+		m_share.Counter.vec[0] = steps[0] & counter_mask;
+		m_share.Counter.vec[1] = steps[1] & counter_mask;
+		m_share.SamplePos.vec[0] = m_share.SamplePos.vec[0].add16(steps[0].srl16(12));
+		m_share.SamplePos.vec[1] = m_share.SamplePos.vec[1].add16(steps[1].srl16(12));
 
 		for (auto& v : m_voices)
 		{
