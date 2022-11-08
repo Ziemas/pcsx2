@@ -114,13 +114,13 @@ namespace SPU
 
 		for (int i = 0; i < 2; i++)
 		{
-			auto pitch_lo = GSVector8i::i16to32(GSVector4i::cast(steps[i]));
-			auto factor_lo = GSVector8i::i16to32(GSVector4i::cast(factors[i]));
-			auto pitch_hi = GSVector8i::i16to32(GSVector4i::cast(steps[i].cddd()));
-			auto factor_hi = GSVector8i::i16to32(GSVector4i::cast(factors[i].cddd()));
+			auto pitch_lo = GSVector8i::i16to32(GSVector4i::cast(m_share.Pitch.vec[i]));
+			auto factor_lo = GSVector8i::u16to32(GSVector4i::cast(factors[i]));
+			auto pitch_hi = GSVector8i::i16to32(GSVector4i::cast(m_share.Pitch.vec[i].cddd()));
+			auto factor_hi = GSVector8i::u16to32(GSVector4i::cast(factors[i].cddd()));
 
-			auto reslo = pitch_lo.mul32lo(factor_lo) & pmod_mask;
-			auto reshi = pitch_hi.mul32lo(factor_hi) & pmod_mask;
+			auto reslo = pitch_lo.mul32lo(factor_lo).sra32(15) & pmod_mask;
+			auto reshi = pitch_hi.mul32lo(factor_hi).sra32(15) & pmod_mask;
 			steps[i] |= reslo.pu32(reshi).acbd() & m_vPMON.vec[i];
 		}
 
