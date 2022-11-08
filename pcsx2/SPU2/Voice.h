@@ -115,7 +115,7 @@ namespace SPU
 			}
 		}
 
-		void DecodeSamples()
+		__fi void DecodeSamples()
 		{
 			// The block header (and thus LSA) updates every spu cycle
 			m_CurHeader.bits = m_Share.RAM[(m_Share.vNAX.arr[m_Id].full & ~0x7) & 0xfffff];
@@ -184,7 +184,7 @@ namespace SPU
 			}
 		};
 
-		void UpdateVolume()
+		__fi void UpdateVolume()
 		{
 			m_Share.ENVX.arr[m_Id] = m_ADSR.Level();
 			m_Share.VOLL.arr[m_Id] = m_Volume.left.GetCurrent();
