@@ -81,7 +81,6 @@ namespace SPU
 			v.DecodeSamples();
 		}
 
-
 		VoiceVec interp_out{};
 		for (int i = 0; i < 24; i += 4)
 		{
@@ -109,14 +108,28 @@ namespace SPU
 
 		GSVector8i step_limit(GSVector8i(0x3fff).broadcast16());
 		GSVector8i counter_mask(GSVector8i(0xfff).broadcast16());
+		GSVector8i pmod_mask(GSVector8i(0xffff).broadcast32());
 		GSVector8i factors[2]{m_share.OUTX.vec[0], m_share.OUTX.vec[1]};
-		GSVector8i steps[2]{m_share.Pitch.vec[0], m_share.Pitch.vec[1]};
+		GSVector8i steps[2]{m_share.Pitch.vec[0].andnot(m_vPMON.vec[0]), m_share.Pitch.vec[1].andnot(m_vPMON.vec[1])};
 
+		for (int i = 0; i < 2; i++)
+		{
+			auto pitch_lo = GSVector8i::i16to32(GSVector4i::cast(steps[i]));
+			auto factor_lo = GSVector8i::i16to32(GSVector4i::cast(factors[i]));
+			auto pitch_hi = GSVector8i::i16to32(GSVector4i::cast(steps[i].cddd()));
+			auto factor_hi = GSVector8i::i16to32(GSVector4i::cast(factors[i].cddd()));
+
+			auto reslo = pitch_lo.mul32lo(factor_lo) & pmod_mask;
+			auto reshi = pitch_hi.mul32lo(factor_hi) & pmod_mask;
+			steps[i] |= reslo.pu32(reshi).acbd() & m_vPMON.vec[i];
+		}
 
 		steps[0] = m_share.Counter.vec[0].add16(steps[0].min_u16(step_limit));
 		steps[1] = m_share.Counter.vec[1].add16(steps[1].min_u16(step_limit));
+
 		m_share.Counter.vec[0] = steps[0] & counter_mask;
 		m_share.Counter.vec[1] = steps[1] & counter_mask;
+
 		m_share.SamplePos.vec[0] = m_share.SamplePos.vec[0].add16(steps[0].srl16(12));
 		m_share.SamplePos.vec[1] = m_share.SamplePos.vec[1].add16(steps[1].srl16(12));
 

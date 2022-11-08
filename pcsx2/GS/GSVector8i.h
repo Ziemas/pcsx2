@@ -846,6 +846,11 @@ public:
 		return GSVector8i(_mm256_mulhrs_epi16(m, v.m));
 	}
 
+	__forceinline GSVector8i mul32lo(const GSVector8i& v) const
+	{
+		return GSVector8i(_mm256_mullo_epi32(m, v.m));
+	}
+
 	GSVector8i madd(const GSVector8i& v) const
 	{
 		return GSVector8i(_mm256_madd_epi16(m, v.m));
