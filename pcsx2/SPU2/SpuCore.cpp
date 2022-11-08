@@ -44,25 +44,23 @@ namespace SPU
 			m_share.KeyOn.full = 0;
 		}
 
-		GSVector8i irqa[2]{
-			GSVector8i(m_IRQA[0].full).broadcast32(),
-			GSVector8i(m_IRQA[1].full).broadcast32()};
-		GSVector8i mask(GSVector8i(~0x7).broadcast32());
-		GSVector8i buf_addrs(GSVector8i(m_CurrentBuffer * BufSize + m_BufPos + m_Id * OutBufCoreOffset).broadcast32() + OutBufVec);
-
 		for (int i = 0; i < 2; i++)
 		{
 			if (m_ATTR[i].IRQEnable)
 			{
-				auto res = m_share.vNAX.vec[0] == irqa[i];
-				res |= m_share.vNAX.vec[1] == irqa[i];
-				res |= m_share.vNAX.vec[2] == irqa[i];
+				GSVector8i mask(GSVector8i(~0x7).broadcast32());
+				GSVector8i buf_addrs(GSVector8i(m_CurrentBuffer * BufSize + m_BufPos + m_Id * OutBufCoreOffset).broadcast32() + OutBufVec);
+				GSVector8i irqa{GSVector8i(m_IRQA[i].full).broadcast32()};
 
-				res |= (m_share.vNAX.vec[0] & mask) == irqa[i];
-				res |= (m_share.vNAX.vec[1] & mask) == irqa[i];
-				res |= (m_share.vNAX.vec[2] & mask) == irqa[i];
+				auto res = m_share.vNAX.vec[0] == irqa;
+				res |= m_share.vNAX.vec[1] == irqa;
+				res |= m_share.vNAX.vec[2] == irqa;
 
-				res |= buf_addrs == irqa[i];
+				res |= (m_share.vNAX.vec[0] & mask) == irqa;
+				res |= (m_share.vNAX.vec[1] & mask) == irqa;
+				res |= (m_share.vNAX.vec[2] & mask) == irqa;
+
+				res |= buf_addrs == irqa;
 
 				if (!res.allfalse())
 				{
