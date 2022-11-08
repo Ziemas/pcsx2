@@ -184,22 +184,8 @@ namespace SPU
 			}
 		};
 
-		void UpdateCounter()
+		void UpdateVolume()
 		{
-			//s32 step = m_Share.Pitch.uarr[m_Id];
-			//if ((m_Share.PitchMod.full & (1 << m_Id)) != 0U)
-			//{
-			//	s32 factor = m_Share.OUTX.uarr[m_Id];
-			//	step = (step << 16) >> 16;
-			//	step = (step * factor) >> 15;
-			//	step &= 0xFFFF;
-			//}
-
-			//step = std::min(step, 0x3FFF);
-			//m_Share.Counter.uarr[m_Id] += step;
-			//PopN(m_Share.Counter.uarr[m_Id] >> 12);
-			//m_Share.Counter.uarr[m_Id] &= 0xFFF;
-
 			m_Share.ENVX.arr[m_Id] = m_ADSR.Level();
 			m_Share.VOLL.arr[m_Id] = m_Volume.left.GetCurrent();
 			m_Share.VOLR.arr[m_Id] = m_Volume.right.GetCurrent();

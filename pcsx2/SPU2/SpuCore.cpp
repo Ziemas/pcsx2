@@ -106,8 +106,11 @@ namespace SPU
 			interp_out.arr[i + 3] = hi.I16[12];
 		}
 
-		GSVector8i step_limit(GSVector8i(0x3fff).broadcast16());
-		GSVector8i counter_mask(GSVector8i(0xfff).broadcast16());
+		for (auto& v : m_voices)
+		{
+			v.UpdateVolume();
+		}
+
 		GSVector8i pmod_mask(GSVector8i(0xffff).broadcast32());
 		GSVector8i factors[2]{m_share.OUTX.vec[0], m_share.OUTX.vec[1]};
 		GSVector8i steps[2]{m_share.Pitch.vec[0].andnot(m_vPMON.vec[0]), m_share.Pitch.vec[1].andnot(m_vPMON.vec[1])};
@@ -124,20 +127,16 @@ namespace SPU
 			steps[i] |= reslo.pu32(reshi).acbd() & m_vPMON.vec[i];
 		}
 
+		GSVector8i step_limit(GSVector8i(0x3fff).broadcast16());
 		steps[0] = m_share.Counter.vec[0].add16(steps[0].min_u16(step_limit));
 		steps[1] = m_share.Counter.vec[1].add16(steps[1].min_u16(step_limit));
 
+		GSVector8i counter_mask(GSVector8i(0xfff).broadcast16());
 		m_share.Counter.vec[0] = steps[0] & counter_mask;
 		m_share.Counter.vec[1] = steps[1] & counter_mask;
 
 		m_share.SamplePos.vec[0] = m_share.SamplePos.vec[0].add16(steps[0].srl16(12));
 		m_share.SamplePos.vec[1] = m_share.SamplePos.vec[1].add16(steps[1].srl16(12));
-
-		for (auto& v : m_voices)
-		{
-			// Could be vectorized if not for pitch mod
-			v.UpdateCounter();
-		}
 
 		// Load noise into all elements
 		GSVector8i noise[2]{
