@@ -351,7 +351,7 @@ namespace SPU
 			m_Wpos += n;
 		}
 
-		size_t Size() { return m_Wpos - m_Rpos; }
+		u16 Size() { return static_cast<u16>(m_Wpos - m_Rpos); }
 
 		s16* Get()
 		{
