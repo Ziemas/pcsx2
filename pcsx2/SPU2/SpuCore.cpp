@@ -654,11 +654,11 @@ namespace SPU
 				break;
 			case 0x2E0:
 				m_Reverb.m_pos = 0;
-				m_Reverb.m_ESA.hi = value & 0xF;
+				m_Reverb.m_ESA.hi.SetValue(value & 0x3F);
 				break;
 			case 0x2E2:
 				m_Reverb.m_pos = 0;
-				m_Reverb.m_ESA.lo = value;
+				m_Reverb.m_ESA.lo.SetValue(value);
 				break;
 			case 0x2E4:
 				m_Reverb.dAPF[0].hi = value;
@@ -793,8 +793,8 @@ namespace SPU
 				m_Reverb.mAPF2[1].lo = value;
 				break;
 			case 0x33C:
-				m_Reverb.m_EEA.hi = value & 0xF;
-				m_Reverb.m_EEA.lo = 0xFFFF;
+				m_Reverb.m_EEA.hi.SetValue(value & 0x3f);
+				m_Reverb.m_EEA.lo.SetValue(0xFFFF);
 				break;
 			case 0x340:
 				m_share.ENDX.lo.SetValue(value);
