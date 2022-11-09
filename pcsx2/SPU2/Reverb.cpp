@@ -35,7 +35,7 @@ namespace SPU
 		// clang-format on
 	} FilterCoefficients{};
 
-	s16 Reverb::DownSample(AudioSample in)
+	inline s16 Reverb::DownSample(AudioSample in)
 	{
 		m_ReverbIn[0].Push(in.left);
 		m_ReverbIn[1].Push(in.right);
@@ -54,7 +54,7 @@ namespace SPU
 		return hsum(vec[0]);
 	}
 
-	AudioSample Reverb::UpSample(s16 in)
+	inline AudioSample Reverb::UpSample(s16 in)
 	{
 		m_ReverbOut[0].Push(m_Phase ? in : 0);
 		m_ReverbOut[1].Push(m_Phase ? 0 : in);
@@ -90,7 +90,7 @@ namespace SPU
 			static_cast<s16>(std::clamp<s32>(hsum(rvec[0]) * 2, INT16_MIN, INT16_MAX))};
 	}
 
-	static s32 IIASM(const s16 vIIR, const s16 sample)
+	inline static s32 IIASM(const s16 vIIR, const s16 sample)
 	{
 		if (vIIR == INT16_MIN)
 		{
@@ -103,12 +103,12 @@ namespace SPU
 		return sample * (INT16_MAX - vIIR);
 	}
 
-	static s16 ReverbSat(s32 sample)
+	inline static s16 ReverbSat(s32 sample)
 	{
 		return static_cast<s16>(std::clamp<s32>(sample, INT16_MIN, INT16_MAX));
 	}
 
-	static s16 ReverbNeg(s16 sample)
+	inline static s16 ReverbNeg(s16 sample)
 	{
 		if (sample == INT16_MIN)
 			return INT16_MAX;
@@ -116,7 +116,7 @@ namespace SPU
 		return static_cast<s16>(-sample);
 	}
 
-	u32 Reverb::Offset(s32 offset) const
+	inline u32 Reverb::Offset(s32 offset) const
 	{
 		uint32_t address = m_pos + offset;
 		uint32_t size = m_EEA.full - m_ESA.full;
@@ -129,13 +129,13 @@ namespace SPU
 		return address;
 	}
 
-	s16 Reverb::RD_RVB(s32 address, s32 offset)
+	inline s16 Reverb::RD_RVB(s32 address, s32 offset)
 	{
 		m_SPU.TestIrq(Offset(address + offset));
 		return static_cast<s16>(m_SPU.Ram(Offset(address + offset)));
 	}
 
-	void Reverb::WR_RVB(s32 address, s16 sample)
+	inline void Reverb::WR_RVB(s32 address, s16 sample)
 	{
 		if (m_Enable)
 		{
