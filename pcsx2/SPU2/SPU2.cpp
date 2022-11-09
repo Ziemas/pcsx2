@@ -139,14 +139,14 @@ namespace SPU
             return;
         }
 
-        if (addr < 0x7C0) // core1 volume, reverb addrs
+        if (addr < 0x7B0) // core1 volume, reverb addrs
         {
             addr -= 0x28;
             cores[1].Write(addr, value);
             return;
         }
 
-		if (addr >= 0x7C0) // shared?
+		if (addr >= 0x7B0) // shared?
 		{
             cores[0].Write(addr, value);
 			return;

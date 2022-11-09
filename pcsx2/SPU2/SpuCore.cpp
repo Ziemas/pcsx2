@@ -872,6 +872,18 @@ namespace SPU
 			case 0x786:
 				m_Reverb.vIN[1] = static_cast<int16_t>(value);
 				break;
+			case 0x7B8:
+				// unk
+				break;
+			case 0x7BA:
+				// unk
+				break;
+			case 0x7BC:
+				// unk
+				break;
+			case 0x7BE:
+				// unk
+				break;
 			case 0x7C0:
 				m_SPDIFConf.bits = value;
 				break;
