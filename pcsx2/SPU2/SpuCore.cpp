@@ -353,11 +353,6 @@ namespace SPU
 		PSX_INT((IopEventId)(IopEvt_SPU0DMA + m_Id), 1024);
 	}
 
-	void SPUCore::WriteMem(u32 addr, u16 value)
-	{
-		m_RAM[addr] = value;
-	}
-
 	void SPUCore::RunADMA()
 	{
 		u32 displacement;

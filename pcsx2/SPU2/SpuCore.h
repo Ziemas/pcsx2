@@ -48,7 +48,7 @@ namespace SPU
 		void Write(u32 addr, u16 value);
 		u16 Read(u32 addr);
 
-		void WriteMem(u32 addr, u16 value);
+		void WriteMem(u32 addr, u16 value) { m_RAM[addr & 0xFFFFF] = value; }
 
 		void RunDma();
 		void DmaWrite(u16* madr, u32 size);
