@@ -506,6 +506,10 @@ namespace SPU
 				return m_BVOL.left;
 			case 0x76E:
 				return m_BVOL.right;
+			case 0x770:
+				return m_MVOL.left.GetCurrent();
+			case 0x772:
+				return m_MVOL.right.GetCurrent();
 			case 0x774:
 				return m_Reverb.vIIR;
 			case 0x776:
