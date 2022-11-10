@@ -118,13 +118,13 @@ namespace SPU
 
 	inline u32 Reverb::Offset(s32 offset) const
 	{
-		uint32_t address = m_pos + offset;
-		uint32_t size = m_EEA.full - m_ESA.full;
+		u32 address = m_pos + offset;
 
-		if (size == 0)
-			return 0;
+		// this off by one from real behaviour in the ESA > EEA case
+		// where pos is stuck in place
 
-		address = m_ESA.full + (address % size);
+		if (address > m_EEA.full)
+			address -= m_EEA.full - m_ESA.full;
 
 		return address;
 	}
@@ -177,8 +177,12 @@ namespace SPU
 		m_Phase ^= 1;
 		if (m_Phase)
 			m_pos++;
-		if (m_pos >= m_EEA.full - m_ESA.full + 1)
-			m_pos = 0;
+
+		// if esa > eea pos sticks in place
+		if (m_pos > m_EEA.full)
+		{
+			m_pos = m_ESA.full;
+		}
 
 		return output;
 	}

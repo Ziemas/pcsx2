@@ -653,12 +653,12 @@ namespace SPU
 				++m_InternalTSA &= 0xFFFFF;
 				break;
 			case 0x2E0:
-				m_Reverb.m_pos = 0;
 				m_Reverb.m_ESA.hi.SetValue(value & 0x3F);
+				m_Reverb.m_pos = m_Reverb.m_ESA.full;
 				break;
 			case 0x2E2:
-				m_Reverb.m_pos = 0;
 				m_Reverb.m_ESA.lo.SetValue(value);
+				m_Reverb.m_pos = m_Reverb.m_ESA.full;
 				break;
 			case 0x2E4:
 				m_Reverb.dAPF[0].hi = value;
