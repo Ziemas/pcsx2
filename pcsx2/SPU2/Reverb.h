@@ -108,8 +108,8 @@ namespace SPU
 		s16 DownSample(AudioSample in);
 		AudioSample UpSample(s16 in);
 
-		s16 RD_RVB(s32 address, s32 offset = 0);
-		void WR_RVB(s32 address, s16 sample);
+		s16 Read(u32 address, s32 offset = 0);
+		void Write(u32 address, s16 sample);
 		[[nodiscard]] u32 Offset(s32 offset) const;
 
 		u32 m_Phase{0};

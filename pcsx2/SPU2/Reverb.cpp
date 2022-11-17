@@ -103,12 +103,12 @@ namespace SPU
 		return sample * (INT16_MAX - vIIR);
 	}
 
-	inline static s16 ReverbSat(s32 sample)
+	inline static s16 Sat(s32 sample)
 	{
 		return static_cast<s16>(std::clamp<s32>(sample, INT16_MIN, INT16_MAX));
 	}
 
-	inline static s16 ReverbNeg(s16 sample)
+	inline static s16 Neg(s16 sample)
 	{
 		if (sample == INT16_MIN)
 			return INT16_MAX;
@@ -129,13 +129,13 @@ namespace SPU
 		return address;
 	}
 
-	inline s16 Reverb::RD_RVB(s32 address, s32 offset)
+	inline s16 Reverb::Read(u32 address, s32 offset)
 	{
 		m_SPU.TestIrq(Offset(address + offset));
 		return static_cast<s16>(m_SPU.Ram(Offset(address + offset)));
 	}
 
-	inline void Reverb::WR_RVB(s32 address, s16 sample)
+	inline void Reverb::Write(u32 address, s16 sample)
 	{
 		if (m_Enable)
 		{
@@ -149,27 +149,27 @@ namespace SPU
 		// down-sample input
 		auto in = DownSample(input);
 
-		const s16 SAME_SIDE_IN = ReverbSat((((RD_RVB(static_cast<s32>(dSAME[m_Phase ^ 0].full)) * vWALL) >> 14) + ((in * vIN[m_Phase]) >> 14)) >> 1);
-		const s16 DIFF_SIDE_IN = ReverbSat((((RD_RVB(static_cast<s32>(dDIFF[m_Phase ^ 1].full)) * vWALL) >> 14) + ((in * vIN[m_Phase]) >> 14)) >> 1);
-		const s16 SAME_SIDE = ReverbSat((((SAME_SIDE_IN * vIIR) >> 14) + (IIASM(vIIR, RD_RVB(static_cast<s32>(mSAME[m_Phase].full), -1)) >> 14)) >> 1);
-		const s16 DIFF_SIDE = ReverbSat((((DIFF_SIDE_IN * vIIR) >> 14) + (IIASM(vIIR, RD_RVB(static_cast<s32>(mDIFF[m_Phase].full), -1)) >> 14)) >> 1);
+		const s16 SAME_SIDE_IN = Sat((((Read(dSAME[m_Phase ^ 0].full) * vWALL) >> 14) + ((in * vIN[m_Phase]) >> 14)) >> 1);
+		const s16 DIFF_SIDE_IN = Sat((((Read(dDIFF[m_Phase ^ 1].full) * vWALL) >> 14) + ((in * vIN[m_Phase]) >> 14)) >> 1);
+		const s16 SAME_SIDE = Sat((((SAME_SIDE_IN * vIIR) >> 14) + (IIASM(vIIR, Read(mSAME[m_Phase].full, -1)) >> 14)) >> 1);
+		const s16 DIFF_SIDE = Sat((((DIFF_SIDE_IN * vIIR) >> 14) + (IIASM(vIIR, Read(mDIFF[m_Phase].full, -1)) >> 14)) >> 1);
 
-		WR_RVB(static_cast<s32>(mSAME[m_Phase].full), SAME_SIDE);
-		WR_RVB(static_cast<s32>(mDIFF[m_Phase].full), DIFF_SIDE);
+		Write(mSAME[m_Phase].full, SAME_SIDE);
+		Write(mDIFF[m_Phase].full, DIFF_SIDE);
 
-		const s32 COMB = ((RD_RVB(static_cast<s32>(mCOMB1[m_Phase].full)) * vCOMB1) >> 14) +
-						 ((RD_RVB(static_cast<s32>(mCOMB2[m_Phase].full)) * vCOMB2) >> 14) +
-						 ((RD_RVB(static_cast<s32>(mCOMB3[m_Phase].full)) * vCOMB3) >> 14) +
-						 ((RD_RVB(static_cast<s32>(mCOMB4[m_Phase].full)) * vCOMB4) >> 14);
+		const s32 COMB = ((Read(mCOMB1[m_Phase].full) * vCOMB1) >> 14) +
+						 ((Read(mCOMB2[m_Phase].full) * vCOMB2) >> 14) +
+						 ((Read(mCOMB3[m_Phase].full) * vCOMB3) >> 14) +
+						 ((Read(mCOMB4[m_Phase].full) * vCOMB4) >> 14);
 
-		const s16 APF1 = RD_RVB(static_cast<s32>(mAPF1[m_Phase].full - dAPF[0].full));
-		const s16 APF2 = RD_RVB(static_cast<s32>(mAPF2[m_Phase].full - dAPF[1].full));
-		const s16 APF1_OUT = ReverbSat((COMB + ((APF1 * ReverbNeg(vAPF1)) >> 14)) >> 1);
-		const s16 APF2_OUT = ReverbSat(APF1 + ((((APF1_OUT * vAPF1) >> 14) + ((APF2 * ReverbNeg(vAPF2)) >> 14)) >> 1));
-		const s16 OUT = ReverbSat(APF2 + ((APF2_OUT * vAPF2) >> 15));
+		const s16 APF1 = Read(mAPF1[m_Phase].full - dAPF[0].full);
+		const s16 APF2 = Read(mAPF2[m_Phase].full - dAPF[1].full);
+		const s16 APF1_OUT = Sat((COMB + ((APF1 * Neg(vAPF1)) >> 14)) >> 1);
+		const s16 APF2_OUT = Sat(APF1 + ((((APF1_OUT * vAPF1) >> 14) + ((APF2 * Neg(vAPF2)) >> 14)) >> 1));
+		const s16 OUT = Sat(APF2 + ((APF2_OUT * vAPF2) >> 15));
 
-		WR_RVB(static_cast<s32>(mAPF1[m_Phase].full), APF1_OUT);
-		WR_RVB(static_cast<s32>(mAPF2[m_Phase].full), APF2_OUT);
+		Write(mAPF1[m_Phase].full, APF1_OUT);
+		Write(mAPF2[m_Phase].full, APF2_OUT);
 
 		// up-sample output
 		auto output = UpSample(OUT);
