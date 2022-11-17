@@ -164,15 +164,15 @@ namespace SPU
 
 		const s16 APF1 = RD_RVB(static_cast<s32>(mAPF1[m_Phase].full - dAPF[0].full));
 		const s16 APF2 = RD_RVB(static_cast<s32>(mAPF2[m_Phase].full - dAPF[1].full));
-		const s16 MDA = ReverbSat((COMB + ((APF1 * ReverbNeg(vAPF1)) >> 14)) >> 1);
-		const s16 MDB = ReverbSat(APF1 + ((((MDA * vAPF1) >> 14) + ((APF2 * ReverbNeg(vAPF2)) >> 14)) >> 1));
-		const s16 IVB = ReverbSat(APF2 + ((MDB * vAPF2) >> 15));
+		const s16 APF1_OUT = ReverbSat((COMB + ((APF1 * ReverbNeg(vAPF1)) >> 14)) >> 1);
+		const s16 APF2_OUT = ReverbSat(APF1 + ((((APF1_OUT * vAPF1) >> 14) + ((APF2 * ReverbNeg(vAPF2)) >> 14)) >> 1));
+		const s16 OUT = ReverbSat(APF2 + ((APF2_OUT * vAPF2) >> 15));
 
-		WR_RVB(static_cast<s32>(mAPF1[m_Phase].full), MDA);
-		WR_RVB(static_cast<s32>(mAPF2[m_Phase].full), MDB);
+		WR_RVB(static_cast<s32>(mAPF1[m_Phase].full), APF1_OUT);
+		WR_RVB(static_cast<s32>(mAPF2[m_Phase].full), APF2_OUT);
 
 		// up-sample output
-		auto output = UpSample(IVB);
+		auto output = UpSample(OUT);
 
 		m_Phase ^= 1;
 		if (m_Phase)
