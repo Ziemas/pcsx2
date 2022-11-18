@@ -90,7 +90,7 @@ namespace SPU
 			static_cast<s16>(std::clamp<s32>(hsum(rvec[0]) * 2, INT16_MIN, INT16_MAX))};
 	}
 
-	inline static s32 IIASM(const s16 vIIR, const s16 sample)
+	inline s32 Reverb::IIASM(const s16 vIIR, const s16 sample)
 	{
 		if (vIIR == INT16_MIN)
 		{
@@ -103,12 +103,12 @@ namespace SPU
 		return sample * (INT16_MAX - vIIR);
 	}
 
-	inline static s16 Sat(s32 sample)
+	inline s16 Reverb::Sat(s32 sample)
 	{
 		return static_cast<s16>(std::clamp<s32>(sample, INT16_MIN, INT16_MAX));
 	}
 
-	inline static s16 Neg(s16 sample)
+	inline s16 Reverb::Neg(s16 sample)
 	{
 		if (sample == INT16_MIN)
 			return INT16_MAX;

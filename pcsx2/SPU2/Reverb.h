@@ -107,6 +107,9 @@ namespace SPU
 
 		s16 DownSample(AudioSample in);
 		AudioSample UpSample(s16 in);
+		static s16 Sat(s32 sample);
+		static s16 Neg(s16 sample);
+		static s32 IIASM(s16 vIIR, s16 sample);
 
 		s16 Read(u32 address, s32 offset = 0);
 		void Write(u32 address, s16 sample);
