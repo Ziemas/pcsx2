@@ -306,7 +306,6 @@ set(pcsx2SPU2Sources
 	SPU2/Output.cpp
 	SPU2/SpuCore.cpp
 	SPU2/Reverb.cpp
-	SPU2/Voice.cpp
 	)
 
 # SPU2 headers
