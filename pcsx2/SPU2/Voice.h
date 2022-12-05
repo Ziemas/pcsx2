@@ -27,7 +27,7 @@ namespace SPU
 	static constexpr std::array<std::array<s16, 4>, 256> gaussianConstructTable()
 	{
 		std::array<std::array<s16, 4>, 256> result = {};
-		double table[512] = {};
+		std::array<double, 512> table = {};
 		for (u32 n = 0; n < 512; n++)
 		{
 			double k = 0.5 + n;
@@ -61,6 +61,33 @@ namespace SPU
 	}
 
 	static constexpr std::array<std::array<s16, 4>, 256> gaussianTable = gaussianConstructTable();
+
+	static constexpr u32 NUM_VOICES = 42;
+
+	union AddrVec
+	{
+		std::array<Reg32, NUM_VOICES> arr;
+
+#if _M_SSE >= 0x501
+		std::array<GSVector8i, 6> vec;
+#else
+		std::array<GSVector4i, 11> vec;
+#endif
+	};
+
+	union VoiceVec
+	{
+		std::array<s16, NUM_VOICES> arr;
+		std::array<u16, NUM_VOICES> uarr;
+
+		// lets fit in 3 of these so we have room to write
+		// outx with an offset
+#if _M_SSE >= 0x501
+		std::array<GSVector8i, 3> vec;
+#else
+		std::array<GSVector4i, 6> vec;
+#endif
+	};
 
 	struct SharedData
 	{
@@ -145,11 +172,12 @@ namespace SPU
 				for (int i = 0; i < 4; i++)
 				{
 					s32 sample = (s16)((data & 0xF) << 12);
-					sample >>= m_CurHeader.Shift.GetValue();
+					u8 filter = std::min<u8>(m_CurHeader.Filter, 4);
 
 					// TODO do the right thing for invalid shift/filter values
-					sample += (adpcm_coefs_i[m_CurHeader.Filter.GetValue()][0] * m_DecodeHist1) >> 6;
-					sample += (adpcm_coefs_i[m_CurHeader.Filter.GetValue()][1] * m_DecodeHist2) >> 6;
+					sample >>= m_CurHeader.Shift.GetValue();
+					sample += (adpcm_coefs_i[filter][0] * m_DecodeHist1) >> 6;
+					sample += (adpcm_coefs_i[filter][1] * m_DecodeHist2) >> 6;
 
 					// We do get overflow here otherwise, should we?
 					sample = std::clamp<s32>(sample, INT16_MIN, INT16_MAX);

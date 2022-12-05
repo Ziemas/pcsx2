@@ -44,22 +44,6 @@ namespace SPU
 		BitField<u32, u16, 0, 16> lo;
 	};
 
-	union AddrVec
-	{
-		std::array<Reg32, 24> arr;
-		std::array<GSVector8i, 3> vec;
-	};
-
-	union VoiceVec
-	{
-		std::array<s16, 24> arr;
-		std::array<u16, 24> uarr;
-
-		// lets fit in 3 of these so we have room to write
-		// outx with an offset
-		std::array<GSVector8i, 3> vec;
-	};
-
 	template <typename Tp, size_t Nm>
 	class SampleBuffer
 	{
