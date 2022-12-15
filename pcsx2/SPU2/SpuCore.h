@@ -37,6 +37,7 @@ namespace SPU
 			: m_Id(id)
 			, m_RAM(ram)
 		{
+			m_share.Reset();
 			m_share.RAM = m_RAM;
 			m_share.SPU_ID = m_Id;
 		}
@@ -54,7 +55,6 @@ namespace SPU
 		void DmaWrite(u16* madr, u32 size);
 		void DmaRead(u16* madr, u32 size);
 		u16 Ram(u32 address) { return m_RAM[address & 0xFFFFF]; }
-		Voice& GetVoice(int n) { return m_voices[n]; }
 		static void TestIrq(u32 address);
 		static void TestIrq(u32 start, u32 end);
 		[[nodiscard]] s16 NoiseLevel() const { return m_Noise.Get(); }
@@ -165,6 +165,7 @@ namespace SPU
 			BitField<u32, bool, 4, 1> BufferHalf;
 			BitField<u32, bool, 3, 1> CauseC1;
 			BitField<u32, bool, 2, 1> CauseC0;
+			BitField<u32, u8, 2, 2> Cause;
 		};
 
 		union Status
@@ -276,17 +277,6 @@ namespace SPU
 		VoiceVec m_vVMIXER{};
 
 		SharedData m_share{};
-
-		// clang-format off
-		std::array<Voice, NUM_VOICES> m_voices = {{
-			{m_share, 0},  {m_share, 1},  {m_share, 2},  {m_share, 3},
-			{m_share, 4},  {m_share, 5},  {m_share, 6},  {m_share, 7},
-			{m_share, 8},  {m_share, 9},  {m_share, 10}, {m_share, 11},
-			{m_share, 12}, {m_share, 13}, {m_share, 14}, {m_share, 15},
-			{m_share, 16}, {m_share, 17}, {m_share, 18}, {m_share, 19},
-			{m_share, 20}, {m_share, 21}, {m_share, 22}, {m_share, 23},
-		}};
-		// clang-format on
 	};
 
 } // namespace SPU

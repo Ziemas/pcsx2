@@ -33,36 +33,18 @@ namespace SPU
 		MemOut(OutBuf::SINL, input.left);
 		MemOut(OutBuf::SINR, input.right);
 
-		if (m_share.KeyOn.full != 0 || m_share.KeyOff.full != 0)
-		{
-			for (auto& v : m_voices)
-			{
-				v.ProcessKonKoff();
-			}
-
-			m_share.KeyOff.full = 0;
-			m_share.KeyOn.full = 0;
-		}
+		m_share.ProcessKonKoff();
 
 		for (int i = 0; i < 2; i++)
 		{
 			if (m_ATTR[i].IRQEnable)
 			{
-				GSVector8i mask(GSVector8i(~0x7).broadcast32());
+				bool cause = m_share.IRQTest(m_IRQA[i].full);
 				GSVector8i buf_addrs(GSVector8i(m_CurrentBuffer * BufSize + m_BufPos + m_Id * OutBufCoreOffset).broadcast32() + OutBufVec);
 				GSVector8i irqa{GSVector8i(m_IRQA[i].full).broadcast32()};
+				auto res = buf_addrs == irqa;
 
-				auto res = m_share.vNAX.vec[0] == irqa;
-				res |= m_share.vNAX.vec[1] == irqa;
-				res |= m_share.vNAX.vec[2] == irqa;
-
-				res |= (m_share.vNAX.vec[0] & mask) == irqa;
-				res |= (m_share.vNAX.vec[1] & mask) == irqa;
-				res |= (m_share.vNAX.vec[2] & mask) == irqa;
-
-				res |= buf_addrs == irqa;
-
-				if (!res.allfalse())
+				if (cause || !res.allfalse())
 				{
 					if (i == 0)
 						m_IRQ.CauseC0 = true;
@@ -74,40 +56,12 @@ namespace SPU
 			}
 		}
 
-		for (auto& v : m_voices)
-		{
-			v.DecodeSamples();
-		}
+		m_share.DecodeSamples();
 
 		VoiceVec interp_out{};
-		for (int i = 0; i < 24; i += 4)
-		{
-			GSVector8i dec(
-				*(u64*)m_voices[i + 0].Get(),
-				*(u64*)m_voices[i + 1].Get(),
-				*(u64*)m_voices[i + 2].Get(),
-				*(u64*)m_voices[i + 3].Get());
-			GSVector8i interp(
-				*(u64*)gaussianTable[(m_share.Counter.uarr[i + 0] & 0xff0) >> 4].data(),
-				*(u64*)gaussianTable[(m_share.Counter.uarr[i + 1] & 0xff0) >> 4].data(),
-				*(u64*)gaussianTable[(m_share.Counter.uarr[i + 2] & 0xff0) >> 4].data(),
-				*(u64*)gaussianTable[(m_share.Counter.uarr[i + 3] & 0xff0) >> 4].data());
+		m_share.Interpolate(interp_out);
 
-			dec = dec.mul16hrs(interp);
-			dec = dec.adds16(dec.yyww());
-			auto lo = dec.adds16(dec.yxxxl());
-			auto hi = dec.adds16(dec.yxxxh());
-
-			interp_out.arr[i + 0] = lo.I16[0];
-			interp_out.arr[i + 1] = hi.I16[4];
-			interp_out.arr[i + 2] = lo.I16[8];
-			interp_out.arr[i + 3] = hi.I16[12];
-		}
-
-		for (auto& v : m_voices)
-		{
-			v.UpdateVolume();
-		}
+		m_share.UpdateVolume();
 
 		for (int i = 0; i < 2; i++)
 		{
@@ -421,14 +375,14 @@ namespace SPU
 		{
 			u32 id = addr >> 4;
 			addr &= 0xF;
-			return m_voices[id].Read(addr);
+			return m_share.Read(id, addr);
 		}
 		if (addr >= 0x1C0 && addr < 0x2E0)
 		{
 			addr -= 0x1C0;
 			u32 id = addr / 0xC;
 			addr %= 0xC;
-			return m_voices[id].ReadAddr(addr);
+			return m_share.ReadAddr(id, addr);
 		}
 		switch (addr)
 		{
@@ -551,7 +505,7 @@ namespace SPU
 		{
 			u32 id = addr >> 4;
 			addr &= 0xF;
-			m_voices[id].Write(addr, value);
+			m_share.Write(id, addr, value);
 			return;
 		}
 		if (addr >= 0x1C0 && addr < 0x2E0)
@@ -559,7 +513,7 @@ namespace SPU
 			addr -= 0x1C0;
 			u32 id = addr / 0xC;
 			addr %= 0xC;
-			m_voices[id].WriteAddr(addr, value);
+			m_share.WriteAddr(id, addr, value);
 			return;
 		}
 		switch (addr)
@@ -926,8 +880,7 @@ namespace SPU
 		m_ATTR[m_Id].bits = 0;
 		m_IRQ.bits = 0;
 		m_Reverb.Reset();
-		for (auto& v : m_voices)
-			v.Reset();
 		m_Noise.Reset();
+		m_share.Reset();
 	}
 } // namespace SPU

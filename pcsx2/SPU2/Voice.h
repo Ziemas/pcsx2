@@ -62,17 +62,22 @@ namespace SPU
 
 	static constexpr std::array<std::array<s16, 4>, 256> gaussianTable = gaussianConstructTable();
 
-	static constexpr u32 NUM_VOICES = 42;
+	//static constexpr u32 NUM_VOICES = 48;
+	static constexpr s32 NUM_VOICES = 24;
 
 	union AddrVec
 	{
 		std::array<Reg32, NUM_VOICES> arr;
 
-#if _M_SSE >= 0x501
 		std::array<GSVector8i, 6> vec;
-#else
-		std::array<GSVector4i, 11> vec;
-#endif
+
+		void Reset()
+		{
+			for (int i = 0; i < NUM_VOICES; i++)
+			{
+				arr[i].full = 0;
+			}
+		}
 	};
 
 	union VoiceVec
@@ -82,261 +87,19 @@ namespace SPU
 
 		// lets fit in 3 of these so we have room to write
 		// outx with an offset
-#if _M_SSE >= 0x501
 		std::array<GSVector8i, 3> vec;
-#else
-		std::array<GSVector4i, 6> vec;
-#endif
+
+		void Reset()
+		{
+			for (int i = 0; i < NUM_VOICES; i++)
+			{
+				arr[i] = 0;
+			}
+		}
 	};
 
-	struct SharedData
+	struct Decoder
 	{
-		u32 SPU_ID;
-		u16* RAM{nullptr};
-		Reg32 KeyOn{0};
-		Reg32 KeyOff{0};
-		Reg32 PitchMod{0};
-		Reg32 ENDX{0};
-		Reg32 NON{0};
-		AddrVec vNAX{};
-		VoiceVec Pitch{};
-		VoiceVec Counter{};
-		VoiceVec SamplePos{};
-		VoiceVec OUTX{};
-		VoiceVec VOLL{};
-		VoiceVec VOLR{};
-		VoiceVec ENVX{};
-	};
-
-	class Voice
-	{
-	public:
-		Voice(SharedData& share, u32 id)
-			: m_Share(share)
-			, m_Id(id)
-		{
-		}
-
-		void ProcessKonKoff()
-		{
-			if (m_Share.KeyOff.full & (1 << m_Id))
-			{
-				m_ADSR.Release();
-				//Console.WriteLn("SPU[%d]:VOICE[%d] Key Off", m_SPU.m_Id, m_Id);
-			}
-			if (m_Share.KeyOn.full & (1 << m_Id))
-			{
-				m_Share.vNAX.arr[m_Id].full = m_SSA.full;
-				m_Share.vNAX.arr[m_Id].full++;
-
-				m_Share.ENDX.full &= ~(1 << m_Id);
-				m_ADSR.Attack();
-				m_Share.Counter.uarr[m_Id] = 0;
-				m_DecodeHist1 = 0;
-				m_DecodeHist2 = 0;
-				m_Buffer = {};
-				m_Share.SamplePos.uarr[m_Id] = 0;
-				m_Wpos = 0;
-				m_CustomLoop = false;
-				//Console.WriteLn("SPU[%d]:VOICE[%d] Key On, SSA %08x", m_SPU.m_Id, m_Id, m_SSA);
-			}
-		}
-
-		__fi void DecodeSamples()
-		{
-			// The block header (and thus LSA) updates every spu cycle
-			m_CurHeader.bits = m_Share.RAM[(m_Share.vNAX.arr[m_Id].full & ~0x7) & 0xfffff];
-			if (m_CurHeader.LoopStart && !m_CustomLoop)
-				m_LSA.full = m_Share.vNAX.arr[m_Id].full & ~0x7;
-
-			// This doesn't exactly match the real behaviour,
-			// it seems to initially decode a bigger chunk
-			// and then decode more data after a bit has drained
-			if (Size() >= 16)
-			{
-				// sufficient data buffered
-				return;
-			}
-
-			// Skip decoding for stopped voices.
-			// technically not safe i think, envx could be written
-			// directly to make it audible again.
-			// But it's too good a speed boost to let go.
-			if (m_ADSR.GetPhase() == ADSR::Phase::Stopped)
-			{
-				PushSkipN(4);
-			}
-			else
-			{
-				u32 data = m_Share.RAM[m_Share.vNAX.arr[m_Id].full & 0xfffff];
-				for (int i = 0; i < 4; i++)
-				{
-					s32 sample = (s16)((data & 0xF) << 12);
-					u8 filter = std::min<u8>(m_CurHeader.Filter, 4);
-
-					// TODO do the right thing for invalid shift/filter values
-					sample >>= m_CurHeader.Shift.GetValue();
-					sample += (adpcm_coefs_i[filter][0] * m_DecodeHist1) >> 6;
-					sample += (adpcm_coefs_i[filter][1] * m_DecodeHist2) >> 6;
-
-					// We do get overflow here otherwise, should we?
-					sample = std::clamp<s32>(sample, INT16_MIN, INT16_MAX);
-
-					m_DecodeHist2 = m_DecodeHist1;
-					m_DecodeHist1 = static_cast<s16>(sample);
-
-					Push(static_cast<s16>(sample));
-					data >>= 4;
-				}
-			}
-
-			m_Share.vNAX.arr[m_Id].full++;
-
-			if ((m_Share.vNAX.arr[m_Id].full & 0x7) == 0)
-			{
-				if (m_CurHeader.LoopEnd)
-				{
-					m_Share.vNAX.arr[m_Id].full = m_LSA.full;
-					m_Share.ENDX.full |= (1 << m_Id);
-
-					if (!m_CurHeader.LoopRepeat)
-					{
-						// Need to inhibit stopping here in noise is on
-						// seems to result in the right thing but would like to verify
-						if ((m_Share.NON.full & (1 << m_Id)) == 0U)
-							m_ADSR.Stop();
-					}
-				}
-
-				m_Share.vNAX.arr[m_Id].full++;
-			}
-		};
-
-		__fi void UpdateVolume()
-		{
-			m_Share.ENVX.arr[m_Id] = m_ADSR.Level();
-			m_Share.VOLL.arr[m_Id] = m_Volume.left.GetCurrent();
-			m_Share.VOLR.arr[m_Id] = m_Volume.right.GetCurrent();
-
-			m_ADSR.Run();
-			m_Volume.Run();
-		};
-
-		[[nodiscard]] u16 Read(u32 addr) const
-		{
-			switch (addr)
-			{
-				case 0:
-					return m_Volume.left.Get();
-				case 2:
-					return m_Volume.right.Get();
-				case 4:
-					return m_Share.Pitch.uarr[m_Id];
-				case 6:
-					return m_ADSR.m_Reg.lo.GetValue();
-				case 8:
-					return m_ADSR.m_Reg.hi.GetValue();
-				case 10:
-					return m_ADSR.Level();
-				case 12:
-					return m_Volume.left.GetCurrent();
-				case 14:
-					return m_Volume.right.GetCurrent();
-				default:
-					Console.WriteLn("UNHANDLED SPU[%d]:VOICE[%d] READ ---- <- %04x", m_Share.SPU_ID, m_Id, addr);
-					pxAssertMsg(false, "Unhandled SPU Write");
-					return 0;
-			}
-		}
-
-		void Write(u32 addr, u16 value)
-		{
-			switch (addr)
-			{
-				case 0:
-					m_Volume.left.Set(value);
-					return;
-				case 2:
-					m_Volume.right.Set(value);
-					return;
-				case 4:
-					m_Share.Pitch.uarr[m_Id] = value;
-					return;
-				case 6:
-					m_ADSR.m_Reg.lo = value;
-					m_ADSR.UpdateSettings();
-					return;
-				case 8:
-					m_ADSR.m_Reg.hi = value;
-					m_ADSR.UpdateSettings();
-					return;
-				case 10:
-					// writeable envx
-					m_ADSR.SetLevel(static_cast<s16>(value));
-					return;
-				case 12:
-				case 14:
-					// These two are not writeable though
-					return;
-				default:
-					Console.WriteLn("UNHANDLED SPU[%d]:VOICE[%d] WRITE %04x -> %04x", m_Share.SPU_ID, m_Id, value, addr);
-					pxAssertMsg(false, "Unhandled SPU Write");
-			}
-		}
-
-		// The new (for SPU2) full addr regs are a separate range
-		[[nodiscard]] u16 ReadAddr(u32 addr) const
-		{
-			switch (addr)
-			{
-				case 0:
-					return m_SSA.hi.GetValue();
-				case 2:
-					return m_SSA.lo.GetValue();
-				case 4:
-					return m_LSA.hi.GetValue();
-				case 6:
-					return m_LSA.lo.GetValue();
-				case 8:
-					return m_Share.vNAX.arr[m_Id].hi.GetValue();
-				case 10:
-					return m_Share.vNAX.arr[m_Id].lo.GetValue();
-				default:
-					Console.WriteLn("UNHANDLED SPU[%d]:VOICE[%d] ReadAddr ---- <- %04x", m_Share.SPU_ID, m_Id, addr);
-					pxAssertMsg(false, "Unhandled SPU Write");
-					return 0;
-			}
-		}
-		void WriteAddr(u32 addr, u16 value)
-		{
-			switch (addr)
-			{
-				case 0:
-					m_SSA.hi = value & 0xF;
-					return;
-				case 2:
-					m_SSA.lo = value;
-					return;
-				case 4:
-					m_LSA.hi = value & 0xF;
-					m_CustomLoop = true;
-					return;
-				case 6:
-					m_LSA.lo = value;
-					m_CustomLoop = true;
-					return;
-				case 8:
-					m_Share.vNAX.arr[m_Id].hi = value & 0xF;
-					return;
-				case 10:
-					m_Share.vNAX.arr[m_Id].lo = value;
-					return;
-				default:
-					Console.WriteLn("UNHANDLED SPU[%d]:VOICE[%d] WriteAddr %04x -> %04x", m_Share.SPU_ID, m_Id, value, addr);
-					pxAssertMsg(false, "Unhandled SPU Write");
-			}
-		}
-
 		void Reset()
 		{
 			m_DecodeHist1 = 0;
@@ -345,35 +108,11 @@ namespace SPU
 			m_LSA.full = 0;
 			m_CustomLoop = false;
 			m_CurHeader.bits = 0;
-			m_ADSR.Reset();
-			m_Volume.Reset();
 
 			m_Buffer.fill({});
-			m_Share.SamplePos.uarr[m_Id] = 0;
 			m_Wpos = 0;
 		}
 
-		void PopN(size_t n) { m_Share.SamplePos.uarr[m_Id] += n; }
-		void Push(s16 val)
-		{
-			m_Buffer[(m_Wpos & 0x1f) | 0x0] = val;
-			m_Buffer[(m_Wpos & 0x1f) | 0x20] = val;
-			m_Wpos++;
-		}
-
-		void PushSkipN(size_t n)
-		{
-			m_Wpos += n;
-		}
-
-		u16 Size() { return static_cast<u16>(m_Wpos - m_Share.SamplePos.uarr[m_Id]); }
-
-		s16* Get()
-		{
-			return &m_Buffer[m_Share.SamplePos.uarr[m_Id] & 0x1f];
-		}
-
-	private:
 		union ADPCMHeader
 		{
 			u16 bits;
@@ -396,10 +135,6 @@ namespace SPU
 		alignas(32) std::array<s16, 0x20 << 1> m_Buffer{};
 
 		u16 m_Wpos{0};
-
-		SharedData& m_Share;
-		s32 m_Id{0};
-
 		s16 m_DecodeHist1{0};
 		s16 m_DecodeHist2{0};
 
@@ -408,8 +143,339 @@ namespace SPU
 		bool m_CustomLoop{false};
 
 		ADPCMHeader m_CurHeader{};
-
-		ADSR m_ADSR{};
-		VolumePair m_Volume{};
 	};
+
+	struct SharedData
+	{
+		u32 SPU_ID;
+		std::array<Decoder, NUM_VOICES> decoder;
+		std::array<ADSR, NUM_VOICES> adsr;
+		std::array<VolumePair, NUM_VOICES> volume;
+		u16* RAM{nullptr};
+		Reg32 KeyOn{0};
+		Reg32 KeyOff{0};
+		Reg32 PitchMod{0};
+		Reg32 ENDX{0};
+		Reg32 NON{0};
+		AddrVec vNAX{};
+		VoiceVec Pitch{};
+		VoiceVec Counter{};
+		VoiceVec SamplePos{};
+		VoiceVec OUTX{};
+		VoiceVec VOLL{};
+		VoiceVec VOLR{};
+		VoiceVec ENVX{};
+
+		s16* GetSample(int n)
+		{
+			return &decoder[n].m_Buffer[SamplePos.uarr[n] & 0x1f];
+		}
+
+		void Reset()
+		{
+			for (int i = 0; i < NUM_VOICES; i++)
+			{
+				decoder[i].Reset();
+				adsr[i].Reset();
+				volume[i].Reset();
+			}
+			KeyOn.full = 0;
+			KeyOff.full = 0;
+			PitchMod.full = 0;
+			ENDX.full = 0;
+			NON.full = 0;
+			vNAX.Reset();
+			Pitch.Reset();
+			Counter.Reset();
+			SamplePos.Reset();
+			OUTX.Reset();
+			VOLL.Reset();
+			VOLR.Reset();
+			ENVX.Reset();
+		}
+
+		void ProcessKonKoff()
+		{
+			if (KeyOn.full != 0 || KeyOff.full != 0)
+			{
+				for (int i = 0; i < NUM_VOICES; i++)
+				{
+					if ((KeyOff.full & (1 << i)) != 0U)
+					{
+						adsr[i].Release();
+						//Console.WriteLn("SPU[%d]:VOICE[%d] Key Off", SPU_ID, i);
+					}
+					if ((KeyOn.full & (1 << i)) != 0U)
+					{
+						vNAX.arr[i].full = decoder[i].m_SSA.full;
+						vNAX.arr[i].full++;
+
+						ENDX.full &= ~(1 << i);
+						adsr[i].Attack();
+						Counter.uarr[i] = 0;
+						SamplePos.uarr[i] = 0;
+
+						decoder[i].m_DecodeHist1 = 0;
+						decoder[i].m_DecodeHist2 = 0;
+						decoder[i].m_Buffer = {};
+						decoder[i].m_Wpos = 0;
+						decoder[i].m_CustomLoop = false;
+						//Console.WriteLn("SPU[%d]:VOICE[%d] Key On, SSA %08x", SPU_ID, i, decoder[i].m_SSA.full);
+					}
+				}
+			}
+
+			KeyOff.full = 0;
+			KeyOn.full = 0;
+		}
+
+		__fi void DecodeSamples()
+		{
+			for (int i = 0; i < NUM_VOICES; i++)
+			{
+				// The block header (and thus LSA) updates every spu cycle
+				decoder[i].m_CurHeader.bits = RAM[(vNAX.arr[i].full & ~0x7) & 0xfffff];
+				if (decoder[i].m_CurHeader.LoopStart && !decoder[i].m_CustomLoop)
+					decoder[i].m_LSA.full = vNAX.arr[i].full & ~0x7;
+
+				// This doesn't exactly match the real behaviour,
+				// it seems to initially decode a bigger chunk
+				// and then decode more data after a bit has drained
+				if (static_cast<u16>(decoder[i].m_Wpos - SamplePos.uarr[i]) >= 16)
+				{
+					// sufficient data buffered
+					continue;
+				}
+
+				// Skip decoding for stopped voices.
+				// technically not safe i think, envx could be written
+				// directly to make it audible again.
+				// But it's too good a speed boost to let go.
+				if (adsr[i].GetPhase() != ADSR::Phase::Stopped)
+				{
+					u32 data = RAM[vNAX.arr[i].full & 0xfffff];
+					for (int j = 0; j < 4; j++)
+					{
+						s32 sample = (s16)((data & 0xF) << 12);
+						u8 filter = std::min<u8>(decoder[i].m_CurHeader.Filter, 4);
+
+						// TODO do the right thing for invalid shift/filter values
+						sample >>= decoder[i].m_CurHeader.Shift.GetValue();
+						sample += (Decoder::adpcm_coefs_i[filter][0] * decoder[i].m_DecodeHist1) >> 6;
+						sample += (Decoder::adpcm_coefs_i[filter][1] * decoder[i].m_DecodeHist2) >> 6;
+
+						// We do get overflow here otherwise, should we?
+						sample = std::clamp<s32>(sample, INT16_MIN, INT16_MAX);
+
+						decoder[i].m_DecodeHist2 = decoder[i].m_DecodeHist1;
+						decoder[i].m_DecodeHist1 = static_cast<s16>(sample);
+
+						u16 pos = static_cast<u16>(decoder[i].m_Wpos + j) & 0x1f;
+						decoder[i].m_Buffer[pos | 0x0] = sample;
+						decoder[i].m_Buffer[pos | 0x20] = sample;
+
+						data >>= 4;
+					}
+				}
+
+				decoder[i].m_Wpos += 4;
+
+				vNAX.arr[i].full++;
+
+				if ((vNAX.arr[i].full & 0x7) == 0)
+				{
+					if (decoder[i].m_CurHeader.LoopEnd)
+					{
+						vNAX.arr[i].full = decoder[i].m_LSA.full;
+						ENDX.full |= (1 << i);
+
+						if (!decoder[i].m_CurHeader.LoopRepeat)
+						{
+							// Need to inhibit stopping here in noise is on
+							// seems to result in the right thing but would like to verify
+							if ((NON.full & (1 << i)) == 0U)
+								adsr[i].Stop();
+						}
+					}
+
+					vNAX.arr[i].full++;
+				}
+			}
+		};
+
+
+		__fi void UpdateVolume()
+		{
+			for (int i = 0; i < NUM_VOICES; i++)
+			{
+				ENVX.arr[i] = adsr[i].Level();
+				VOLL.arr[i] = volume[i].left.GetCurrent();
+				VOLR.arr[i] = volume[i].right.GetCurrent();
+
+				adsr[i].Run();
+				volume[i].Run();
+			}
+		};
+
+
+		__fi bool IRQTest(u32 IRQA)
+		{
+			GSVector8i mask(GSVector8i(~0x7).broadcast32());
+			GSVector8i irqa{GSVector8i((int)IRQA).broadcast32()};
+			auto res = vNAX.vec[0] == irqa;
+			res |= vNAX.vec[1] == irqa;
+			res |= vNAX.vec[2] == irqa;
+
+			res |= (vNAX.vec[0] & mask) == irqa;
+			res |= (vNAX.vec[1] & mask) == irqa;
+			res |= (vNAX.vec[2] & mask) == irqa;
+
+			if (!res.allfalse())
+			{
+				return true;
+			}
+
+			return false;
+		}
+
+		__fi void Interpolate(VoiceVec& interp_out)
+		{
+			for (int i = 0; i < NUM_VOICES; i += 4)
+			{
+				GSVector8i dec(
+					*(u64*)GetSample(i + 0),
+					*(u64*)GetSample(i + 1),
+					*(u64*)GetSample(i + 2),
+					*(u64*)GetSample(i + 3));
+				GSVector8i interp(
+					*(u64*)gaussianTable[(Counter.uarr[i + 0] & 0xff0) >> 4].data(),
+					*(u64*)gaussianTable[(Counter.uarr[i + 1] & 0xff0) >> 4].data(),
+					*(u64*)gaussianTable[(Counter.uarr[i + 2] & 0xff0) >> 4].data(),
+					*(u64*)gaussianTable[(Counter.uarr[i + 3] & 0xff0) >> 4].data());
+
+				dec = dec.mul16hrs(interp);
+				dec = dec.adds16(dec.yyww());
+				auto lo = dec.adds16(dec.yxxxl());
+				auto hi = dec.adds16(dec.yxxxh());
+
+				interp_out.arr[i + 0] = lo.I16[0];
+				interp_out.arr[i + 1] = hi.I16[4];
+				interp_out.arr[i + 2] = lo.I16[8];
+				interp_out.arr[i + 3] = hi.I16[12];
+			}
+		}
+
+		[[nodiscard]] u16 Read(u32 id, u32 addr) const
+		{
+			switch (addr)
+			{
+				case 0:
+					return volume[id].left.Get();
+				case 2:
+					return volume[id].right.Get();
+				case 4:
+					return Pitch.uarr[id];
+				case 6:
+					return adsr[id].m_Reg.lo.GetValue();
+				case 8:
+					return adsr[id].m_Reg.hi.GetValue();
+				case 10:
+					return adsr[id].Level();
+				case 12:
+					return volume[id].left.GetCurrent();
+				case 14:
+					return volume[id].right.GetCurrent();
+				default:
+					pxAssertMsg(false, "Unhandled SPU Write");
+					return 0;
+			}
+		}
+
+		void Write(u32 id, u32 addr, u16 value)
+		{
+			switch (addr)
+			{
+				case 0:
+					volume[id].left.Set(value);
+					return;
+				case 2:
+					volume[id].right.Set(value);
+					return;
+				case 4:
+					Pitch.uarr[id] = value;
+					return;
+				case 6:
+					adsr[id].m_Reg.lo.SetValue(value);
+					adsr[id].UpdateSettings();
+					return;
+				case 8:
+					adsr[id].m_Reg.hi.SetValue(value);
+					adsr[id].UpdateSettings();
+					return;
+				case 10:
+					// writeable envx
+					adsr[id].SetLevel(static_cast<s16>(value));
+					return;
+				case 12:
+				case 14:
+					// These two are not writeable though
+					return;
+				default:
+					pxAssertMsg(false, "Unhandled SPU Write");
+			}
+		}
+
+		// The new (for SPU2) full addr regs are a separate range
+		[[nodiscard]] u16 ReadAddr(u32 id, u32 addr) const
+		{
+			switch (addr)
+			{
+				case 0:
+					return decoder[id].m_SSA.hi.GetValue();
+				case 2:
+					return decoder[id].m_SSA.lo.GetValue();
+				case 4:
+					return decoder[id].m_LSA.hi.GetValue();
+				case 6:
+					return decoder[id].m_LSA.lo.GetValue();
+				case 8:
+					return vNAX.arr[id].hi.GetValue();
+				case 10:
+					return vNAX.arr[id].lo.GetValue();
+				default:
+					pxAssertMsg(false, "Unhandled SPU Write");
+					return 0;
+			}
+		}
+
+		void WriteAddr(u32 id, u32 addr, u16 value)
+		{
+			switch (addr)
+			{
+				case 0:
+					decoder[id].m_SSA.hi.SetValue(value & 0xF);
+					return;
+				case 2:
+					decoder[id].m_SSA.lo.SetValue(value);
+					return;
+				case 4:
+					decoder[id].m_LSA.hi.SetValue(value & 0xF);
+					decoder[id].m_CustomLoop = true;
+					return;
+				case 6:
+					decoder[id].m_LSA.lo.SetValue(value);
+					decoder[id].m_CustomLoop = true;
+					return;
+				case 8:
+					vNAX.arr[id].hi.SetValue(value & 0xF);
+					return;
+				case 10:
+					vNAX.arr[id].lo.SetValue(value);
+					return;
+				default:
+					pxAssertMsg(false, "Unhandled SPU Write");
+			}
+		}
+	};
+
 } // namespace SPU
