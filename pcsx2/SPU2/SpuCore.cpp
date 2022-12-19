@@ -25,7 +25,7 @@ namespace SPU
 	std::array<SPUCore::AttrReg, 2> SPUCore::m_ATTR = {{{0}, {0}}};
 	SPUCore::IrqStat SPUCore::m_IRQ = {0};
 
-	AudioSample SPUCore::GenSample(AudioSample input)
+	AudioSample SPUCore::GenSample(AudioSample input, AudioSample& VoicesDry, AudioSample& VoicesWet)
 	{
 		AudioSample Dry(0, 0);
 		AudioSample Wet(0, 0);
@@ -33,13 +33,11 @@ namespace SPU
 		MemOut(OutBuf::SINL, input.left);
 		MemOut(OutBuf::SINR, input.right);
 
-		m_share.ProcessKonKoff();
-
 		for (int i = 0; i < 2; i++)
 		{
 			if (m_ATTR[i].IRQEnable)
 			{
-				bool cause = m_share.IRQTest(m_IRQA[i].full);
+				bool cause = m_voice.IRQTest(m_IRQA[i].full);
 				GSVector8i buf_addrs(GSVector8i(m_CurrentBuffer * BufSize + m_BufPos + m_Id * OutBufCoreOffset).broadcast32() + OutBufVec);
 				GSVector8i irqa{GSVector8i(m_IRQA[i].full).broadcast32()};
 				auto res = buf_addrs == irqa;
@@ -55,86 +53,6 @@ namespace SPU
 				}
 			}
 		}
-
-		m_share.DecodeSamples();
-
-		VoiceVec interp_out{};
-		m_share.Interpolate(interp_out);
-
-		m_share.UpdateVolume();
-
-		for (int i = 0; i < 2; i++)
-		{
-			GSVector8i steps{m_share.Pitch.vec[i].andnot(m_vPMON.vec[i])};
-			GSVector8i factors{m_share.OUTX.vec[i]};
-			auto pitch_lo = GSVector8i::i16to32(GSVector4i::cast(m_share.Pitch.vec[i]));
-			auto factor_lo = GSVector8i::u16to32(GSVector4i::cast(factors));
-			auto pitch_hi = GSVector8i::i16to32(GSVector4i::cast(m_share.Pitch.vec[i].cddd()));
-			auto factor_hi = GSVector8i::u16to32(GSVector4i::cast(factors.cddd()));
-
-			GSVector8i pmod_mask(GSVector8i(0xffff).broadcast32());
-			auto reslo = pitch_lo.mul32lo(factor_lo).sra32(15) & pmod_mask;
-			auto reshi = pitch_hi.mul32lo(factor_hi).sra32(15) & pmod_mask;
-			steps |= reslo.pu32(reshi).acbd() & m_vPMON.vec[i];
-
-			GSVector8i step_limit(GSVector8i(0x3fff).broadcast16());
-			steps = m_share.Counter.vec[i].add16(steps.min_u16(step_limit));
-
-			GSVector8i counter_mask(GSVector8i(0xfff).broadcast16());
-			m_share.Counter.vec[i] = steps & counter_mask;
-			m_share.SamplePos.vec[i] = m_share.SamplePos.vec[i].add16(steps.srl16(12));
-		}
-
-		// Load noise into all elements
-		GSVector8i noise[2]{
-			GSVector8i::load(m_Noise.Get()).broadcast16(),
-			GSVector8i::load(m_Noise.Get()).broadcast16()};
-
-		// & with NON to only keep it for voices with noise selected
-		noise[0] = noise[0] & m_vNON.vec[0];
-		noise[1] = noise[1] & m_vNON.vec[1];
-
-		// Load voice output, exclude voices with active noise
-		GSVector8i samples[2]{
-			interp_out.vec[0].andnot(m_vNON.vec[0]),
-			interp_out.vec[1].andnot(m_vNON.vec[1])};
-
-		// mix in noise
-		samples[0] |= noise[0];
-		samples[1] |= noise[1];
-
-		// Apply ADSR volume
-		samples[0] = samples[0].mul16hrs(m_share.ENVX.vec[0]);
-		samples[1] = samples[1].mul16hrs(m_share.ENVX.vec[1]);
-
-		// Save to OUTX (needs to be kept for later due to pitch mod)
-		// offset it so it lines up with the voice using the data
-		GSVector8i::store<false>(&m_share.OUTX.arr[1], samples[0].add16(GSVector8i(0x8000).broadcast16()));
-		GSVector8i::store<false>(&m_share.OUTX.arr[17], samples[1].add16(GSVector8i(0x8000).broadcast16()));
-
-		MemOut(OutBuf::Voice1, samples[0].I16[1]);
-		MemOut(OutBuf::Voice3, samples[0].I16[3]);
-
-		// Split to streo and apply l/r volume
-		GSVector8i left[2], right[2];
-		left[0] = samples[0].mul16hrs(m_share.VOLL.vec[0]);
-		left[1] = samples[1].mul16hrs(m_share.VOLL.vec[1]);
-		right[0] = samples[0].mul16hrs(m_share.VOLR.vec[0]);
-		right[1] = samples[1].mul16hrs(m_share.VOLR.vec[1]);
-
-		GSVector8i vc_dry_l[2], vc_dry_r[2], vc_wet_l[2], vc_wet_r[2];
-		vc_dry_l[0] = left[0] & m_vVMIXL.vec[0];
-		vc_dry_l[1] = left[1] & m_vVMIXL.vec[1];
-		vc_dry_r[0] = right[0] & m_vVMIXR.vec[0];
-		vc_dry_r[1] = right[1] & m_vVMIXR.vec[1];
-
-		vc_wet_l[0] = left[0] & m_vVMIXEL.vec[0];
-		vc_wet_l[1] = left[1] & m_vVMIXEL.vec[1];
-		vc_wet_r[0] = right[0] & m_vVMIXER.vec[0];
-		vc_wet_r[1] = right[1] & m_vVMIXER.vec[1];
-
-		AudioSample VoicesDry(hsum(vc_dry_l[0], vc_dry_l[1]), hsum(vc_dry_r[0], vc_dry_r[1]));
-		AudioSample VoicesWet(hsum(vc_wet_l[0], vc_wet_l[1]), hsum(vc_wet_r[0], vc_wet_r[1]));
 
 		MemOut(OutBuf::MemOutEL, VoicesWet.left);
 		MemOut(OutBuf::MemOutER, VoicesWet.right);
@@ -375,25 +293,25 @@ namespace SPU
 		{
 			u32 id = addr >> 4;
 			addr &= 0xF;
-			return m_share.Read(id, addr);
+			return m_voice.Read(id, addr);
 		}
 		if (addr >= 0x1C0 && addr < 0x2E0)
 		{
 			addr -= 0x1C0;
 			u32 id = addr / 0xC;
 			addr %= 0xC;
-			return m_share.ReadAddr(id, addr);
+			return m_voice.ReadAddr(id, addr);
 		}
 		switch (addr)
 		{
 			case 0x180:
-				return m_share.PitchMod.lo.GetValue();
+				return m_voice.PitchMod.lo.GetValue();
 			case 0x182:
-				return m_share.PitchMod.hi.GetValue();
+				return m_voice.PitchMod.hi.GetValue();
 			case 0x184:
-				return m_share.NON.lo.GetValue();
+				return m_voice.NON.lo.GetValue();
 			case 0x186:
-				return m_share.NON.hi.GetValue();
+				return m_voice.NON.hi.GetValue();
 			case 0x188:
 				return m_VMIXL.lo.GetValue();
 			case 0x18A:
@@ -419,13 +337,13 @@ namespace SPU
 			case 0x19E:
 				return m_IRQA[m_Id].lo.GetValue();
 			case 0x1A0:
-				return m_share.KeyOn.lo.GetValue();
+				return m_voice.KeyOn.lo.GetValue();
 			case 0x1A2:
-				return m_share.KeyOn.hi.GetValue();
+				return m_voice.KeyOn.hi.GetValue();
 			case 0x1A4:
-				return m_share.KeyOff.lo.GetValue();
+				return m_voice.KeyOff.lo.GetValue();
 			case 0x1A6:
-				return m_share.KeyOff.hi.GetValue();
+				return m_voice.KeyOff.hi.GetValue();
 			case 0x1A8:
 				return m_TSA.hi.GetValue();
 			case 0x1AA:
@@ -439,9 +357,9 @@ namespace SPU
 			case 0x33c:
 				return m_Reverb.m_EEA.hi.GetValue();
 			case 0x340:
-				return m_share.ENDX.lo.GetValue();
+				return m_voice.ENDX.lo.GetValue();
 			case 0x342:
-				return m_share.ENDX.hi.GetValue();
+				return m_voice.ENDX.hi.GetValue();
 			case 0x344:
 				return m_Stat.bits;
 			case 0x760:
@@ -505,7 +423,7 @@ namespace SPU
 		{
 			u32 id = addr >> 4;
 			addr &= 0xF;
-			m_share.Write(id, addr, value);
+			m_voice.Write(id, addr, value);
 			return;
 		}
 		if (addr >= 0x1C0 && addr < 0x2E0)
@@ -513,46 +431,46 @@ namespace SPU
 			addr -= 0x1C0;
 			u32 id = addr / 0xC;
 			addr %= 0xC;
-			m_share.WriteAddr(id, addr, value);
+			m_voice.WriteAddr(id, addr, value);
 			return;
 		}
 		switch (addr)
 		{
 			case 0x180:
-				ExpandVoiceBitfield(value & ~1, m_share.PitchMod, m_vPMON.vec[0], false);
+				ExpandVoiceBitfield(value & ~1, m_voice.PitchMod, m_voice.vPMON.vec[0], false);
 				break;
 			case 0x182:
-				ExpandVoiceBitfield(value, m_share.PitchMod, m_vPMON.vec[1], true);
+				ExpandVoiceBitfield(value, m_voice.PitchMod, m_voice.vPMON.vec[1], true);
 				break;
 			case 0x184:
-				ExpandVoiceBitfield(value, m_share.NON, m_vNON.vec[0], false);
+				ExpandVoiceBitfield(value, m_voice.NON, m_voice.vNON.vec[0], false);
 				break;
 			case 0x186:
-				ExpandVoiceBitfield(value, m_share.NON, m_vNON.vec[1], true);
+				ExpandVoiceBitfield(value, m_voice.NON, m_voice.vNON.vec[1], true);
 				break;
 			case 0x188:
-				ExpandVoiceBitfield(value, m_VMIXL, m_vVMIXL.vec[0], false);
+				ExpandVoiceBitfield(value, m_VMIXL, m_voice.vVMIXL.vec[0], false);
 				break;
 			case 0x18A:
-				ExpandVoiceBitfield(value, m_VMIXL, m_vVMIXL.vec[1], true);
+				ExpandVoiceBitfield(value, m_VMIXL, m_voice.vVMIXL.vec[1], true);
 				break;
 			case 0x18C:
-				ExpandVoiceBitfield(value, m_VMIXEL, m_vVMIXEL.vec[0], false);
+				ExpandVoiceBitfield(value, m_VMIXEL, m_voice.vVMIXEL.vec[0], false);
 				break;
 			case 0x18E:
-				ExpandVoiceBitfield(value, m_VMIXEL, m_vVMIXEL.vec[1], true);
+				ExpandVoiceBitfield(value, m_VMIXEL, m_voice.vVMIXEL.vec[1], true);
 				break;
 			case 0x190:
-				ExpandVoiceBitfield(value, m_VMIXR, m_vVMIXR.vec[0], false);
+				ExpandVoiceBitfield(value, m_VMIXR, m_voice.vVMIXR.vec[0], false);
 				break;
 			case 0x192:
-				ExpandVoiceBitfield(value, m_VMIXR, m_vVMIXR.vec[1], true);
+				ExpandVoiceBitfield(value, m_VMIXR, m_voice.vVMIXR.vec[1], true);
 				break;
 			case 0x194:
-				ExpandVoiceBitfield(value, m_VMIXER, m_vVMIXER.vec[0], false);
+				ExpandVoiceBitfield(value, m_VMIXER, m_voice.vVMIXER.vec[0], false);
 				break;
 			case 0x196:
-				ExpandVoiceBitfield(value, m_VMIXER, m_vVMIXER.vec[1], true);
+				ExpandVoiceBitfield(value, m_VMIXER, m_voice.vVMIXER.vec[1], true);
 				break;
 			case 0x198:
 				for (int i = 0; i < 16; i++)
@@ -586,16 +504,16 @@ namespace SPU
 				m_Adma.bits = value;
 				break;
 			case 0x1A0:
-				m_share.KeyOn.lo.SetValue(value);
+				m_voice.KeyOn.lo.SetValue(value);
 				break;
 			case 0x1A2:
-				m_share.KeyOn.hi.SetValue(value);
+				m_voice.KeyOn.hi.SetValue(value);
 				break;
 			case 0x1A4:
-				m_share.KeyOff.lo.SetValue(value);
+				m_voice.KeyOff.lo.SetValue(value);
 				break;
 			case 0x1A6:
-				m_share.KeyOff.hi.SetValue(value);
+				m_voice.KeyOff.hi.SetValue(value);
 				break;
 			case 0x1A8:
 				m_TSA.hi = value & 0xF;
@@ -755,10 +673,10 @@ namespace SPU
 				m_Reverb.m_EEA.lo.SetValue(0xFFFF);
 				break;
 			case 0x340:
-				m_share.ENDX.lo.SetValue(value);
+				m_voice.ENDX.lo.SetValue(value);
 				break;
 			case 0x342:
-				m_share.ENDX.hi.SetValue(value);
+				m_voice.ENDX.hi.SetValue(value);
 				break;
 			//case 0x344:
 			//	// SPU Status R/O
@@ -881,6 +799,6 @@ namespace SPU
 		m_IRQ.bits = 0;
 		m_Reverb.Reset();
 		m_Noise.Reset();
-		m_share.Reset();
+		m_voice.Reset();
 	}
 } // namespace SPU

@@ -33,18 +33,16 @@ namespace SPU
 		friend class Voice;
 
 	public:
-		SPUCore(u16* ram, u32 id)
+		SPUCore(u16* ram, u32 id, Voices& voice)
 			: m_Id(id)
 			, m_RAM(ram)
+			, m_voice(voice)
 		{
-			m_share.Reset();
-			m_share.RAM = m_RAM;
-			m_share.SPU_ID = m_Id;
 		}
 
 		u32 m_Id{0};
 
-		AudioSample GenSample(AudioSample input);
+		AudioSample GenSample(AudioSample input, AudioSample& VoicesDry, AudioSample& VoicesWet);
 
 		void Write(u32 addr, u16 value);
 		u16 Read(u32 addr);
@@ -269,14 +267,7 @@ namespace SPU
 		Reg32 m_VMIXEL{0};
 		Reg32 m_VMIXER{0};
 
-		VoiceVec m_vNON{};
-		VoiceVec m_vPMON{};
-		VoiceVec m_vVMIXL{};
-		VoiceVec m_vVMIXR{};
-		VoiceVec m_vVMIXEL{};
-		VoiceVec m_vVMIXER{};
-
-		SharedData m_share{};
+		Voices& m_voice;
 	};
 
 } // namespace SPU

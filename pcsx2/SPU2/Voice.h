@@ -62,13 +62,11 @@ namespace SPU
 
 	static constexpr std::array<std::array<s16, 4>, 256> gaussianTable = gaussianConstructTable();
 
-	//static constexpr u32 NUM_VOICES = 48;
-	static constexpr s32 NUM_VOICES = 24;
+	static constexpr s32 NUM_VOICES = 48;
 
 	union AddrVec
 	{
 		std::array<Reg32, NUM_VOICES> arr;
-
 		std::array<GSVector8i, 6> vec;
 
 		void Reset()
@@ -87,7 +85,7 @@ namespace SPU
 
 		// lets fit in 3 of these so we have room to write
 		// outx with an offset
-		std::array<GSVector8i, 3> vec;
+		std::array<GSVector8i, 4> vec;
 
 		void Reset()
 		{
@@ -145,9 +143,10 @@ namespace SPU
 		ADPCMHeader m_CurHeader{};
 	};
 
-	struct SharedData
+	struct Voices
 	{
-		u32 SPU_ID;
+		Voices(u16* ram)
+			: RAM(ram){};
 		std::array<Decoder, NUM_VOICES> decoder;
 		std::array<ADSR, NUM_VOICES> adsr;
 		std::array<VolumePair, NUM_VOICES> volume;
@@ -165,11 +164,12 @@ namespace SPU
 		VoiceVec VOLL{};
 		VoiceVec VOLR{};
 		VoiceVec ENVX{};
-
-		s16* GetSample(int n)
-		{
-			return &decoder[n].m_Buffer[SamplePos.uarr[n] & 0x1f];
-		}
+		VoiceVec vNON{};
+		VoiceVec vPMON{};
+		VoiceVec vVMIXL{};
+		VoiceVec vVMIXR{};
+		VoiceVec vVMIXEL{};
+		VoiceVec vVMIXER{};
 
 		void Reset()
 		{
@@ -229,6 +229,16 @@ namespace SPU
 			KeyOn.full = 0;
 		}
 
+		s16* GetSample(int n)
+		{
+			return &decoder[n].m_Buffer[SamplePos.uarr[n] & 0x1f];
+		}
+
+		u16 BufferedSize(int n)
+		{
+			return static_cast<u16>(decoder[n].m_Wpos - SamplePos.uarr[n]);
+		}
+
 		__fi void DecodeSamples()
 		{
 			for (int i = 0; i < NUM_VOICES; i++)
@@ -241,7 +251,7 @@ namespace SPU
 				// This doesn't exactly match the real behaviour,
 				// it seems to initially decode a bigger chunk
 				// and then decode more data after a bit has drained
-				if (static_cast<u16>(decoder[i].m_Wpos - SamplePos.uarr[i]) >= 16)
+				if (BufferedSize(i) >= 16)
 				{
 					// sufficient data buffered
 					continue;
@@ -363,6 +373,98 @@ namespace SPU
 				interp_out.arr[i + 2] = lo.I16[8];
 				interp_out.arr[i + 3] = hi.I16[12];
 			}
+		}
+
+		__fi void UpdatePitch()
+		{
+			for (int i = 0; i < 2; i++)
+			{
+				GSVector8i steps{Pitch.vec[i].andnot(vPMON.vec[i])};
+				GSVector8i factors{OUTX.vec[i]};
+				auto pitch_lo = GSVector8i::i16to32(GSVector4i::cast(Pitch.vec[i]));
+				auto factor_lo = GSVector8i::u16to32(GSVector4i::cast(factors));
+				auto pitch_hi = GSVector8i::i16to32(GSVector4i::cast(Pitch.vec[i].cddd()));
+				auto factor_hi = GSVector8i::u16to32(GSVector4i::cast(factors.cddd()));
+
+				GSVector8i pmod_mask(GSVector8i(0xffff).broadcast32());
+				auto reslo = pitch_lo.mul32lo(factor_lo).sra32(15) & pmod_mask;
+				auto reshi = pitch_hi.mul32lo(factor_hi).sra32(15) & pmod_mask;
+				steps |= reslo.pu32(reshi).acbd() & vPMON.vec[i];
+
+				GSVector8i step_limit(GSVector8i(0x3fff).broadcast16());
+				steps = Counter.vec[i].add16(steps.min_u16(step_limit));
+
+				GSVector8i counter_mask(GSVector8i(0xfff).broadcast16());
+				Counter.vec[i] = steps & counter_mask;
+				SamplePos.vec[i] = SamplePos.vec[i].add16(steps.srl16(12));
+			}
+		}
+
+		__fi void Mix(s16 cur_noise, VoiceVec& interp, AudioSample& dry, AudioSample& wet)
+		{
+			// Load noise into all elements
+			GSVector8i noise[2]{
+				GSVector8i::load(cur_noise).broadcast16(),
+				GSVector8i::load(cur_noise).broadcast16()};
+
+			// & with NON to only keep it for voices with noise selected
+			noise[0] = noise[0] & vNON.vec[0];
+			noise[1] = noise[1] & vNON.vec[1];
+
+			// Load voice output, exclude voices with active noise
+			GSVector8i samples[2]{
+				interp.vec[0].andnot(vNON.vec[0]),
+				interp.vec[1].andnot(vNON.vec[1])};
+
+			// mix in noise
+			samples[0] |= noise[0];
+			samples[1] |= noise[1];
+
+			// Apply ADSR volume
+			samples[0] = samples[0].mul16hrs(ENVX.vec[0]);
+			samples[1] = samples[1].mul16hrs(ENVX.vec[1]);
+
+			// Save to OUTX (needs to be kept for later due to pitch mod)
+			// offset it so it lines up with the voice using the data
+			GSVector8i::store<false>(&OUTX.arr[1], samples[0].add16(GSVector8i(0x8000).broadcast16()));
+			GSVector8i::store<false>(&OUTX.arr[17], samples[1].add16(GSVector8i(0x8000).broadcast16()));
+
+			//MemOut(OutBuf::Voice1, samples[0].I16[1]);
+			//MemOut(OutBuf::Voice3, samples[0].I16[3]);
+
+			// Split to streo and apply l/r volume
+			GSVector8i left[2], right[2];
+			left[0] = samples[0].mul16hrs(VOLL.vec[0]);
+			left[1] = samples[1].mul16hrs(VOLL.vec[1]);
+			right[0] = samples[0].mul16hrs(VOLR.vec[0]);
+			right[1] = samples[1].mul16hrs(VOLR.vec[1]);
+
+			GSVector8i vc_dry_l[2], vc_dry_r[2], vc_wet_l[2], vc_wet_r[2];
+			vc_dry_l[0] = left[0] & vVMIXL.vec[0];
+			vc_dry_l[1] = left[1] & vVMIXL.vec[1];
+			vc_dry_r[0] = right[0] & vVMIXR.vec[0];
+			vc_dry_r[1] = right[1] & vVMIXR.vec[1];
+
+			vc_wet_l[0] = left[0] & vVMIXEL.vec[0];
+			vc_wet_l[1] = left[1] & vVMIXEL.vec[1];
+			vc_wet_r[0] = right[0] & vVMIXER.vec[0];
+			vc_wet_r[1] = right[1] & vVMIXER.vec[1];
+
+			dry = {hsum(vc_dry_l[0], vc_dry_l[1]), hsum(vc_dry_r[0], vc_dry_r[1])};
+			wet = {hsum(vc_wet_l[0], vc_wet_l[1]), hsum(vc_wet_r[0], vc_wet_r[1])};
+		}
+
+		__fi void Run(AudioSample& dry_out, AudioSample& wet_out)
+		{
+
+			ProcessKonKoff();
+			DecodeSamples();
+			VoiceVec interp_out{};
+			Interpolate(interp_out);
+			UpdateVolume();
+			UpdatePitch();
+			//m_voice.Mix(m_Noise.Get(), interp_out, VoicesDry, VoicesWet);
+			Mix(0, interp_out, dry_out, wet_out);
 		}
 
 		[[nodiscard]] u16 Read(u32 id, u32 addr) const

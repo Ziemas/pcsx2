@@ -19,15 +19,15 @@
 #include "common/MemcpyFast.h"
 #include "Output.h"
 #include "IopHw.h"
+#include "Voice.h"
 
 namespace SPU
 {
-	u16 SPU_RAM[1024 * 1024 * 2] = {};
-	//std::array<u16, 1024*1024*2> SPU_RAM = {};
-
+	std::array<u16, 1024 * 1024 * 2> SPU_RAM = {};
+	Voices voices(SPU_RAM.data());
 	SPUCore cores[2] = {
-		{SPU_RAM, 0},
-		{SPU_RAM, 1},
+		{SPU_RAM.data(), 0, voices},
+		{SPU_RAM.data(), 1, voices},
 	};
 
 	u32 spuCycles = 0;
@@ -42,8 +42,13 @@ namespace SPU
 		spuCycles += cycles;
 		while (spuCycles >= 768)
 		{
-			auto core0 = cores[0].GenSample(AudioSample());
-			auto core1 = cores[1].GenSample(core0);
+			AudioSample dry_out{};
+			AudioSample wet_out{};
+			// TODO output for both cores
+			voices.Run(dry_out, wet_out);
+
+			auto core0 = cores[0].GenSample(AudioSample(), dry_out, wet_out);
+			auto core1 = cores[1].GenSample(core0, dry_out, wet_out);
 			spuCycles -= 768;
 
 			S16Out out{};
@@ -99,15 +104,15 @@ namespace SPU
 			return cores[core].Read(addr);
 		}
 
-        if (addr < 0x788) // core0 volume, reverb addrs
-        {
+		if (addr < 0x788) // core0 volume, reverb addrs
+		{
 			return cores[0].Read(addr);
-        }
+		}
 
-        if (addr < 0x7C0) // core1 volume, reverb addrs
+		if (addr < 0x7C0) // core1 volume, reverb addrs
 		{
 			addr -= 0x28;
-            return cores[1].Read(addr);
+			return cores[1].Read(addr);
 		}
 
 		if (addr >= 0x7C0) // shared?
@@ -133,22 +138,22 @@ namespace SPU
 			return;
 		}
 
-        if (addr < 0x788) // core0 volume, reverb addrs
-        {
-            cores[0].Write(addr, value);
-            return;
-        }
+		if (addr < 0x788) // core0 volume, reverb addrs
+		{
+			cores[0].Write(addr, value);
+			return;
+		}
 
-        if (addr < 0x7B0) // core1 volume, reverb addrs
-        {
-            addr -= 0x28;
-            cores[1].Write(addr, value);
-            return;
-        }
+		if (addr < 0x7B0) // core1 volume, reverb addrs
+		{
+			addr -= 0x28;
+			cores[1].Write(addr, value);
+			return;
+		}
 
 		if (addr >= 0x7B0) // shared?
 		{
-            cores[0].Write(addr, value);
+			cores[0].Write(addr, value);
 			return;
 		}
 	}

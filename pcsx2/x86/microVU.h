@@ -128,7 +128,16 @@ public:
 			microBlockLink* prevI = nullptr;
 			for (microBlockLink* linkI = fBlockList; linkI != nullptr; prevI = linkI, linkI = linkI->next)
 			{
-				if (mVUquickSearch(pState, &linkI->block.pState, sizeof(microRegInfo)))
+				bool found = mVUquickSearch(pState, &linkI->block.pState, sizeof(microRegInfo));
+				bool found2 = memcmp(pState, &linkI->block.pState, sizeof(microRegInfo)) == 0;
+				//if (found != found2)
+				//{
+				//	Console.WriteLn("search mismatch mvu == %d, memcmp == %d!", found, found2);
+				//	bool found3 = mVUquickSearch(pState, &linkI->block.pState, sizeof(microRegInfo));
+				//	Console.WriteLn("second chance == %d!", found3);
+				//}
+
+				if (found2)
 				{
 					if (linkI != fBlockList)
 					{
