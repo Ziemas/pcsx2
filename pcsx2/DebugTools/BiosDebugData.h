@@ -15,6 +15,8 @@
 
 #pragma once
 #include "common/Pcsx2Types.h"
+#include <memory>
+#include <vector>
 #include "ps2/BiosTools.h"
 
 enum class ThreadStatus
@@ -105,6 +107,7 @@ public:
 	[[nodiscard]] virtual ThreadStatus Status() const = 0;
 	[[nodiscard]] virtual WaitState State() const = 0;
 	[[nodiscard]] virtual u32 EntryPoint() const = 0;
+	// TODO/FIXME Saved SP vs bottom, which one do we want?
 	[[nodiscard]] virtual u32 SP() const = 0;
 	[[nodiscard]] virtual u32 Priority() const = 0;
 };
