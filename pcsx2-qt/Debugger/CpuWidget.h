@@ -112,8 +112,8 @@ private:
 	};
 
 	std::vector<BreakpointObject> m_bplistObjects;
-	std::vector<EEThread> m_threadlistObjects;
-	EEThread m_activeThread;
+	std::vector<std::unique_ptr<BiosThread>> m_threadlistObjects;
+	BiosThread* m_activeThread;
 	std::vector<StackFrame> m_stacklistObjects;
 
 	bool m_demangleFunctions = true;

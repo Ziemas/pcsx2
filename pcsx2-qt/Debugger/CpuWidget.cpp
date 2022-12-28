@@ -582,7 +582,13 @@ void CpuWidget::updateThreads()
 	m_ui.threadList->setRowCount(0);
 
 	if (m_cpu.getCpuType() == BREAKPOINT_EE)
+	{
 		m_threadlistObjects = getEEThreads();
+	}
+	else
+	{
+		m_threadlistObjects = getIOPThreads();
+	}
 
 	for (size_t i = 0; i < m_threadlistObjects.size(); i++)
 	{
@@ -590,54 +596,54 @@ void CpuWidget::updateThreads()
 
 		const auto& thread = m_threadlistObjects[i];
 
-		if (thread.data.status == THS_RUN)
-			m_activeThread = thread;
+		if (thread->Status() == ThreadStatus::THS_RUN)
+			m_activeThread = thread.get();
 
 		QTableWidgetItem* idItem = new QTableWidgetItem();
-		idItem->setText(QString::number(thread.tid));
+		idItem->setText(QString::number(thread->TID()));
 		idItem->setFlags(Qt::ItemFlag::ItemIsSelectable | Qt::ItemFlag::ItemIsEnabled);
 		m_ui.threadList->setItem(i, 0, idItem);
 
 		QTableWidgetItem* pcItem = new QTableWidgetItem();
-		if (thread.data.status == THS_RUN)
+		if (thread->Status() == ThreadStatus::THS_RUN)
 			pcItem->setText(FilledQStringFromValue(m_cpu.getPC(), 16));
 		else
-			pcItem->setText(FilledQStringFromValue(thread.data.entry, 16));
+			pcItem->setText(FilledQStringFromValue(thread->PC(), 16));
 		pcItem->setFlags(Qt::ItemFlag::ItemIsSelectable | Qt::ItemFlag::ItemIsEnabled);
 		m_ui.threadList->setItem(i, 1, pcItem);
 
 		QTableWidgetItem* entryItem = new QTableWidgetItem();
-		entryItem->setText(FilledQStringFromValue(thread.data.entry_init, 16));
+		entryItem->setText(FilledQStringFromValue(thread->EntryPoint(), 16));
 		entryItem->setFlags(Qt::ItemFlag::ItemIsSelectable | Qt::ItemFlag::ItemIsEnabled);
 		m_ui.threadList->setItem(i, 2, entryItem);
 
 		QTableWidgetItem* priorityItem = new QTableWidgetItem();
-		priorityItem->setText(QString::number(thread.data.currentPriority));
+		priorityItem->setText(QString::number(thread->Priority()));
 		priorityItem->setFlags(Qt::ItemFlag::ItemIsSelectable | Qt::ItemFlag::ItemIsEnabled);
 		m_ui.threadList->setItem(i, 3, priorityItem);
 
 		QString statusString;
-		switch (thread.data.status)
+		switch (thread->Status())
 		{
-			case THS_BAD:
+			case ThreadStatus::THS_BAD:
 				statusString = tr("Bad");
 				break;
-			case THS_RUN:
+			case ThreadStatus::THS_RUN:
 				statusString = tr("Running");
 				break;
-			case THS_READY:
+			case ThreadStatus::THS_READY:
 				statusString = tr("Ready");
 				break;
-			case THS_WAIT:
+			case ThreadStatus::THS_WAIT:
 				statusString = tr("Waiting");
 				break;
-			case THS_SUSPEND:
+			case ThreadStatus::THS_SUSPEND:
 				statusString = tr("Suspended");
 				break;
-			case THS_WAIT_SUSPEND:
+			case ThreadStatus::THS_WAIT_SUSPEND:
 				statusString = tr("Waiting/Suspended");
 				break;
-			case THS_DORMANT:
+			case ThreadStatus::THS_DORMANT:
 				statusString = tr("Dormant");
 				break;
 		}
@@ -648,16 +654,34 @@ void CpuWidget::updateThreads()
 		m_ui.threadList->setItem(i, 4, statusItem);
 
 		QString waitTypeString;
-		switch (thread.data.waitType)
+		switch (thread->State())
 		{
-			case WAIT_NONE:
+			case WaitState::NONE:
 				waitTypeString = tr("None");
 				break;
-			case WAIT_WAKEUP_REQ:
+			case WaitState::WAKEUP_REQ:
 				waitTypeString = tr("Wakeup request");
 				break;
-			case WAIT_SEMA:
+			case WaitState::SEMA:
 				waitTypeString = tr("Semaphore");
+				break;
+			case WaitState::SLEEP:
+				waitTypeString = tr("Sleep");
+				break;
+			case WaitState::DELAY:
+				waitTypeString = tr("Delay");
+				break;
+			case WaitState::EVENTFLAG:
+				waitTypeString = tr("Eventflag");
+				break;
+			case WaitState::MBOX:
+				waitTypeString = tr("Mailbox");
+				break;
+			case WaitState::VPOOL:
+				waitTypeString = tr("VPool");
+				break;
+			case WaitState::FIXPOOL:
+				waitTypeString = tr("FixPool");
 				break;
 		}
 
@@ -692,14 +716,14 @@ void CpuWidget::onThreadListDoubleClick(int row, int column)
 	const auto& entry = m_threadlistObjects.at(row);
 	if (column == 1) // PC
 	{
-		if (entry.data.status == THS_RUN)
+		if (entry->Status() == ThreadStatus::THS_RUN)
 			m_ui.disassemblyWidget->gotoAddress(m_cpu.getPC());
 		else
-			m_ui.disassemblyWidget->gotoAddress(entry.data.entry);
+			m_ui.disassemblyWidget->gotoAddress(entry->PC());
 	}
 	else if (column == 2) // Entry Point
 	{
-		m_ui.disassemblyWidget->gotoAddress(entry.data.entry_init);
+		m_ui.disassemblyWidget->gotoAddress(entry->EntryPoint());
 	}
 }
 
@@ -770,7 +794,7 @@ void CpuWidget::updateStackFrames()
 	m_ui.stackframeList->setRowCount(0);
 
 	m_stacklistObjects = MipsStackWalk::Walk(&m_cpu, m_cpu.getPC(), m_cpu.getRegister(0, 31), m_cpu.getRegister(0, 29),
-		m_activeThread.data.entry_init, m_activeThread.data.stack);
+		m_activeThread->EntryPoint(), m_activeThread->SP());
 
 	for (size_t i = 0; i < m_stacklistObjects.size(); i++)
 	{

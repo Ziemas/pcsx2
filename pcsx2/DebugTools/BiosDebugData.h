@@ -15,6 +15,8 @@
 
 #pragma once
 #include "common/Pcsx2Types.h"
+#include <memory>
+#include <vector>
 #include "ps2/BiosTools.h"
 
 enum class ThreadStatus
