@@ -211,7 +211,6 @@ bool SPU2::Initialize()
 		}
 	}
 
-	InitADSR();
 	return true;
 }
 

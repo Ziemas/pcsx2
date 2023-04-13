@@ -118,22 +118,34 @@ struct V_ADSR
 		struct
 		{
 			u32 SustainLevel : 4,
-				DecayRate : 4,
-				AttackRate : 7,
+				DecayShift : 4,
+				AttackStep : 2,
+				AttackShift: 5,
 				AttackMode : 1, // 0 for linear (+lin), 1 for pseudo exponential (+exp)
 
-				ReleaseRate : 5,
+				ReleaseShift : 5,
 				ReleaseMode : 1, // 0 for linear (-lin), 1 for exponential (-exp)
-				SustainRate : 7,
-				SustainMode : 3; // 0 = +lin, 1 = -lin, 2 = +exp, 3 = -exp
+				SustainStep : 2,
+				SustainShift: 5,
+				Unused : 1,
+				SustainDir : 1,
+				SustainMode : 1;
 		};
 	};
 
-	s32 Value;      // Ranges from 0 to 0x7fffffff (signed values are clamped to 0) [Reg_ENVX]
+	// Values for current phase from register.
+	bool Decrease = false;
+	bool Exp = false;
+	s32 Target = 0;
+	s32 Shift = 0;
+	s32 Step = 0;
+
+	s32 Value;      // Ranges from 0 to 0x7fff (signed values are clamped to 0) [Reg_ENVX]
+	u32 Counter;    // Counter for next value change, 0 to 0x8000.
 	u8 Phase;       // monitors current phase of ADSR envelope
-	bool Releasing; // Ready To Release, triggered by Voice.Stop();
 
 public:
+	void NewPhase(u8 phase);
 	bool Calculate();
 };
 
@@ -568,7 +580,6 @@ extern void SetIrqCall(int core);
 extern void SetIrqCallDMA(int core);
 extern void StartVoices(int core, u32 value);
 extern void StopVoices(int core, u32 value);
-extern void InitADSR();
 extern void CalculateADSR(V_Voice& vc);
 extern void UpdateSpdifMode();
 

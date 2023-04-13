@@ -358,9 +358,7 @@ __forceinline bool StartQueuedVoice(uint coreidx, uint voiceidx)
 		vc.StartA = (vc.StartA + 0xFFFF8) + 0x8;
 	}
 
-	vc.ADSR.Releasing = false;
-	vc.ADSR.Value = 1;
-	vc.ADSR.Phase = 1;
+	vc.ADSR.NewPhase(1);
 	vc.SCurrent = 28;
 	vc.LoopMode = 0;
 
@@ -666,7 +664,7 @@ void V_Core::WriteRegPS1(u32 mem, u16 value)
 				break;
 			case 0xc: // Voice 0..23 ADSR Current Volume
 				// not commonly set by games
-				Voices[voice].ADSR.Value = value * 0x10001U;
+				Voices[voice].ADSR.Value = value;
 				if (SPU2::MsgToConsole())
 					SPU2::ConLog("voice %x ADSR.Value write: %x\n", voice, Voices[voice].ADSR.Value);
 				break;
@@ -987,7 +985,7 @@ u16 V_Core::ReadRegPS1(u32 mem)
 				value = Voices[voice].ADSR.regADSR2;
 				break;
 			case 0xc:                                   // Voice 0..23 ADSR Current Volume
-				value = Voices[voice].ADSR.Value >> 16; // no clue
+				value = Voices[voice].ADSR.Value;
 				//if (value != 0) ConLog("voice %d read ADSR.Value result = %x\n", voice, value);
 				break;
 			case 0xe:
@@ -2007,7 +2005,7 @@ void StartVoices(int core, u32 value)
 					   (Cores[core].VoiceGates[vc].WetL) ? "+" : "-", (Cores[core].VoiceGates[vc].WetR) ? "+" : "-",
 					   *(u16*)GetMemPtr(thisvc.StartA),
 					   thisvc.Pitch,
-					   thisvc.Volume.Left.Value >> 16, thisvc.Volume.Right.Value >> 16,
+					   thisvc.Volume.Left.Value, thisvc.Volume.Right.Value,
 					   thisvc.ADSR.regADSR1, thisvc.ADSR.regADSR2);
 			}
 		}
@@ -2034,7 +2032,7 @@ void StopVoices(int core, u32 value)
 			continue;
 		}
 
-		Cores[core].Voices[vc].ADSR.Releasing = true;
+		Cores[core].Voices[vc].ADSR.NewPhase(4);
 		if (SPU2::MsgKeyOnOff())
 			SPU2::ConLog("* SPU2: KeyOff: Core %d; Voice %d.\n", core, vc);
 	}

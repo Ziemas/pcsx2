@@ -283,8 +283,7 @@ static __forceinline void GetNextDataDummy(V_Core& thiscore, uint voiceidx)
 // Data is shifted up by 1 bit to give the output an effective 16 bit range.
 static __forceinline s32 ApplyVolume(s32 data, s32 volume)
 {
-	//return (volume * data) >> 15;
-	return MulShr32(data << 1, volume);
+	return (volume * data) >> 15;
 }
 
 static __forceinline StereoOut32 ApplyVolume(const StereoOut32& data, const V_VolumeLR& volume)
