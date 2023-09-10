@@ -277,44 +277,8 @@ struct V_Reverb
 	u32 APF1_R_DST;
 	u32 APF2_L_DST;
 	u32 APF2_R_DST;
-};
 
-struct V_ReverbBuffers
-{
-	s32 SAME_L_SRC;
-	s32 SAME_R_SRC;
-	s32 DIFF_R_SRC;
-	s32 DIFF_L_SRC;
-	s32 SAME_L_DST;
-	s32 SAME_R_DST;
-	s32 DIFF_L_DST;
-	s32 DIFF_R_DST;
-
-	s32 COMB1_L_SRC;
-	s32 COMB1_R_SRC;
-	s32 COMB2_L_SRC;
-	s32 COMB2_R_SRC;
-	s32 COMB3_L_SRC;
-	s32 COMB3_R_SRC;
-	s32 COMB4_L_SRC;
-	s32 COMB4_R_SRC;
-
-	s32 APF1_L_DST;
-	s32 APF1_R_DST;
-	s32 APF2_L_DST;
-	s32 APF2_R_DST;
-
-	s32 SAME_L_PRV;
-	s32 SAME_R_PRV;
-	s32 DIFF_L_PRV;
-	s32 DIFF_R_PRV;
-
-	s32 APF1_L_SRC;
-	s32 APF1_R_SRC;
-	s32 APF2_L_SRC;
-	s32 APF2_R_SRC;
-
-	bool NeedsUpdated;
+	bool Updated;
 };
 
 struct V_SPDIF
@@ -425,7 +389,7 @@ struct V_Core
 	u32 InputDataProgress;
 
 	V_Reverb Revb;              // Reverb Registers
-	V_ReverbBuffers RevBuffers; // buffer pointers for reverb, pre-calculated and pre-clipped.
+	V_Reverb RevBuffers;
 
 	s32 RevbDownBuf[2][64]; // Downsample buffer for reverb, one for each channel
 	s32 RevbUpBuf[2][64]; // Upsample buffer for reverb, one for each channel
@@ -435,12 +399,6 @@ struct V_Core
 	u32 ExtEffectsStartA;
 	u32 ExtEffectsEndA;
 	u32 ReverbX;
-
-	// Current size of and position of the effects buffer.  Pre-caculated when the effects start
-	// or end position registers are written.  CAN BE NEGATIVE OR ZERO, in which
-	// case reverb should be disabled.
-	s32 EffectsBufferSize;
-	u32 EffectsBufferStart;
 
 	V_CoreRegs Regs; // Registers
 
@@ -489,8 +447,6 @@ struct V_Core
 	void Init(int index);
 	void UpdateEffectsBufferSize();
 	void AnalyzeReverbPreset();
-
-	s32 EffectsBufferIndexer(s32 offset) const;
 
 	void WriteRegPS1(u32 mem, u16 value);
 	u16 ReadRegPS1(u32 mem);
