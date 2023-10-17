@@ -14,11 +14,11 @@
  */
 
 #include "PrecompiledHeader.h"
+#include "GS/MultiISA.h"
 #include "Global.h"
 #include "GS/GSVector.h"
 
 #include <array>
-
 
 void V_Core::AnalyzeReverbPreset()
 {
@@ -113,21 +113,22 @@ static constexpr std::array<s16, 48> make_up_coefs()
 
 static constexpr std::array<s16, 48> filter_up_coefs alignas(32) = make_up_coefs();
 
-s32 __forceinline V_Core::ReverbDownsample(bool right)
-{
-	int index = (RevbSampleBufPos - NUM_TAPS) & 63;
+MULTI_ISA_UNSHARED_START
 
-#if _M_SSE >= 0x501
+s32 __forceinline ReverbDownsample_avx(V_Core& core, bool right)
+{
+	int index = (core.RevbSampleBufPos - NUM_TAPS) & 63;
+
 	auto c = GSVector8i::load<true>(&filter_down_coefs[0]);
-	auto s = GSVector8i::load<false>(&RevbDownBuf[right][index]);
+	auto s = GSVector8i::load<false>(&core.RevbDownBuf[right][index]);
 	auto acc = s.mul16hrs(c);
 
 	c = GSVector8i::load<true>(&filter_down_coefs[16]);
-	s = GSVector8i::load<false>(&RevbDownBuf[right][index + 16]);
+	s = GSVector8i::load<false>(&core.RevbDownBuf[right][index + 16]);
 	acc = acc.adds16(s.mul16hrs(c));
 
 	c = GSVector8i::load<true>(&filter_down_coefs[32]);
-	s = GSVector8i::load<false>(&RevbDownBuf[right][index + 32]);
+	s = GSVector8i::load<false>(&core.RevbDownBuf[right][index + 32]);
 	acc = acc.adds16(s.mul16hrs(c));
 
 	acc = acc.adds16(acc.ba());
@@ -135,56 +136,70 @@ s32 __forceinline V_Core::ReverbDownsample(bool right)
 	acc = acc.hadds16(acc);
 	acc = acc.hadds16(acc);
 	acc = acc.hadds16(acc);
-#else
-	auto c = GSVector4i::load<true>(&filter_down_coefs[0]);
-	auto s = GSVector4i::load<false>(&RevbDownBuf[right][index]);
-	auto acc = s.mul16hrs(c);
-
-	c = GSVector4i::load<true>(&filter_down_coefs[8]);
-	s = GSVector4i::load<false>(&RevbDownBuf[right][index + 8]);
-	acc = acc.adds16(s.mul16hrs(c));
-
-	c = GSVector4i::load<true>(&filter_down_coefs[16]);
-	s = GSVector4i::load<false>(&RevbDownBuf[right][index + 16]);
-	acc = acc.adds16(s.mul16hrs(c));
-
-	c = GSVector4i::load<true>(&filter_down_coefs[24]);
-	s = GSVector4i::load<false>(&RevbDownBuf[right][index + 24]);
-	acc = acc.adds16(s.mul16hrs(c));
-
-	c = GSVector4i::load<true>(&filter_down_coefs[32]);
-	s = GSVector4i::load<false>(&RevbDownBuf[right][index + 32]);
-	acc = acc.adds16(s.mul16hrs(c));
-
-	acc = acc.hadds16(acc);
-	acc = acc.hadds16(acc);
-	acc = acc.hadds16(acc);
-#endif
 
 	return acc.I16[0];
 }
 
-StereoOut32 __forceinline V_Core::ReverbUpsample()
+s32 __forceinline ReverbDownsample_sse(V_Core& core, bool right)
 {
-	int index = (RevbSampleBufPos - NUM_TAPS) & 63;
+	int index = (core.RevbSampleBufPos - NUM_TAPS) & 63;
 
+	auto c = GSVector4i::load<true>(&filter_down_coefs[0]);
+	auto s = GSVector4i::load<false>(&core.RevbDownBuf[right][index]);
+	auto acc = s.mul16hrs(c);
+
+	c = GSVector4i::load<true>(&filter_down_coefs[8]);
+	s = GSVector4i::load<false>(&core.RevbDownBuf[right][index + 8]);
+	acc = acc.adds16(s.mul16hrs(c));
+
+	c = GSVector4i::load<true>(&filter_down_coefs[16]);
+	s = GSVector4i::load<false>(&core.RevbDownBuf[right][index + 16]);
+	acc = acc.adds16(s.mul16hrs(c));
+
+	c = GSVector4i::load<true>(&filter_down_coefs[24]);
+	s = GSVector4i::load<false>(&core.RevbDownBuf[right][index + 24]);
+	acc = acc.adds16(s.mul16hrs(c));
+
+	c = GSVector4i::load<true>(&filter_down_coefs[32]);
+	s = GSVector4i::load<false>(&core.RevbDownBuf[right][index + 32]);
+	acc = acc.adds16(s.mul16hrs(c));
+
+	acc = acc.hadds16(acc);
+	acc = acc.hadds16(acc);
+	acc = acc.hadds16(acc);
+
+	return acc.I16[0];
+}
+
+s32 __forceinline ReverbDownsample(V_Core& core, bool right)
+{
 #if _M_SSE >= 0x501
+	ReverbDownsample_avx(core, right);
+#else
+	ReverbDownsample_sse(core, right);
+#endif
+}
+
+StereoOut32 __forceinline ReverbUpsample_avx(V_Core& core)
+{
+	int index = (core.RevbSampleBufPos - NUM_TAPS) & 63;
+
 	auto c = GSVector8i::load<true>(&filter_up_coefs[0]);
-	auto l = GSVector8i::load<false>(&RevbUpBuf[0][index]);
-	auto r = GSVector8i::load<false>(&RevbUpBuf[1][index]);
+	auto l = GSVector8i::load<false>(&core.RevbUpBuf[0][index]);
+	auto r = GSVector8i::load<false>(&core.RevbUpBuf[1][index]);
 
 	auto lacc = l.mul16hrs(c);
 	auto racc = r.mul16hrs(c);
 
 	c = GSVector8i::load<true>(&filter_up_coefs[16]);
-	l = GSVector8i::load<false>(&RevbUpBuf[0][index + 16]);
-	r = GSVector8i::load<false>(&RevbUpBuf[1][index + 16]);
+	l = GSVector8i::load<false>(&core.RevbUpBuf[0][index + 16]);
+	r = GSVector8i::load<false>(&core.RevbUpBuf[1][index + 16]);
 	lacc = lacc.adds16(l.mul16hrs(c));
 	racc = racc.adds16(r.mul16hrs(c));
 
 	c = GSVector8i::load<true>(&filter_up_coefs[32]);
-	l = GSVector8i::load<false>(&RevbUpBuf[0][index + 32]);
-	r = GSVector8i::load<false>(&RevbUpBuf[1][index + 32]);
+	l = GSVector8i::load<false>(&core.RevbUpBuf[0][index + 32]);
+	r = GSVector8i::load<false>(&core.RevbUpBuf[1][index + 32]);
 	lacc = lacc.adds16(l.mul16hrs(c));
 	racc = racc.adds16(r.mul16hrs(c));
 
@@ -198,35 +213,42 @@ StereoOut32 __forceinline V_Core::ReverbUpsample()
 	racc = racc.hadds16(racc);
 	racc = racc.hadds16(racc);
 	racc = racc.hadds16(racc);
-#else
+
+	return {lacc.I16[0], racc.I16[0]};
+}
+
+StereoOut32 __forceinline ReverbUpsample_sse(V_Core& core)
+{
+	int index = (core.RevbSampleBufPos - NUM_TAPS) & 63;
+
 	auto c = GSVector4i::load<true>(&filter_up_coefs[0]);
-	auto l = GSVector4i::load<false>(&RevbUpBuf[0][index]);
-	auto r = GSVector4i::load<false>(&RevbUpBuf[1][index]);
+	auto l = GSVector4i::load<false>(&core.RevbUpBuf[0][index]);
+	auto r = GSVector4i::load<false>(&core.RevbUpBuf[1][index]);
 
 	auto lacc = l.mul16hrs(c);
 	auto racc = r.mul16hrs(c);
 
 	c = GSVector4i::load<true>(&filter_up_coefs[8]);
-	l = GSVector4i::load<false>(&RevbUpBuf[0][index + 8]);
-	r = GSVector4i::load<false>(&RevbUpBuf[1][index + 8]);
+	l = GSVector4i::load<false>(&core.RevbUpBuf[0][index + 8]);
+	r = GSVector4i::load<false>(&core.RevbUpBuf[1][index + 8]);
 	lacc = lacc.adds16(l.mul16hrs(c));
 	racc = racc.adds16(r.mul16hrs(c));
 
 	c = GSVector4i::load<true>(&filter_up_coefs[16]);
-	l = GSVector4i::load<false>(&RevbUpBuf[0][index + 16]);
-	r = GSVector4i::load<false>(&RevbUpBuf[1][index + 16]);
+	l = GSVector4i::load<false>(&core.RevbUpBuf[0][index + 16]);
+	r = GSVector4i::load<false>(&core.RevbUpBuf[1][index + 16]);
 	lacc = lacc.adds16(l.mul16hrs(c));
 	racc = racc.adds16(r.mul16hrs(c));
 
 	c = GSVector4i::load<true>(&filter_up_coefs[24]);
-	l = GSVector4i::load<false>(&RevbUpBuf[0][index + 24]);
-	r = GSVector4i::load<false>(&RevbUpBuf[1][index + 24]);
+	l = GSVector4i::load<false>(&core.RevbUpBuf[0][index + 24]);
+	r = GSVector4i::load<false>(&core.RevbUpBuf[1][index + 24]);
 	lacc = lacc.adds16(l.mul16hrs(c));
 	racc = racc.adds16(r.mul16hrs(c));
 
 	c = GSVector4i::load<true>(&filter_up_coefs[32]);
-	l = GSVector4i::load<false>(&RevbUpBuf[0][index + 32]);
-	r = GSVector4i::load<false>(&RevbUpBuf[1][index + 32]);
+	l = GSVector4i::load<false>(&core.RevbUpBuf[0][index + 32]);
+	r = GSVector4i::load<false>(&core.RevbUpBuf[1][index + 32]);
 	lacc = lacc.adds16(l.mul16hrs(c));
 	racc = racc.adds16(r.mul16hrs(c));
 
@@ -237,10 +259,21 @@ StereoOut32 __forceinline V_Core::ReverbUpsample()
 	racc = racc.hadds16(racc);
 	racc = racc.hadds16(racc);
 	racc = racc.hadds16(racc);
-#endif
 
 	return {lacc.I16[0], racc.I16[0]};
 }
+
+StereoOut32 __forceinline ReverbUpsample(V_Core& core)
+{
+#if _M_SSE >= 0x501
+	ReverbUpsample_avx(core);
+#else
+	ReverbUpsample_sse(core);
+#endif
+}
+
+MULTI_ISA_UNSHARED_END
+
 
 __forceinline s32 V_Core::RevbGetIndexer(s32 offset)
 {
@@ -323,7 +356,7 @@ StereoOut32 V_Core::DoReverb(const StereoOut32& Input)
 	s32 in, same, diff, apf1, apf2, out;
 
 #define MUL(x, y) ((x) * (y) >> 15)
-	in = MUL(R ? Revb.IN_COEF_R : Revb.IN_COEF_L, ReverbDownsample(R));
+	in = MUL(R ? Revb.IN_COEF_R : Revb.IN_COEF_L, ReverbDownsample(*this, R));
 
 	same = MUL(Revb.IIR_VOL, in + MUL(Revb.WALL_VOL, _spu2mem[same_src]) - _spu2mem[same_prv]) + _spu2mem[same_prv];
 	diff = MUL(Revb.IIR_VOL, in + MUL(Revb.WALL_VOL, _spu2mem[diff_src]) - _spu2mem[diff_prv]) + _spu2mem[diff_prv];
@@ -352,5 +385,5 @@ StereoOut32 V_Core::DoReverb(const StereoOut32& Input)
 
 	RevbSampleBufPos = (RevbSampleBufPos + 1) & 63;
 
-	return ReverbUpsample();
+	return ReverbUpsample(*this);
 }
