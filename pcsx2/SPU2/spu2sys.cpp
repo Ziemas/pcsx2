@@ -44,8 +44,8 @@ u32 Cycles;
 
 int PlayMode;
 
-static bool has_to_call_irq[2] = { false, false };
-static bool has_to_call_irq_dma[2] = { false, false };
+static bool has_to_call_irq[2] = {false, false};
+static bool has_to_call_irq_dma[2] = {false, false};
 StereoOut32 (*ReverbUpsample)(V_Core& core);
 s32 (*ReverbDownsample)(V_Core& core, bool right);
 
@@ -54,12 +54,13 @@ static bool psxmode = false;
 
 void SetIrqCall(int core)
 {
+	SPU2::ConLog("Core %d special write IRQ Called (IRQ passed). IRQA = %x\n",core, Cores[core].IRQA);
 	// reset by an irq disable/enable cycle, behaviour found by
 	// test programs that bizarrely only fired one interrupt
 	has_to_call_irq[core] = true;
 }
 
-void SetIrqCallDMA(int core)
+void SetIrqCallDma(int core)
 {
 	// reset by an irq disable/enable cycle, behaviour found by
 	// test programs that bizarrely only fired one interrupt
@@ -134,11 +135,12 @@ void V_Core::Init(int index)
 	CoreEnabled = 0;
 	AttrBit0 = 0;
 	DmaMode = 0;
-	DMAPtr = nullptr;
 	KeyOn = 0;
 	OutPos = 0;
 	DCFilterIn = {};
 	DCFilterOut = {};
+	TransferFifo = {};
+	FifoPos = 0;
 
 	psxmode = false;
 	psxSoundDataTransferControl = 0;
@@ -203,8 +205,8 @@ void V_Core::Init(int index)
 		Voices[v].LoopStartA = 0x2800;
 	}
 
-	DMAICounter = 0;
-	AdmaInProgress = false;
+	DmaCounter = 0;
+	DmaReq = false;
 
 	Regs.STATX = 0x80;
 	Regs.ENDX = 0xffffff; // PS2 confirmed
@@ -300,7 +302,7 @@ __forceinline void TimeUpdate(u32 cClocks)
 		{
 			if (has_to_call_irq[i])
 			{
-				//ConLog("* SPU2: Irq Called (%04x) at cycle %d.\n", Spdif.Info, Cycles);
+				//SPU2::ConLog("* SPU2: Irq Called (%04x) at cycle %d.\n", Spdif.Info, Cycles);
 				has_to_call_irq[i] = false;
 				if (!(Spdif.Info & (4 << i)) && Cores[i].IRQEnable)
 				{
@@ -315,120 +317,29 @@ __forceinline void TimeUpdate(u32 cClocks)
 		Cycles++;
 
 		// Start Queued Voices, they start after 2T (Tested on real HW)
-		for(int c = 0; c < 2; c++)
+		for (int c = 0; c < 2; c++)
 			for (int v = 0; v < 24; v++)
-				if(Cores[c].KeyOn & (1 << v))
-					if(StartQueuedVoice(c, v))
+				if (Cores[c].KeyOn & (1 << v))
+					if (StartQueuedVoice(c, v))
 						Cores[c].KeyOn &= ~(1 << v);
-		// Note: IOP does not use MMX regs, so no need to save them.
-		//SaveMMXRegs();
+
 		Mix();
-		//RestoreMMXRegs();
 	}
 
-	//Update DMA4 interrupt delay counter
-	if (Cores[0].DMAICounter > 0 && (psxRegs.cycle - Cores[0].LastClock) > 0)
+	for (auto& Core : Cores)
 	{
-		const u32 amt = std::min(psxRegs.cycle - Cores[0].LastClock, (u32)Cores[0].DMAICounter);
-		Cores[0].DMAICounter -= amt;
-		Cores[0].LastClock = psxRegs.cycle;
-		if(!Cores[0].AdmaInProgress)
-			HW_DMA4_MADR += amt / 2;
-
-		if (Cores[0].DMAICounter <= 0)
+		Core.RunDma();
+		for (int i = 0; i < 2; i++)
 		{
-			for (int i = 0; i < 2; i++)
+			if (has_to_call_irq_dma[i])
 			{
-				if (has_to_call_irq_dma[i])
+				//SPU2::ConLog("* SPU2: Irq Called (%04x) at cycle %d.\n", Spdif.Info, Cycles);
+				has_to_call_irq_dma[i] = false;
+				if (!(Spdif.Info & (4 << i)) && Cores[i].IRQEnable)
 				{
-					//ConLog("* SPU2: Irq Called (%04x) at cycle %d.\n", Spdif.Info, Cycles);
-					has_to_call_irq_dma[i] = false;
-					if (!(Spdif.Info & (4 << i)) && Cores[i].IRQEnable)
-					{
-						Spdif.Info |= (4 << i);
-						spu2Irq();
-					}
+					Spdif.Info |= (4 << i);
+					spu2Irq();
 				}
-			}
-
-			if (((Cores[0].AutoDMACtrl & 1) != 1) && Cores[0].ReadSize)
-			{
-				if (Cores[0].IsDMARead)
-					Cores[0].FinishDMAread();
-				else
-					Cores[0].FinishDMAwrite();
-			}
-
-			if (Cores[0].DMAICounter <= 0)
-			{
-				HW_DMA4_MADR = HW_DMA4_TADR;
-				spu2DMA4Irq();
-			}
-		}
-		else
-		{
-			if (((psxCounters[6].sCycleT + psxCounters[6].CycleT) - psxRegs.cycle) > (u32)Cores[0].DMAICounter)
-			{
-				psxCounters[6].sCycleT = psxRegs.cycle;
-				psxCounters[6].CycleT = Cores[0].DMAICounter;
-
-				psxNextCounter -= (psxRegs.cycle - psxNextsCounter);
-				psxNextsCounter = psxRegs.cycle;
-				if (psxCounters[6].CycleT < psxNextCounter)
-					psxNextCounter = psxCounters[6].CycleT;
-			}
-		}
-	}
-
-	//Update DMA7 interrupt delay counter
-	if (Cores[1].DMAICounter > 0 && (psxRegs.cycle - Cores[1].LastClock) > 0)
-	{
-		const u32 amt = std::min(psxRegs.cycle - Cores[1].LastClock, (u32)Cores[1].DMAICounter);
-		Cores[1].DMAICounter -= amt;
-		Cores[1].LastClock = psxRegs.cycle;
-		if (!Cores[1].AdmaInProgress)
-			HW_DMA7_MADR += amt / 2;
-		if (Cores[1].DMAICounter <= 0)
-		{
-			for (int i = 0; i < 2; i++)
-			{
-				if (has_to_call_irq_dma[i])
-				{
-					//ConLog("* SPU2: Irq Called (%04x) at cycle %d.\n", Spdif.Info, Cycles);
-					has_to_call_irq_dma[i] = false;
-					if (!(Spdif.Info & (4 << i)) && Cores[i].IRQEnable)
-					{
-						Spdif.Info |= (4 << i);
-						spu2Irq();
-					}
-				}
-			}
-
-			if (((Cores[1].AutoDMACtrl & 2) != 2) && Cores[1].ReadSize)
-			{
-				if (Cores[1].IsDMARead)
-					Cores[1].FinishDMAread();
-				else
-					Cores[1].FinishDMAwrite();
-			}
-
-			if (Cores[1].DMAICounter <= 0)
-			{
-				HW_DMA7_MADR = HW_DMA7_TADR;
-				spu2DMA7Irq();
-			}
-		}
-		else
-		{
-			if (((psxCounters[6].sCycleT + psxCounters[6].CycleT) - psxRegs.cycle) > (u32)Cores[1].DMAICounter)
-			{
-				psxCounters[6].sCycleT = psxRegs.cycle;
-				psxCounters[6].CycleT = Cores[1].DMAICounter;
-
-				psxNextCounter -= (psxRegs.cycle - psxNextsCounter);
-				psxNextsCounter = psxRegs.cycle;
-				if (psxCounters[6].CycleT < psxNextCounter)
-					psxNextCounter = psxCounters[6].CycleT;
 			}
 		}
 	}
@@ -462,7 +373,7 @@ __forceinline void UpdateSpdifMode()
 	if (OPM != PlayMode && SPU2::MsgToConsole())
 	{
 		SPU2::ConLog("* SPU2: Play Mode Set to %s (%d).\n",
-			   (PlayMode == 0) ? "Normal" : ((PlayMode == 1) ? "PCM Clone" : ((PlayMode == 2) ? "PCM Bypass" : "BitStream Bypass")), PlayMode);
+			(PlayMode == 0) ? "Normal" : ((PlayMode == 1) ? "PCM Clone" : ((PlayMode == 2) ? "PCM Bypass" : "BitStream Bypass")), PlayMode);
 	}
 }
 
@@ -630,7 +541,7 @@ void V_Core::WriteRegPS1(u32 mem, u16 value)
 
 			case 0x1da2: //         Reverb work area start
 				EffectsStartA = map_spu1to2(value);
-			break;
+				break;
 
 			case 0x1da4:
 				IRQA = map_spu1to2(value);
@@ -644,14 +555,7 @@ void V_Core::WriteRegPS1(u32 mem, u16 value)
 				break;
 
 			case 0x1da8: // Spu Write to Memory
-				//ConLog("SPU direct DMA Write. Current TSA = %x\n", TSA);
-				Cores[0].ActiveTSA = Cores[0].TSA;
-				if (Cores[0].IRQEnable && (Cores[0].IRQA <= Cores[0].ActiveTSA))
-				{
-					SetIrqCall(0);
-					spu2Irq();
-				}
-				DmaWrite(value);
+				FifoWrite(value);
 				show = false;
 				break;
 
@@ -666,23 +570,23 @@ void V_Core::WriteRegPS1(u32 mem, u16 value)
 				break;
 
 			case 0x1dae: // 1F801DAEh - SPU Status Register (SPUSTAT) (R)
-						 // The SPUSTAT register should be treated read-only (writing is possible in so far that the written
-						 // value can be read-back for a short moment, however, thereafter the hardware is overwriting that value).
-						 //Regs.STATX = value;
+				// The SPUSTAT register should be treated read-only (writing is possible in so far that the written
+				// value can be read-back for a short moment, however, thereafter the hardware is overwriting that value).
+				//Regs.STATX = value;
 				break;
 
 			case 0x1DB0: // 1F801DB0h 4  CD Volume Left/Right
-				break;   // cd left?
+				break; // cd left?
 			case 0x1DB2:
-				break;   // cd right?
+				break; // cd right?
 			case 0x1DB4: // 1F801DB4h 4  Extern Volume Left / Right
-				break;   // Extern left?
+				break; // Extern left?
 			case 0x1DB6:
-				break;   // Extern right?
+				break; // Extern right?
 			case 0x1DB8: // 1F801DB8h 4  Current Main Volume Left/Right
-				break;   // Current left?
+				break; // Current left?
 			case 0x1DBA:
-				break;   // Current right?
+				break; // Current right?
 			case 0x1DBC: // 1F801DBCh 4  Unknown? (R/W)
 				break;
 			case 0x1DBE:
@@ -834,7 +738,7 @@ u16 V_Core::ReadRegPS1(u32 mem)
 			case 0xa:
 				value = Voices[voice].ADSR.regADSR2;
 				break;
-			case 0xc:                                   // Voice 0..23 ADSR Current Volume
+			case 0xc: // Voice 0..23 ADSR Current Volume
 				value = Voices[voice].ADSR.Value;
 				//if (value != 0) ConLog("voice %d read ADSR.Value result = %x\n", voice, value);
 				break;
@@ -913,11 +817,6 @@ u16 V_Core::ReadRegPS1(u32 mem)
 			case 0x1da6:
 				value = map_spu2to1(TSA);
 				//ConLog("SPU2 TSA read: 0x1da6 = %x , (TSA = %x)\n", value, TSA);
-				break;
-			case 0x1da8:
-				ActiveTSA = TSA;
-				value = DmaRead();
-				show = false;
 				break;
 			case 0x1daa:
 				value = Cores[0].Regs.ATTR;
@@ -1020,40 +919,40 @@ static void RegWrite_VoiceAddr(u16 value)
 			break;
 
 		case 2:
+		{
+			u32* LoopReg;
+			if ((Cycles - thisvoice.PlayCycle) < 4 && (int)(thisvoice.LoopCycle - thisvoice.PlayCycle) < 0)
 			{
-				u32* LoopReg;
-				if ((Cycles - thisvoice.PlayCycle) < 4 && (int)(thisvoice.LoopCycle - thisvoice.PlayCycle) < 0)
-				{
-					LoopReg = &thisvoice.PendingLoopStartA;
-					thisvoice.PendingLoopStart = true;
-				}
-				else
-				{
-					LoopReg = &thisvoice.LoopStartA;
-					thisvoice.LoopMode = 1;
-				}
-
-				*LoopReg = ((u32)(value & 0x0F) << 16) | (*LoopReg & 0xFFF8);
+				LoopReg = &thisvoice.PendingLoopStartA;
+				thisvoice.PendingLoopStart = true;
 			}
-			break;
+			else
+			{
+				LoopReg = &thisvoice.LoopStartA;
+				thisvoice.LoopMode = 1;
+			}
+
+			*LoopReg = ((u32)(value & 0x0F) << 16) | (*LoopReg & 0xFFF8);
+		}
+		break;
 
 		case 3:
+		{
+			u32* LoopReg;
+			if ((Cycles - thisvoice.PlayCycle) < 4 && (int)(thisvoice.LoopCycle - thisvoice.PlayCycle) < 0)
 			{
-				u32* LoopReg;
-				if ((Cycles - thisvoice.PlayCycle) < 4 && (int)(thisvoice.LoopCycle - thisvoice.PlayCycle) < 0)
-				{
-					LoopReg = &thisvoice.PendingLoopStartA;
-					thisvoice.PendingLoopStart = true;
-				}
-				else
-				{
-					LoopReg = &thisvoice.LoopStartA;
-					thisvoice.LoopMode = 1;
-				}
-
-				*LoopReg = (*LoopReg & 0x0F0000) | (value & 0xFFF8);
+				LoopReg = &thisvoice.PendingLoopStartA;
+				thisvoice.PendingLoopStart = true;
 			}
-			break;
+			else
+			{
+				LoopReg = &thisvoice.LoopStartA;
+				thisvoice.LoopMode = 1;
+			}
+
+			*LoopReg = (*LoopReg & 0x0F0000) | (value & 0xFFF8);
+		}
+		break;
 
 
 			// NAX is confirmed to be writable on hardware (decoder will start decoding at new location).
@@ -1094,17 +993,7 @@ static void RegWrite_Core(u16 value)
 			// optimized block copy fashion elsewhere, but some games will write this register
 			// directly, so handle those here:
 
-			// Performance Note: The PS2 Bios uses this extensively right before booting games,
-			// causing massive slowdown if we don't shortcut it here.
-			thiscore.ActiveTSA = thiscore.TSA;
-			for (int i = 0; i < 2; i++)
-			{
-				if (Cores[i].IRQEnable && (Cores[i].IRQA == thiscore.ActiveTSA))
-				{
-					SetIrqCall(i);
-				}
-			}
-			thiscore.DmaWrite(value);
+			thiscore.FifoWrite(value);
 			break;
 
 		case REG_C_ATTR:
@@ -1114,12 +1003,12 @@ static void RegWrite_Core(u16 value)
 			bool oldFXenable = thiscore.FxEnable;
 			u8 oldDmaMode = thiscore.DmaMode;
 
-			thiscore.AttrBit0 = (value >> 0) & 0x01;  //1 bit
-			thiscore.DMABits = (value >> 1) & 0x07;   //3 bits
-			thiscore.DmaMode = (value >> 4) & 0x03;   //2 bit (not necessary, we get the direction from the iop)
+			thiscore.AttrBit0 = (value >> 0) & 0x01; //1 bit
+			thiscore.DMABits = (value >> 1) & 0x07; //3 bits
+			thiscore.DmaMode = (value >> 4) & 0x03; //2 bit (not necessary, we get the direction from the iop)
 			thiscore.IRQEnable = (value >> 6) & 0x01; //1 bit
-			thiscore.FxEnable = (value >> 7) & 0x01;  //1 bit
-			thiscore.NoiseClk = (value >> 8) & 0x3f;  //6 bits
+			thiscore.FxEnable = (value >> 7) & 0x01; //1 bit
+			thiscore.NoiseClk = (value >> 8) & 0x3f; //6 bits
 			//thiscore.Mute		=(value>>14) & 0x01; //1 bit
 			thiscore.Mute = 0;
 			//thiscore.CoreEnabled=(value>>15) & 0x01; //1 bit
@@ -1134,10 +1023,18 @@ static void RegWrite_Core(u16 value)
 
 			if (!thiscore.DmaMode && !(thiscore.Regs.STATX & 0x400))
 				thiscore.Regs.STATX &= ~0x80;
-			else if(!oldDmaMode && thiscore.DmaMode)
+			else if (!oldDmaMode && thiscore.DmaMode)
 				thiscore.Regs.STATX |= 0x80;
 
-			thiscore.ActiveTSA = thiscore.TSA;
+			if (thiscore.DmaMode && oldDmaMode != thiscore.DmaMode)
+			{
+				thiscore.ActiveTSA = thiscore.TSA & 0xf'ffff;
+
+				if (thiscore.DmaMode == 1)
+				{
+					thiscore.FlushFifo();
+				}
+			}
 
 			if (value & 0x000E)
 			{
@@ -1157,9 +1054,8 @@ static void RegWrite_Core(u16 value)
 
 				if (!thiscore.IRQEnable)
 					Spdif.Info &= ~(4 << thiscore.Index);
-				else
-					if ((thiscore.IRQA & 0xFFF00000) != 0)
-						DevCon.Warning("SPU2: Core %d IRQA Outside of SPU2 memory, Addr %x", thiscore.Index, thiscore.IRQA);
+				else if ((thiscore.IRQA & 0xFFF00000) != 0)
+					DevCon.Warning("SPU2: Core %d IRQA Outside of SPU2 memory, Addr %x", thiscore.Index, thiscore.IRQA);
 			}
 		}
 		break;
@@ -1190,20 +1086,20 @@ static void RegWrite_Core(u16 value)
 
 // Games like to repeatedly write these regs over and over with the same value, hence
 // the shortcut that skips the bitloop if the values are equal.
-#define vx_SetSomeBits(reg_out, mask_out, hiword)                       \
-	{                                                                   \
-		const u32 result = thiscore.Regs.reg_out;                       \
-		if (hiword)                                                     \
-			SetHiWord(thiscore.Regs.reg_out, value);                    \
-		else                                                            \
-			SetLoWord(thiscore.Regs.reg_out, value);                    \
-		if (result == thiscore.Regs.reg_out)                            \
-			break;                                                      \
-                                                                        \
-		const uint start_bit = (hiword) ? 16 : 0;                       \
-		const uint end_bit = (hiword) ? 24 : 16;                        \
+#define vx_SetSomeBits(reg_out, mask_out, hiword) \
+	{ \
+		const u32 result = thiscore.Regs.reg_out; \
+		if (hiword) \
+			SetHiWord(thiscore.Regs.reg_out, value); \
+		else \
+			SetLoWord(thiscore.Regs.reg_out, value); \
+		if (result == thiscore.Regs.reg_out) \
+			break; \
+\
+		const uint start_bit = (hiword) ? 16 : 0; \
+		const uint end_bit = (hiword) ? 24 : 16; \
 		for (uint vc = start_bit, vx = 1; vc < end_bit; ++vc, vx <<= 1) \
-			thiscore.VoiceGates[vc].mask_out = (value & vx) ? -1 : 0;   \
+			thiscore.VoiceGates[vc].mask_out = (value & vx) ? -1 : 0; \
 	}
 
 		case REG_S_VMIXL:
@@ -1321,12 +1217,13 @@ static void RegWrite_Core(u16 value)
 				return;
 			}
 			thiscore.AutoDMACtrl = value;
+			/* TODO investigate
 			if (!(value & 0x3) && thiscore.AdmaInProgress)
 			{
 				// Kill the current transfer so it doesn't continue
 				thiscore.AdmaInProgress = 0;
 				thiscore.InputDataLeft = 0;
-				thiscore.DMAICounter = 0;
+				thiscore.DmaCounter = 0;
 				thiscore.InputDataTransferred = 0;
 
 				// Not accurate behaviour but shouldn't hurt for now, need to run some tests
@@ -1339,6 +1236,7 @@ static void RegWrite_Core(u16 value)
 					GetMemPtr(0x2200 + (thiscore.Index << 10))[i] = 0;
 				}
 			}
+			*/
 			break;
 
 		default:
@@ -1429,22 +1327,22 @@ static void RegWrite_Null(u16 value)
 // --------------------------------------------------------------------------------------
 //  Macros for tbl_reg_writes
 // --------------------------------------------------------------------------------------
-#define VoiceParamsSet(core, voice)                                                 \
-	RegWrite_VoiceParams<core, voice, 0>, RegWrite_VoiceParams<core, voice, 1>,     \
+#define VoiceParamsSet(core, voice) \
+	RegWrite_VoiceParams<core, voice, 0>, RegWrite_VoiceParams<core, voice, 1>, \
 		RegWrite_VoiceParams<core, voice, 2>, RegWrite_VoiceParams<core, voice, 3>, \
 		RegWrite_VoiceParams<core, voice, 4>, RegWrite_VoiceParams<core, voice, 5>, \
 		RegWrite_VoiceParams<core, voice, 6>, RegWrite_VoiceParams<core, voice, 7>
 
-#define VoiceParamsCore(core)                                                                                   \
-	VoiceParamsSet(core, 0), VoiceParamsSet(core, 1), VoiceParamsSet(core, 2), VoiceParamsSet(core, 3),         \
-		VoiceParamsSet(core, 4), VoiceParamsSet(core, 5), VoiceParamsSet(core, 6), VoiceParamsSet(core, 7),     \
-		VoiceParamsSet(core, 8), VoiceParamsSet(core, 9), VoiceParamsSet(core, 10), VoiceParamsSet(core, 11),   \
+#define VoiceParamsCore(core) \
+	VoiceParamsSet(core, 0), VoiceParamsSet(core, 1), VoiceParamsSet(core, 2), VoiceParamsSet(core, 3), \
+		VoiceParamsSet(core, 4), VoiceParamsSet(core, 5), VoiceParamsSet(core, 6), VoiceParamsSet(core, 7), \
+		VoiceParamsSet(core, 8), VoiceParamsSet(core, 9), VoiceParamsSet(core, 10), VoiceParamsSet(core, 11), \
 		VoiceParamsSet(core, 12), VoiceParamsSet(core, 13), VoiceParamsSet(core, 14), VoiceParamsSet(core, 15), \
 		VoiceParamsSet(core, 16), VoiceParamsSet(core, 17), VoiceParamsSet(core, 18), VoiceParamsSet(core, 19), \
 		VoiceParamsSet(core, 20), VoiceParamsSet(core, 21), VoiceParamsSet(core, 22), VoiceParamsSet(core, 23)
 
-#define VoiceAddrSet(core, voice)                                               \
-	RegWrite_VoiceAddr<core, voice, 0>, RegWrite_VoiceAddr<core, voice, 1>,     \
+#define VoiceAddrSet(core, voice) \
+	RegWrite_VoiceAddr<core, voice, 0>, RegWrite_VoiceAddr<core, voice, 1>, \
 		RegWrite_VoiceAddr<core, voice, 2>, RegWrite_VoiceAddr<core, voice, 3>, \
 		RegWrite_VoiceAddr<core, voice, 4>, RegWrite_VoiceAddr<core, voice, 5>
 
@@ -1493,28 +1391,28 @@ static RegWriteHandler* const tbl_reg_writes[0x401] =
 
 		CoreParamsPair(0, REG_A_ESA),
 
-		CoreParamsPair(0, R_APF1_SIZE),   //       0x02E4		// Feedback Source A
-		CoreParamsPair(0, R_APF2_SIZE),   //       0x02E8		// Feedback Source B
-		CoreParamsPair(0, R_SAME_L_DST),  //    0x02EC
-		CoreParamsPair(0, R_SAME_R_DST),  //    0x02F0
+		CoreParamsPair(0, R_APF1_SIZE), //       0x02E4		// Feedback Source A
+		CoreParamsPair(0, R_APF2_SIZE), //       0x02E8		// Feedback Source B
+		CoreParamsPair(0, R_SAME_L_DST), //    0x02EC
+		CoreParamsPair(0, R_SAME_R_DST), //    0x02F0
 		CoreParamsPair(0, R_COMB1_L_SRC), //     0x02F4
 		CoreParamsPair(0, R_COMB1_R_SRC), //     0x02F8
 		CoreParamsPair(0, R_COMB2_L_SRC), //     0x02FC
 		CoreParamsPair(0, R_COMB2_R_SRC), //     0x0300
-		CoreParamsPair(0, R_SAME_L_SRC),  //     0x0304
-		CoreParamsPair(0, R_SAME_R_SRC),  //     0x0308
-		CoreParamsPair(0, R_DIFF_L_DST),  //    0x030C
-		CoreParamsPair(0, R_DIFF_R_DST),  //    0x0310
+		CoreParamsPair(0, R_SAME_L_SRC), //     0x0304
+		CoreParamsPair(0, R_SAME_R_SRC), //     0x0308
+		CoreParamsPair(0, R_DIFF_L_DST), //    0x030C
+		CoreParamsPair(0, R_DIFF_R_DST), //    0x0310
 		CoreParamsPair(0, R_COMB3_L_SRC), //     0x0314
 		CoreParamsPair(0, R_COMB3_R_SRC), //     0x0318
 		CoreParamsPair(0, R_COMB4_L_SRC), //     0x031C
 		CoreParamsPair(0, R_COMB4_R_SRC), //     0x0320
-		CoreParamsPair(0, R_DIFF_L_SRC),  //     0x0324
-		CoreParamsPair(0, R_DIFF_R_SRC),  //     0x0328
-		CoreParamsPair(0, R_APF1_L_DST),  //    0x032C
-		CoreParamsPair(0, R_APF1_R_DST),  //    0x0330
-		CoreParamsPair(0, R_APF2_L_DST),  //    0x0334
-		CoreParamsPair(0, R_APF2_R_DST),  //    0x0338
+		CoreParamsPair(0, R_DIFF_L_SRC), //     0x0324
+		CoreParamsPair(0, R_DIFF_R_SRC), //     0x0328
+		CoreParamsPair(0, R_APF1_L_DST), //    0x032C
+		CoreParamsPair(0, R_APF1_R_DST), //    0x0330
+		CoreParamsPair(0, R_APF2_L_DST), //    0x0334
+		CoreParamsPair(0, R_APF2_R_DST), //    0x0338
 
 		RegWrite_Core<0, REG_A_EEA>, RegWrite_Null,
 
@@ -1583,28 +1481,28 @@ static RegWriteHandler* const tbl_reg_writes[0x401] =
 
 		CoreParamsPair(1, REG_A_ESA),
 
-		CoreParamsPair(1, R_APF1_SIZE),   //       0x02E4		// Feedback Source A
-		CoreParamsPair(1, R_APF2_SIZE),   //       0x02E8		// Feedback Source B
-		CoreParamsPair(1, R_SAME_L_DST),  //    0x02EC
-		CoreParamsPair(1, R_SAME_R_DST),  //    0x02F0
+		CoreParamsPair(1, R_APF1_SIZE), //       0x02E4		// Feedback Source A
+		CoreParamsPair(1, R_APF2_SIZE), //       0x02E8		// Feedback Source B
+		CoreParamsPair(1, R_SAME_L_DST), //    0x02EC
+		CoreParamsPair(1, R_SAME_R_DST), //    0x02F0
 		CoreParamsPair(1, R_COMB1_L_SRC), //     0x02F4
 		CoreParamsPair(1, R_COMB1_R_SRC), //     0x02F8
 		CoreParamsPair(1, R_COMB2_L_SRC), //     0x02FC
 		CoreParamsPair(1, R_COMB2_R_SRC), //     0x0300
-		CoreParamsPair(1, R_SAME_L_SRC),  //     0x0304
-		CoreParamsPair(1, R_SAME_R_SRC),  //     0x0308
-		CoreParamsPair(1, R_DIFF_L_DST),  //    0x030C
-		CoreParamsPair(1, R_DIFF_R_DST),  //    0x0310
+		CoreParamsPair(1, R_SAME_L_SRC), //     0x0304
+		CoreParamsPair(1, R_SAME_R_SRC), //     0x0308
+		CoreParamsPair(1, R_DIFF_L_DST), //    0x030C
+		CoreParamsPair(1, R_DIFF_R_DST), //    0x0310
 		CoreParamsPair(1, R_COMB3_L_SRC), //     0x0314
 		CoreParamsPair(1, R_COMB3_R_SRC), //     0x0318
 		CoreParamsPair(1, R_COMB4_L_SRC), //     0x031C
 		CoreParamsPair(1, R_COMB4_R_SRC), //     0x0320
-		CoreParamsPair(1, R_DIFF_R_SRC),  //     0x0324
-		CoreParamsPair(1, R_DIFF_L_SRC),  //     0x0328
-		CoreParamsPair(1, R_APF1_L_DST),  //    0x032C
-		CoreParamsPair(1, R_APF1_R_DST),  //    0x0330
-		CoreParamsPair(1, R_APF2_L_DST),  //    0x0334
-		CoreParamsPair(1, R_APF2_R_DST),  //    0x0338
+		CoreParamsPair(1, R_DIFF_R_SRC), //     0x0324
+		CoreParamsPair(1, R_DIFF_L_SRC), //     0x0328
+		CoreParamsPair(1, R_APF1_L_DST), //    0x032C
+		CoreParamsPair(1, R_APF1_R_DST), //    0x0330
+		CoreParamsPair(1, R_APF2_L_DST), //    0x0334
+		CoreParamsPair(1, R_APF2_R_DST), //    0x0338
 
 		RegWrite_Core<1, REG_A_EEA>, RegWrite_Null,
 
@@ -1618,49 +1516,49 @@ static RegWriteHandler* const tbl_reg_writes[0x401] =
 
 		// ------ -------
 
-		RegWrite_CoreExt<0, REG_P_MVOLL>,  //     0x0760		// Master Volume Left
-		RegWrite_CoreExt<0, REG_P_MVOLR>,  //     0x0762		// Master Volume Right
-		RegWrite_CoreExt<0, REG_P_EVOLL>,  //     0x0764		// Effect Volume Left
-		RegWrite_CoreExt<0, REG_P_EVOLR>,  //     0x0766		// Effect Volume Right
-		RegWrite_CoreExt<0, REG_P_AVOLL>,  //     0x0768		// Core External Input Volume Left  (Only Core 1)
-		RegWrite_CoreExt<0, REG_P_AVOLR>,  //     0x076A		// Core External Input Volume Right (Only Core 1)
-		RegWrite_CoreExt<0, REG_P_BVOLL>,  //     0x076C 		// Sound Data Volume Left
-		RegWrite_CoreExt<0, REG_P_BVOLR>,  //     0x076E		// Sound Data Volume Right
+		RegWrite_CoreExt<0, REG_P_MVOLL>, //     0x0760		// Master Volume Left
+		RegWrite_CoreExt<0, REG_P_MVOLR>, //     0x0762		// Master Volume Right
+		RegWrite_CoreExt<0, REG_P_EVOLL>, //     0x0764		// Effect Volume Left
+		RegWrite_CoreExt<0, REG_P_EVOLR>, //     0x0766		// Effect Volume Right
+		RegWrite_CoreExt<0, REG_P_AVOLL>, //     0x0768		// Core External Input Volume Left  (Only Core 1)
+		RegWrite_CoreExt<0, REG_P_AVOLR>, //     0x076A		// Core External Input Volume Right (Only Core 1)
+		RegWrite_CoreExt<0, REG_P_BVOLL>, //     0x076C 		// Sound Data Volume Left
+		RegWrite_CoreExt<0, REG_P_BVOLR>, //     0x076E		// Sound Data Volume Right
 		RegWrite_CoreExt<0, REG_P_MVOLXL>, //     0x0770		// Current Master Volume Left
 		RegWrite_CoreExt<0, REG_P_MVOLXR>, //     0x0772		// Current Master Volume Right
 
-		RegWrite_CoreExt<0, R_IIR_VOL>,   //     0x0774		//IIR alpha (% used)
+		RegWrite_CoreExt<0, R_IIR_VOL>, //     0x0774		//IIR alpha (% used)
 		RegWrite_CoreExt<0, R_COMB1_VOL>, //     0x0776
 		RegWrite_CoreExt<0, R_COMB2_VOL>, //     0x0778
 		RegWrite_CoreExt<0, R_COMB3_VOL>, //     0x077A
 		RegWrite_CoreExt<0, R_COMB4_VOL>, //     0x077C
-		RegWrite_CoreExt<0, R_WALL_VOL>,  //     0x077E
-		RegWrite_CoreExt<0, R_APF1_VOL>,  //     0x0780		//feedback alpha (% used)
-		RegWrite_CoreExt<0, R_APF2_VOL>,  //     0x0782		//feedback
+		RegWrite_CoreExt<0, R_WALL_VOL>, //     0x077E
+		RegWrite_CoreExt<0, R_APF1_VOL>, //     0x0780		//feedback alpha (% used)
+		RegWrite_CoreExt<0, R_APF2_VOL>, //     0x0782		//feedback
 		RegWrite_CoreExt<0, R_IN_COEF_L>, //     0x0784
 		RegWrite_CoreExt<0, R_IN_COEF_R>, //     0x0786
 
 		// ------ -------
 
-		RegWrite_CoreExt<1, REG_P_MVOLL>,  //     0x0788		// Master Volume Left
-		RegWrite_CoreExt<1, REG_P_MVOLR>,  //     0x078A		// Master Volume Right
-		RegWrite_CoreExt<1, REG_P_EVOLL>,  //     0x0764		// Effect Volume Left
-		RegWrite_CoreExt<1, REG_P_EVOLR>,  //     0x0766		// Effect Volume Right
-		RegWrite_CoreExt<1, REG_P_AVOLL>,  //     0x0768		// Core External Input Volume Left  (Only Core 1)
-		RegWrite_CoreExt<1, REG_P_AVOLR>,  //     0x076A		// Core External Input Volume Right (Only Core 1)
-		RegWrite_CoreExt<1, REG_P_BVOLL>,  //     0x076C		// Sound Data Volume Left
-		RegWrite_CoreExt<1, REG_P_BVOLR>,  //     0x076E		// Sound Data Volume Right
+		RegWrite_CoreExt<1, REG_P_MVOLL>, //     0x0788		// Master Volume Left
+		RegWrite_CoreExt<1, REG_P_MVOLR>, //     0x078A		// Master Volume Right
+		RegWrite_CoreExt<1, REG_P_EVOLL>, //     0x0764		// Effect Volume Left
+		RegWrite_CoreExt<1, REG_P_EVOLR>, //     0x0766		// Effect Volume Right
+		RegWrite_CoreExt<1, REG_P_AVOLL>, //     0x0768		// Core External Input Volume Left  (Only Core 1)
+		RegWrite_CoreExt<1, REG_P_AVOLR>, //     0x076A		// Core External Input Volume Right (Only Core 1)
+		RegWrite_CoreExt<1, REG_P_BVOLL>, //     0x076C		// Sound Data Volume Left
+		RegWrite_CoreExt<1, REG_P_BVOLR>, //     0x076E		// Sound Data Volume Right
 		RegWrite_CoreExt<1, REG_P_MVOLXL>, //     0x0770		// Current Master Volume Left
 		RegWrite_CoreExt<1, REG_P_MVOLXR>, //     0x0772		// Current Master Volume Right
 
-		RegWrite_CoreExt<1, R_IIR_VOL>,   //     0x0774		//IIR alpha (% used)
+		RegWrite_CoreExt<1, R_IIR_VOL>, //     0x0774		//IIR alpha (% used)
 		RegWrite_CoreExt<1, R_COMB1_VOL>, //     0x0776
 		RegWrite_CoreExt<1, R_COMB2_VOL>, //     0x0778
 		RegWrite_CoreExt<1, R_COMB3_VOL>, //     0x077A
 		RegWrite_CoreExt<1, R_COMB4_VOL>, //     0x077C
-		RegWrite_CoreExt<1, R_WALL_VOL>,  //     0x077E
-		RegWrite_CoreExt<1, R_APF1_VOL>,  //     0x0780		//feedback alpha (% used)
-		RegWrite_CoreExt<1, R_APF2_VOL>,  //     0x0782		//feedback
+		RegWrite_CoreExt<1, R_WALL_VOL>, //     0x077E
+		RegWrite_CoreExt<1, R_APF1_VOL>, //     0x0780		//feedback alpha (% used)
+		RegWrite_CoreExt<1, R_APF2_VOL>, //     0x0782		//feedback
 		RegWrite_CoreExt<1, R_IN_COEF_L>, //     0x0784
 		RegWrite_CoreExt<1, R_IN_COEF_R>, //     0x0786
 
@@ -1669,10 +1567,10 @@ static RegWriteHandler* const tbl_reg_writes[0x401] =
 
 		//  SPDIF interface
 
-		RegWrite_SPDIF<SPDIF_OUT>,     //    0x07C0		// SPDIF Out: OFF/'PCM'/Bitstream/Bypass
+		RegWrite_SPDIF<SPDIF_OUT>, //    0x07C0		// SPDIF Out: OFF/'PCM'/Bitstream/Bypass
 		RegWrite_SPDIF<SPDIF_IRQINFO>, //    0x07C2
 		REGRAW(0x7C4),
-		RegWrite_SPDIF<SPDIF_MODE>,  //    0x07C6
+		RegWrite_SPDIF<SPDIF_MODE>, //    0x07C6
 		RegWrite_SPDIF<SPDIF_MEDIA>, //    0x07C8		// SPDIF Media: 'CD'/DVD
 		REGRAW(0x7CA),
 		RegWrite_SPDIF<SPDIF_PROTECT>, //	 0x07CC		// SPDIF Copy Protection
@@ -1702,9 +1600,6 @@ void StartVoices(int core, u32 value)
 	if (value == 0)
 		return;
 
-	if (SPU2::MsgToConsole())
-		SPU2::ConLog("KeyOn Write %x\n", value);
-
 	Cores[core].KeyOn |= value;
 	Cores[core].Regs.ENDX &= ~value;
 
@@ -1729,13 +1624,13 @@ void StartVoices(int core, u32 value)
 				V_Voice& thisvc(Cores[core].Voices[vc]);
 
 				SPU2::ConLog("* SPU2: KeyOn: C%dV%02d: SSA: %8x; M: %s%s%s%s; H: %04x; P: %04x V: %04x/%04x; ADSR: %04x%04x\n",
-					   core, vc, thisvc.StartA,
-					   (Cores[core].VoiceGates[vc].DryL) ? "+" : "-", (Cores[core].VoiceGates[vc].DryR) ? "+" : "-",
-					   (Cores[core].VoiceGates[vc].WetL) ? "+" : "-", (Cores[core].VoiceGates[vc].WetR) ? "+" : "-",
-					   *(u16*)GetMemPtr(thisvc.StartA),
-					   thisvc.Pitch,
-					   thisvc.Volume.Left.Value, thisvc.Volume.Right.Value,
-					   thisvc.ADSR.regADSR1, thisvc.ADSR.regADSR2);
+					core, vc, thisvc.StartA,
+					(Cores[core].VoiceGates[vc].DryL) ? "+" : "-", (Cores[core].VoiceGates[vc].DryR) ? "+" : "-",
+					(Cores[core].VoiceGates[vc].WetL) ? "+" : "-", (Cores[core].VoiceGates[vc].WetR) ? "+" : "-",
+					*(u16*)GetMemPtr(thisvc.StartA),
+					thisvc.Pitch,
+					thisvc.Volume.Left.Value, thisvc.Volume.Right.Value,
+					thisvc.ADSR.regADSR1, thisvc.ADSR.regADSR2);
 			}
 		}
 	}
@@ -1745,9 +1640,6 @@ void StopVoices(int core, u32 value)
 {
 	if (value == 0)
 		return;
-
-	if (SPU2::MsgToConsole())
-		SPU2::ConLog("KeyOff Write %x\n", value);
 
 	for (u8 vc = 0; vc < V_Core::NumVoices; vc++)
 	{

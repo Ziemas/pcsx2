@@ -418,15 +418,17 @@ struct V_Core
 	bool IRQEnable; // Interrupt Enable
 	bool FxEnable; // Effect Enable
 	bool Mute; // Mute
-	bool AdmaInProgress;
 
+	std::array<s16, 32> TransferFifo;
+	u8 FifoPos;
 	s8 DMABits; // DMA related?
 	u8 NoiseClk; // Noise Clock
 	u32 NoiseCnt; // Noise Counter
 	u32 NoiseOut; // Noise Output
 	u16 AutoDMACtrl; // AutoDMA Status
-	s32 DMAICounter; // DMA Interrupt Counter
-	u32 LastClock; // DMA Interrupt Clock Cycle Counter
+	s32 DmaCounter; // Cycle target for next DMA transfer
+	u32 LastClock; // DMA Clock Cycle Counter
+	bool DmaReq; // Reqesting transfer
 	u32 InputDataLeft; // Input Buffer
 	u32 InputDataTransferred; // Used for simulating MADR increase (GTA VC)
 	u32 InputPosWrite;
@@ -454,11 +456,13 @@ struct V_Core
 	bool DmaStarted;
 	u32 AutoDmaFree;
 
-	// old dma only
-	u16* DMAPtr;
-	u16* DMARPtr; // Mem pointer for DMA Reads
-	u32 ReadSize;
-	bool IsDMARead;
+	enum class DmaDirection
+	{
+		Read, Write
+	};
+
+	s32 DmaSize;
+	DmaDirection DmaDir;
 
 	u32 KeyOn; // not the KON register (though maybe it is)
 
@@ -478,7 +482,6 @@ struct V_Core
 	// uninitialized constructor
 	V_Core()
 		: Index(-1)
-		, DMAPtr(nullptr)
 	{
 	}
 	V_Core(int idx) : Index(idx) {};
@@ -499,7 +502,7 @@ struct V_Core
 	s32 RevbGetIndexer(s32 offset);
 
 	StereoOut32 ReadInput();
-	StereoOut32 ReadInput_HiFi();
+	//StereoOut32 ReadInput_HiFi();
 
 	// --------------------------------------------------------------------------
 	//  DMA Section
@@ -517,33 +520,29 @@ struct V_Core
 		return 0x30 + GetDmaIndex();
 	}
 
-	__forceinline u16 DmaRead()
+	__forceinline void FifoWrite(u16 value)
 	{
-		const u16 ret = static_cast<u16>(spu2M_Read(ActiveTSA));
-		++ActiveTSA;
-		ActiveTSA &= 0xfffff;
-		TSA = ActiveTSA;
-		return ret;
+		TransferFifo[FifoPos & 31] = value;
+		FifoPos++;
 	}
 
-	__forceinline void DmaWrite(u16 value)
+	__forceinline void FlushFifo()
 	{
-		spu2M_Write(ActiveTSA, value);
-		++ActiveTSA;
-		ActiveTSA &= 0xfffff;
-		TSA = ActiveTSA;
+		for (int i = 0; i < FifoPos; i++) {
+			spu2M_Write(ActiveTSA, TransferFifo[i & 31]);
+			ActiveTSA++;
+		}
+
+		TransferFifo = {};
+		FifoPos = 0;
 	}
 
 	void LogAutoDMA(FILE* fp);
 
-	void DoDMAwrite(u16* pMem, u32 size);
-	void DoDMAread(u16* pMem, u32 size);
-	void FinishDMAread();
-
-	void AutoDMAReadBuffer(int mode);
-	void StartADMAWrite(u16* pMem, u32 sz);
-	void PlainDMAWrite(u16* pMem, u32 sz);
-	void FinishDMAwrite();
+	void RunDma();
+	void RunAdma();
+	void SetDmaIrq();
+	void StartDma(DmaDirection dir, u32 addr, u32 size);
 };
 
 MULTI_ISA_DEF(
@@ -571,7 +570,7 @@ extern s16 _spu2mem[0x200000 / sizeof(s16)];
 extern int PlayMode;
 
 extern void SetIrqCall(int core);
-extern void SetIrqCallDMA(int core);
+extern void SetIrqCallDma(int core);
 extern void StartVoices(int core, u32 value);
 extern void StopVoices(int core, u32 value);
 extern void CalculateADSR(V_Voice& vc);

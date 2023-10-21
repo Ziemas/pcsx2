@@ -46,56 +46,38 @@ s32 SPU2::GetConsoleSampleRate()
 // --------------------------------------------------------------------------------------
 
 
-void SPU2readDMA4Mem(u16* pMem, u32 size) // size now in 16bit units
+void SPU2readDMA4Mem(u32 addr, u32 size) // size now in 16bit units
 {
 	TimeUpdate(psxRegs.cycle);
 
 	SPU2::FileLog("[%10d] SPU2 readDMA4Mem size %x\n", Cycles, size << 1);
-	Cores[0].DoDMAread(pMem, size);
+	Cores[0].StartDma(V_Core::DmaDirection::Read, addr, size);
 }
 
-void SPU2writeDMA4Mem(u16* pMem, u32 size) // size now in 16bit units
+void SPU2writeDMA4Mem(u32 addr, u32 size) // size now in 16bit units
 {
 	TimeUpdate(psxRegs.cycle);
 
 	SPU2::FileLog("[%10d] SPU2 writeDMA4Mem size %x at address %x\n", Cycles, size << 1, Cores[0].TSA);
 
-	Cores[0].DoDMAwrite(pMem, size);
+	Cores[0].StartDma(V_Core::DmaDirection::Write, addr, size);
 }
 
-void SPU2interruptDMA4()
-{
-	SPU2::FileLog("[%10d] SPU2 interruptDMA4\n", Cycles);
-	if (Cores[0].DmaMode)
-		Cores[0].Regs.STATX |= 0x80;
-	Cores[0].Regs.STATX &= ~0x400;
-	Cores[0].TSA = Cores[0].ActiveTSA;
-}
-
-void SPU2interruptDMA7()
-{
-	SPU2::FileLog("[%10d] SPU2 interruptDMA7\n", Cycles);
-	if (Cores[1].DmaMode)
-		Cores[1].Regs.STATX |= 0x80;
-	Cores[1].Regs.STATX &= ~0x400;
-	Cores[1].TSA = Cores[1].ActiveTSA;
-}
-
-void SPU2readDMA7Mem(u16* pMem, u32 size)
+void SPU2readDMA7Mem(u32 addr, u32 size)
 {
 	TimeUpdate(psxRegs.cycle);
 
 	SPU2::FileLog("[%10d] SPU2 readDMA7Mem size %x\n", Cycles, size << 1);
-	Cores[1].DoDMAread(pMem, size);
+	Cores[1].StartDma(V_Core::DmaDirection::Read, addr, size);
 }
 
-void SPU2writeDMA7Mem(u16* pMem, u32 size)
+void SPU2writeDMA7Mem(u32 addr, u32 size)
 {
 	TimeUpdate(psxRegs.cycle);
 
 	SPU2::FileLog("[%10d] SPU2 writeDMA7Mem size %x at address %x\n", Cycles, size << 1, Cores[1].TSA);
 
-	Cores[1].DoDMAwrite(pMem, size);
+	Cores[1].StartDma(V_Core::DmaDirection::Write, addr, size);
 }
 
 void SPU2::InitSndBuffer()
@@ -233,50 +215,27 @@ void SPU2async(u32 cycles)
 u16 SPU2read(u32 rmem)
 {
 	u16 ret = 0xDEAD;
-	u32 core = 0;
 	const u32 mem = rmem & 0xFFFF;
-	u32 omem = mem;
 
-	if (mem & 0x400)
+	TimeUpdate(psxRegs.cycle);
+
+	if (rmem >> 16 == 0x1f80)
 	{
-		omem ^= 0x400;
-		core = 1;
+		ret = Cores[0].ReadRegPS1(rmem);
 	}
-
-	if (omem == 0x1f9001AC)
+	else if (mem >= 0x800)
 	{
-		Cores[core].ActiveTSA = Cores[core].TSA;
-		for (int i = 0; i < 2; i++)
-		{
-			if (Cores[i].IRQEnable && (Cores[i].IRQA == Cores[core].ActiveTSA))
-			{
-				SetIrqCall(i);
-			}
-		}
-		ret = Cores[core].DmaRead();
+		ret = spu2Ru16(mem);
+		if (SPU2::MsgToConsole())
+			SPU2::ConLog("* SPU2: Read from reg>=0x800: %x value %x\n", mem, ret);
 	}
 	else
 	{
-		TimeUpdate(psxRegs.cycle);
-
-		if (rmem >> 16 == 0x1f80)
-		{
-			ret = Cores[0].ReadRegPS1(rmem);
-		}
-		else if (mem >= 0x800)
-		{
-			ret = spu2Ru16(mem);
-			if (SPU2::MsgToConsole())
-				SPU2::ConLog("* SPU2: Read from reg>=0x800: %x value %x\n", mem, ret);
-		}
-		else
-		{
-			ret = *(regtable[(mem >> 1)]);
+		ret = *(regtable[(mem >> 1)]);
 #ifdef PCSX2_DEVBUILD
-			//FileLog("[%10d] SPU2 read mem %x (core %d, register %x): %x\n",Cycles, mem, core, (omem & 0x7ff), ret);
-			SPU2::WriteRegLog("read", rmem, ret);
+		//FileLog("[%10d] SPU2 read mem %x (core %d, register %x): %x\n",Cycles, mem, core, (omem & 0x7ff), ret);
+		SPU2::WriteRegLog("read", rmem, ret);
 #endif
-		}
 	}
 
 	return ret;

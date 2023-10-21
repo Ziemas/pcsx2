@@ -34,7 +34,7 @@ namespace SPU2
 
 	__fi static bool AccessLog() { return EmuConfig.SPU2.AccessLog; }
 	__fi static bool DMALog() { return EmuConfig.SPU2.DMALog; }
-	__fi static bool WaveLog() { return EmuConfig.SPU2.WaveLog; }
+	__fi static bool WaveLog() { return true; return EmuConfig.SPU2.WaveLog; }
 
 	__fi static bool CoresDump() { return EmuConfig.SPU2.CoresDump; }
 	__fi static bool MemDump() { return EmuConfig.SPU2.MemDump; }
