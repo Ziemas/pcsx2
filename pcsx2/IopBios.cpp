@@ -25,6 +25,10 @@
 #include "x86/iR3000A.h"
 #include "VMManager.h"
 
+#include <ctype.h>
+#include <fmt/format.h>
+#include <string.h>
+#include <sys/stat.h>
 #include "common/FileSystem.h"
 #include "common/Path.h"
 
@@ -1017,6 +1021,34 @@ namespace R3000A
 	namespace loadcore
 	{
 
+		u32 GetModList(u32 a0reg)
+		{
+			u32 lcptr = iopMemRead32(0x3f0);
+			u32 lcstring = irxFindLoadcore(lcptr);
+			u32 list = 0;
+
+			if (lcstring == 0)
+			{
+				list = lcptr - 0x20;
+			}
+			else
+			{
+				list = lcstring + 0x18;
+			}
+
+			Console.WriteLn(Color_StrongGreen, "%d modules loaded", iopMemRead32(list + 0x14));
+
+			u32 mod = iopMemRead32(list);
+
+			while (mod != 0)
+			{
+				Console.WriteLn(Color_StrongGreen, "%s", iopMemReadString(mod + 12, 8).c_str());
+				mod = iopMemRead32(mod);
+			}
+
+			return list;
+		}
+
 		// Gets the thread list ptr from thbase
 		u32 GetThreadList(u32 a0reg, u32 version)
 		{
@@ -1035,8 +1067,36 @@ namespace R3000A
 			return list;
 		}
 
-		int RegisterLibraryEntries_HLE()
+		void LoadFuncs(u32 a0reg)
 		{
+			const std::string modname = iopMemReadString(a0reg + 12);
+			DevCon.WriteLn(Color_Gray, "RegisterLibraryEntries: %8.8s version %x.%02x", modname.data(), (unsigned)iopMemRead8(a0 + 9), (unsigned)iopMemRead8(a0 + 8));
+
+			u32 func = a0reg + 20;
+			u32 funcptr = iopMemRead32(func);
+			u32 index = 0;
+			while (funcptr != 0) {
+				const std::string funcname = std::string(irxImportFuncname(modname, index));
+				if(!funcname.empty())
+				{
+					Console.Warning("RegisterLibraryEntries: %8.8s %s %x", modname.data(), funcname.data(), funcptr);
+					R3000SymbolMap.AddFunction(fmt::format("{}::{}", modname, funcname).c_str(), funcptr, 0);
+				}
+				else
+				{
+					Console.Warning("RegisterLibraryEntries: %8.8s %x", modname.data(), funcptr);
+					R3000SymbolMap.AddFunction(fmt::format("{}::unkn_{:02}", modname, index).c_str(), funcptr, 0);
+				}
+				index++;
+				func += 4;
+				funcptr = iopMemRead32(func);
+			}
+		}
+
+		void RegisterLibraryEntries_DEBUG()
+		{
+			LoadFuncs(a0);
+
 			const std::string modname = iopMemReadString(a0 + 12);
 			if (modname == "thbase")
 			{
@@ -1044,13 +1104,7 @@ namespace R3000A
 				CurrentBiosInformation.iopThreadListAddr = GetThreadList(a0, version);
 			}
 
-			return 0;
-		}
-
-		void RegisterLibraryEntries_DEBUG()
-		{
-			const std::string modname = iopMemReadString(a0 + 12);
-			DevCon.WriteLn(Color_Gray, "RegisterLibraryEntries: %8.8s version %x.%02x", modname.data(), (unsigned)iopMemRead8(a0 + 9), (unsigned)iopMemRead8(a0 + 8));
+			CurrentBiosInformation.iopModListAddr = GetModList(a0);
 		}
 	} // namespace loadcore
 
@@ -1099,6 +1153,24 @@ namespace R3000A
 		}
 	} // namespace sifcmd
 
+	u32 irxFindLoadcore(u32 entrypc)
+	{
+		u32 i;
+
+		i = entrypc;
+		while (entrypc - i < 0x50)
+		{
+			// find loadcore string
+			if (iopMemRead32(i) == 0x49497350 && iopMemRead32(i+4) == 0x64616F6C)
+			{
+				return i;
+			}
+			i -= 4;
+		}
+
+		return 0;
+	}
+
 	u32 irxImportTableAddr(u32 entrypc)
 	{
 		u32 i;
@@ -1128,7 +1200,7 @@ namespace R3000A
 				// case 3: ???
 		}
 
-		return 0;
+		return "";
 	}
 
 // clang-format off
@@ -1155,11 +1227,6 @@ namespace R3000A
 		// clang-format off
 		MODULE(sysmem)
 			EXPORT_H( 14, Kprintf)
-		END_MODULE
-
-		// For grabbing the thread list from thbase
-		MODULE(loadcore)
-			EXPORT_H( 6, RegisterLibraryEntries)
 		END_MODULE
 
 		// Special case with ioman and iomanX

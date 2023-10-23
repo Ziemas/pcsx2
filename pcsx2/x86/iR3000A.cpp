@@ -1537,6 +1537,11 @@ static void iopRecRecompile(const u32 startpc)
 	u32 i;
 	u32 willbranch3 = 0;
 
+	if(startpc == 0xBFC4A000)
+	{
+		R3000SymbolMap.Clear();
+	}
+
 	// Inject IRX hack
 	if (startpc == 0x1630 && EmuConfig.CurrentIRX.length() > 3)
 	{

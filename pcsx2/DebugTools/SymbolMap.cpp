@@ -547,6 +547,7 @@ void SymbolMap::AddLabel(const char* name, u32 address, int moduleIndex) {
 			if (active != activeLabels.end() && active->second.module == moduleIndex) {
 				activeLabels.erase(active);
 				activeLabels.insert(std::make_pair(address, existing->second));
+				UpdateActiveSymbols();
 			}
 		}
 	} else {
@@ -559,6 +560,7 @@ void SymbolMap::AddLabel(const char* name, u32 address, int moduleIndex) {
 		labels[symbolKey] = label;
 		if (IsModuleActive(moduleIndex)) {
 			activeLabels.insert(std::make_pair(address, label));
+			UpdateActiveSymbols();
 		}
 	}
 }

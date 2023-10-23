@@ -249,6 +249,11 @@ static void doBranch(s32 tar) {
 	if (tar == 0x0)
 		DevCon.Warning("[R3000 Interpreter] Warning: Branch to 0x0!");
 
+	if(static_cast<u32>(tar) == 0xBFC4A000)
+	{
+		R3000SymbolMap.Clear();
+	}
+
 	branch2 = iopIsDelaySlot = true;
 	branchPC = tar;
 	execI();

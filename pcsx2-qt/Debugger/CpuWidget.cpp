@@ -470,6 +470,7 @@ void CpuWidget::updateFunctionList(bool whenEmpty)
 	if (whenEmpty && m_ui.listFunctions->count())
 		return;
 
+	m_cpu.GetSymbolMap().UpdateActiveSymbols();
 	m_ui.listFunctions->clear();
 
 	const auto demangler = demangler::CDemangler::createGcc();
