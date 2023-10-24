@@ -68,6 +68,16 @@ namespace MipsStackWalk
 		return false;
 	}
 
+	bool IsJRInstr(const R5900::OPCODE& op)
+	{
+		if ((op.flags & IS_BRANCH) && (op.flags & BRANCHTYPE_REGISTER))
+		{
+			return true;
+		}
+
+		return false;
+	}
+
 	bool IsAddImmInstr(const R5900::OPCODE& op)
 	{
 		if (op.flags & IS_ALU)
@@ -113,55 +123,100 @@ namespace MipsStackWalk
 
 		int ra_offset = -1;
 		const u32 start = frame.pc;
-		u32 stop = entry;
+		u32 bounds_start = entry;
+		u32 bounds_end = entry + LONGEST_FUNCTION;
+		u32 pc = start;
+
+		if (cpu == &r3000Debug)
+		{
+			Console.WriteLn("scanning frame at %x", start);
+		}
+
 		if (entry == INVALIDTARGET)
 		{
-			/*			if (start >= PSP_GetUserMemoryBase()) {
-				stop = PSP_GetUserMemoryBase();
-			} else if (start >= PSP_GetKernelMemoryBase()) {
-				stop = PSP_GetKernelMemoryBase();
-			} else if (start >= PSP_GetScratchpadMemoryBase()) {
-				stop = PSP_GetScratchpadMemoryBase();
-			}*/
-			stop = 0x80000;
+			bounds_start = std::max<s64>(0, (s64)start - LONGEST_FUNCTION);
+			bounds_end = pc + LONGEST_FUNCTION;
 		}
-		if (stop < start - LONGEST_FUNCTION)
-		{
-			stop = start - LONGEST_FUNCTION;
-		}
-		for (u32 pc = start; cpu->isValidAddress(pc) && pc >= stop; pc -= 4)
+
+		// 1. find function start
+		while (cpu->isValidAddress(pc) && pc >= bounds_start)
 		{
 			u32 rawOp = cpu->read32(pc);
 			const R5900::OPCODE& op = R5900::GetInstruction(rawOp);
 
-			// Here's where they store the ra address.
 			if (IsSWInstr(op) && _RT == MIPS_REG_RA && _RS == MIPS_REG_SP)
 			{
+				// Found RA to stack save
 				ra_offset = _IMM16;
 			}
 
-			if (IsAddImmInstr(op) && _RT == MIPS_REG_SP && _RS == MIPS_REG_SP)
+			if (IsAddImmInstr(op) && _RT == MIPS_REG_SP && _RS == MIPS_REG_SP && _IMM16 < 0)
 			{
-				// A positive imm either means alloca() or we went too far.
-				if (_IMM16 > 0)
-				{
-					// TODO: Maybe check for any alloca() signature and bail?
-					continue;
-				}
-				if (ScanForAllocaSignature(cpu, pc))
-				{
-					continue;
-				}
+				// Found function start
+				frame.entry = pc;
+				break;
+			}
+
+			if (IsJRInstr(op) && _RS == MIPS_REG_RA)
+			{
+				// Found previous function end
+				// Since no stack setup was found assume this is a leaf
+				// with no stack usage
+				pc = pc + 8;
 
 				frame.entry = pc;
-				frame.stackSize = -_IMM16;
-				if (ra_offset != -1 && cpu->isValidAddress(frame.sp + ra_offset))
-				{
-					ra = cpu->read32(frame.sp + ra_offset);
-				}
+				frame.stackSize = 0;
+
 				return true;
 			}
+
+			pc -= 4;
 		}
+
+		bounds_start = frame.entry;
+
+		// 2. Scan forwards to find current function end
+		while (cpu->isValidAddress(pc) && pc < bounds_end)
+		{
+			u32 rawOp = cpu->read32(pc);
+			const R5900::OPCODE& op = R5900::GetInstruction(rawOp);
+
+			if (IsJRInstr(op) && _RS == MIPS_REG_RA)
+			{
+				// Found function return
+				// move ahead one so we check the delay slot later
+				pc += 4;
+				break;
+			}
+
+			pc += 4;
+		}
+
+		bounds_end = pc;
+
+		// 3. Scan backwards to find the stack ptr increment
+		while (cpu->isValidAddress(pc) && pc >= bounds_start)
+		{
+			u32 rawOp = cpu->read32(pc);
+			const R5900::OPCODE& op = R5900::GetInstruction(rawOp);
+
+			if (IsAddImmInstr(op) && _RT == MIPS_REG_SP && _RS == MIPS_REG_SP)
+			{
+				// Found end of function stack dealloc
+				frame.stackSize = _IMM16;
+
+				if (ra_offset != -1 && cpu->isValidAddress(frame.sp + ra_offset))
+				{
+					// Read RA from the stack
+					ra = cpu->read32(frame.sp + ra_offset);
+				}
+
+				return true;
+			}
+
+			pc -= 4;
+		}
+
 		return false;
 	}
 
@@ -214,7 +269,9 @@ namespace MipsStackWalk
 				prevEntry = current.entry;
 
 				current.pc = ra;
-				current.sp += current.stackSize;
+				// Don't apply the stacksize if we haven't run the stack allocation yet
+				if (pc != current.entry)
+					current.sp += current.stackSize;
 				ra = INVALIDTARGET;
 				current.entry = INVALIDTARGET;
 				current.stackSize = -1;
