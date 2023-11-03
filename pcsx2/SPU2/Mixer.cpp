@@ -618,8 +618,7 @@ __forceinline void spu2Mix()
 
 	// Update AutoDMA output positioning
 	OutPos++;
-	if (OutPos >= 0x200)
-		OutPos = 0;
+	OutPos &= 0x1ff;
 
 	if constexpr (IsDevBuild)
 	{
