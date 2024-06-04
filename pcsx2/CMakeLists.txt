@@ -1083,6 +1083,23 @@ set(pcsx2x86Headers
 	x86/R5900_Profiler.h
 	)
 
+set(modSources
+	mods/ActiveMods.cpp
+	mods/EmuPatches.cpp
+	mods/P2mTools.cpp
+	mods/PTR2Hooks.cpp
+	mods/PriorityList.cpp
+	)
+
+set(modHeaders
+	mods/ActiveMods.h
+	mods/EmuPatches.h
+	mods/P2mTools.h
+	mods/PTR2Hooks.h
+	mods/PTR2Common.h
+	mods/PriorityList.h
+	)
+
 # These ones benefit a lot from LTO
 set(pcsx2LTOSources
 	${pcsx2Sources}
@@ -1130,6 +1147,7 @@ target_sources(PCSX2 PRIVATE
 	${pcsx2InputHeaders}
 	${pcsx2ps2Sources}
 	${pcsx2ps2Headers}
+	${modSources}
 )
 
 # platform sources
