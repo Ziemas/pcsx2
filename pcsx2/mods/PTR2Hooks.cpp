@@ -177,10 +177,14 @@ void PrHookManager::CdctrlMemIntgDecode()
 #endif
 
 		}
-		std::string final_path = Path::Combine(EmuFolders::PTR2, path);
+		auto tmp = Path::SplitWindowsPath(path);
+		std::string final_path = Path::Combine(EmuFolders::PTR2, Path::JoinNativePath(tmp));
 
 		// Write bytes from file to memory
 		const auto fp = FileSystem::OpenManagedCFile(final_path.c_str(), "rb");
+		if (!fp) {
+			Console.Error("Couldn't open file \"%s\"\n", final_path.c_str());
+		}
 
 		const int buf_size = 4096;
 		u8 buf3[buf_size];
@@ -325,10 +329,14 @@ void PrHookManager::intReadSub()
 			Console.WriteLn(Color_Cyan, "Using " + name + " from " + mod + " instead.");
 #endif
 		}
-		std::string final_path = Path::Combine(EmuFolders::PTR2, path);
+		auto tmp = Path::SplitWindowsPath(path);
+		std::string final_path = Path::Combine(EmuFolders::PTR2, Path::JoinNativePath(tmp));
 
 		// Write bytes from file to memory
 		const auto fp = FileSystem::OpenManagedCFile(final_path.c_str(), "rb");
+		if (!fp) {
+			Console.Error("Couldn't open file \"%s\"\n", final_path.c_str());
+		}
 
 		const int buf_size = 4096;
 		u8 buf3[buf_size];
