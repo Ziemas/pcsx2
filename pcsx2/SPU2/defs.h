@@ -605,6 +605,7 @@ extern void StartVoices(int core, u32 value);
 extern void StopVoices(int core, u32 value);
 extern void CalculateADSR(V_Voice& vc);
 extern void UpdateSpdifMode();
+extern void RecalcDelta(int core);
 
 namespace SPU2Savestate
 {

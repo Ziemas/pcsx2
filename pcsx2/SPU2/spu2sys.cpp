@@ -70,6 +70,20 @@ __forceinline s16 spu2M_Read(u32 addr)
 	return *GetMemPtr(addr & 0xfffff);
 }
 
+__forceinline void RecalcDelta(int core)
+{
+	if (((psxCounters[6].startCycle + psxCounters[6].deltaCycles) - psxRegs.cycle) > (u32)Cores[core].DMAICounter)
+	{
+		psxCounters[6].startCycle = psxRegs.cycle;
+		psxCounters[6].deltaCycles = Cores[core].DMAICounter;
+
+		psxNextDeltaCounter -= (psxRegs.cycle - psxNextStartCounter);
+		psxNextStartCounter = psxRegs.cycle;
+		if (psxCounters[6].deltaCycles < psxNextDeltaCounter)
+			psxNextDeltaCounter = psxCounters[6].deltaCycles;
+	}
+}
+
 // writes a signed value to the SPU2 ram
 // Invalidates the ADPCM cache in the process.
 __forceinline void spu2M_Write(u32 addr, s16 value)
@@ -349,16 +363,7 @@ __forceinline void TimeUpdate(u32 cClocks)
 		}
 		else
 		{
-			if (((psxCounters[6].startCycle + psxCounters[6].deltaCycles) - psxRegs.cycle) > (u32)Cores[0].DMAICounter)
-			{
-				psxCounters[6].startCycle = psxRegs.cycle;
-				psxCounters[6].deltaCycles = Cores[0].DMAICounter;
-
-				psxNextDeltaCounter -= (psxRegs.cycle - psxNextStartCounter);
-				psxNextStartCounter = psxRegs.cycle;
-				if (psxCounters[6].deltaCycles < psxNextDeltaCounter)
-					psxNextDeltaCounter = psxCounters[6].deltaCycles;
-			}
+			RecalcDelta(0);
 		}
 	}
 
@@ -402,16 +407,7 @@ __forceinline void TimeUpdate(u32 cClocks)
 		}
 		else
 		{
-			if (((psxCounters[6].startCycle + psxCounters[6].deltaCycles) - psxRegs.cycle) > (u32)Cores[1].DMAICounter)
-			{
-				psxCounters[6].startCycle = psxRegs.cycle;
-				psxCounters[6].deltaCycles = Cores[1].DMAICounter;
-
-				psxNextDeltaCounter -= (psxRegs.cycle - psxNextStartCounter);
-				psxNextStartCounter = psxRegs.cycle;
-				if (psxCounters[6].deltaCycles < psxNextDeltaCounter)
-					psxNextDeltaCounter = psxCounters[6].deltaCycles;
-			}
+			RecalcDelta(1);
 		}
 	}
 }
