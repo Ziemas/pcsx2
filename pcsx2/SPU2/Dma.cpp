@@ -159,7 +159,7 @@ void V_Core::StartADMAWrite(u16* pMem, u32 sz)
 	}
 
 	InputDataProgress = 0;
-	TADR = MADR + (size << 1);
+	DMATarget = MADR + (size << 1);
 	if ((AutoDMACtrl & (Index + 1)) == 0)
 	{
 		ActiveTSA = 0x2000 + (Index << 10);
@@ -209,7 +209,7 @@ void V_Core::PlainDMAWrite(u16* pMem, u32 size)
 	LastClock = psxRegs.cycle;
 	Regs.STATX &= ~0x80;
 	Regs.STATX |= 0x400;
-	TADR = MADR + (size << 1);
+	DMATarget = MADR + (size << 1);
 
 	if (SPU2::MsgDMA())
 	{
@@ -439,7 +439,7 @@ void V_Core::DoDMAread(u16* pMem, u32 size)
 	Regs.STATX &= ~0x80;
 	Regs.STATX |= 0x400;
 	//Regs.ATTR |= 0x30;
-	TADR = MADR + (size << 1);
+	DMATarget = MADR + (size << 1);
 
 	RecalcDelta(Index);
 

@@ -6,7 +6,6 @@
 #include "common/Pcsx2Types.h"
 
 #define MADR (Index == 0 ? HW_DMA4_MADR : HW_DMA7_MADR)
-#define TADR (Index == 0 ? HW_DMA4_TADR : HW_DMA7_TADR)
 
 #ifdef PCSX2_DEVBUILD
 
