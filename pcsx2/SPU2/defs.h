@@ -449,6 +449,8 @@ struct V_Core
 	bool Mute; // Mute
 	bool AdmaInProgress;
 
+	std::array<s16, 32> TransferFifo;
+	u8 FifoPos;
 	s8 DMABits; // DMA related?
 	u8 NoiseClk; // Noise Clock
 	u32 NoiseCnt; // Noise Counter
@@ -546,21 +548,21 @@ struct V_Core
 		return 0x30 + GetDmaIndex();
 	}
 
-	__forceinline u16 DmaRead()
+	__forceinline void FifoWrite(u16 value)
 	{
-		const u16 ret = static_cast<u16>(spu2M_Read(ActiveTSA));
-		++ActiveTSA;
-		ActiveTSA &= 0xfffff;
-		TSA = ActiveTSA;
-		return ret;
+		TransferFifo[FifoPos & 31] = value;
+		FifoPos++;
 	}
 
-	__forceinline void DmaWrite(u16 value)
+	__forceinline void FlushFifo()
 	{
-		spu2M_Write(ActiveTSA, value);
-		++ActiveTSA;
-		ActiveTSA &= 0xfffff;
-		TSA = ActiveTSA;
+		for (int i = 0; i < FifoPos; i++) {
+			spu2M_Write(ActiveTSA, TransferFifo[i & 31]);
+			ActiveTSA++;
+		}
+
+		TransferFifo = {};
+		FifoPos = 0;
 	}
 
 	void LogAutoDMA(FILE* fp);

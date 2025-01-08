@@ -128,6 +128,8 @@ void V_Core::Init(int index)
 	OutPos = 0;
 	DCFilterIn = {};
 	DCFilterOut = {};
+	TransferFifo = {};
+	FifoPos = 0;
 
 	psxmode = false;
 	psxSoundDataTransferControl = 0;
@@ -627,14 +629,7 @@ void V_Core::WriteRegPS1(u32 mem, u16 value)
 				break;
 
 			case 0x1da8: // Spu Write to Memory
-				//ConLog("SPU direct DMA Write. Current TSA = %x\n", TSA);
-				Cores[0].ActiveTSA = Cores[0].TSA;
-				if (Cores[0].IRQEnable && (Cores[0].IRQA <= Cores[0].ActiveTSA))
-				{
-					SetIrqCall(0);
-					spu2Irq();
-				}
-				DmaWrite(value);
+				FifoWrite(value);
 				show = false;
 				break;
 
@@ -897,11 +892,6 @@ u16 V_Core::ReadRegPS1(u32 mem)
 				value = map_spu2to1(TSA);
 				//ConLog("SPU2 TSA read: 0x1da6 = %x , (TSA = %x)\n", value, TSA);
 				break;
-			case 0x1da8:
-				ActiveTSA = TSA;
-				value = DmaRead();
-				show = false;
-				break;
 			case 0x1daa:
 				value = Cores[0].Regs.ATTR;
 				//ConLog("SPU2 ps1 reg psxSPUCNT read return value: %x\n", value);
@@ -1077,17 +1067,7 @@ static void RegWrite_Core(u16 value)
 			// optimized block copy fashion elsewhere, but some games will write this register
 			// directly, so handle those here:
 
-			// Performance Note: The PS2 Bios uses this extensively right before booting games,
-			// causing massive slowdown if we don't shortcut it here.
-			thiscore.ActiveTSA = thiscore.TSA;
-			for (int i = 0; i < 2; i++)
-			{
-				if (Cores[i].IRQEnable && (Cores[i].IRQA == thiscore.ActiveTSA))
-				{
-					SetIrqCall(i);
-				}
-			}
-			thiscore.DmaWrite(value);
+			thiscore.FifoWrite(value);
 			break;
 
 		case REG_C_ATTR:
@@ -1117,10 +1097,18 @@ static void RegWrite_Core(u16 value)
 
 			if (!thiscore.DmaMode && !(thiscore.Regs.STATX & 0x400))
 				thiscore.Regs.STATX &= ~0x80;
-			else if(!oldDmaMode && thiscore.DmaMode)
+			else if (!oldDmaMode && thiscore.DmaMode)
 				thiscore.Regs.STATX |= 0x80;
 
-			thiscore.ActiveTSA = thiscore.TSA;
+			if (thiscore.DmaMode && oldDmaMode != thiscore.DmaMode)
+			{
+				thiscore.ActiveTSA = thiscore.TSA & 0xf'ffff;
+
+				if (thiscore.DmaMode == 1)
+				{
+					thiscore.FlushFifo();
+				}
+			}
 
 			if (value & 0x000E)
 			{
