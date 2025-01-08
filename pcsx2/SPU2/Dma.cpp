@@ -171,18 +171,7 @@ void V_Core::StartADMAWrite(u16* pMem, u32 sz)
 		InputDataLeft = size;
 		if (InputPosWrite != 0xFFFF)
 		{
-#ifdef PCM24_S1_INTERLEAVE
-			if ((Index == 1) && ((PlayMode & 8) == 8))
-			{
-				AutoDMAReadBuffer(Index, 1);
-			}
-			else
-			{
-				AutoDMAReadBuffer(Index, 0);
-			}
-#else
 			AutoDMAReadBuffer(0);
-#endif
 		}
 		AdmaInProgress = 1;
 	}
