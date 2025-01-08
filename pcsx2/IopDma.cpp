@@ -34,18 +34,17 @@ static void psxDmaGeneric(u32 madr, u32 bcr, u32 chcr, u32 spuCore)
 		case 0x01000201: //cpu to spu2 transfer
 			PSXDMA_LOG("*** DMA %d - mem2spu *** %x addr = %x size = %x", dmaNum, chcr, madr, bcr);
 			if (dmaNum == 7)
-				SPU2writeDMA7Mem((u16*)iopPhysMem(madr), size * 2);
+				SPU2writeDMA7Mem(madr, size * 2);
 			else if (dmaNum == 4)
-				SPU2writeDMA4Mem((u16*)iopPhysMem(madr), size * 2);
+				SPU2writeDMA4Mem(madr, size * 2);
 			break;
 
 		case 0x01000200: //spu2 to cpu transfer
 			PSXDMA_LOG("*** DMA %d - spu2mem *** %x addr = %x size = %x", dmaNum, chcr, madr, bcr);
 			if (dmaNum == 7)
-				SPU2readDMA7Mem((u16*)iopPhysMem(madr), size * 2);
+				SPU2readDMA7Mem(madr, size * 2);
 			else if (dmaNum == 4)
-				SPU2readDMA4Mem((u16*)iopPhysMem(madr), size * 2);
-			psxCpu->Clear(spuCore ? HW_DMA7_MADR : HW_DMA4_MADR, size);
+				SPU2readDMA4Mem(madr, size * 2);
 			break;
 
 		default:
@@ -75,7 +74,6 @@ void spu2DMA4Irq()
 #ifdef SPU2IRQTEST
 	Console.Warning("spu2DMA4Irq()");
 #endif
-	SPU2interruptDMA4();
 	if (HW_DMA4_CHCR & 0x01000000)
 	{
 		HW_DMA4_CHCR &= ~0x01000000;
@@ -103,7 +101,6 @@ void spu2DMA7Irq()
 #ifdef SPU2IRQTEST
 	Console.Warning("spu2DMA7Irq()");
 #endif
-	SPU2interruptDMA7();
 	if (HW_DMA7_CHCR & 0x01000000)
 	{
 		HW_DMA7_CHCR &= ~0x01000000;

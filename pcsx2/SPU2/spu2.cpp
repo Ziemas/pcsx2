@@ -43,56 +43,38 @@ u32 SPU2::GetConsoleSampleRate()
 // --------------------------------------------------------------------------------------
 
 
-void SPU2readDMA4Mem(u16* pMem, u32 size) // size now in 16bit units
+void SPU2readDMA4Mem(u32 addr, u32 size) // size now in 16bit units
 {
 	TimeUpdate(psxRegs.cycle);
 
 	SPU2::FileLog("[%10d] SPU2 readDMA4Mem size %x\n", Cycles, size << 1);
-	Cores[0].DoDMAread(pMem, size);
+	Cores[0].StartDma(V_Core::DmaDirection::Read, addr, size);
 }
 
-void SPU2writeDMA4Mem(u16* pMem, u32 size) // size now in 16bit units
+void SPU2writeDMA4Mem(u32 addr, u32 size) // size now in 16bit units
 {
 	TimeUpdate(psxRegs.cycle);
 
 	SPU2::FileLog("[%10d] SPU2 writeDMA4Mem size %x at address %x\n", Cycles, size << 1, Cores[0].TSA);
 
-	Cores[0].DoDMAwrite(pMem, size);
+	Cores[0].StartDma(V_Core::DmaDirection::Write, addr, size);
 }
 
-void SPU2interruptDMA4()
-{
-	SPU2::FileLog("[%10d] SPU2 interruptDMA4\n", Cycles);
-	if (Cores[0].DmaMode)
-		Cores[0].Regs.STATX |= 0x80;
-	Cores[0].Regs.STATX &= ~0x400;
-	Cores[0].TSA = Cores[0].ActiveTSA;
-}
-
-void SPU2interruptDMA7()
-{
-	SPU2::FileLog("[%10d] SPU2 interruptDMA7\n", Cycles);
-	if (Cores[1].DmaMode)
-		Cores[1].Regs.STATX |= 0x80;
-	Cores[1].Regs.STATX &= ~0x400;
-	Cores[1].TSA = Cores[1].ActiveTSA;
-}
-
-void SPU2readDMA7Mem(u16* pMem, u32 size)
+void SPU2readDMA7Mem(u32 addr, u32 size)
 {
 	TimeUpdate(psxRegs.cycle);
 
 	SPU2::FileLog("[%10d] SPU2 readDMA7Mem size %x\n", Cycles, size << 1);
-	Cores[1].DoDMAread(pMem, size);
+	Cores[1].StartDma(V_Core::DmaDirection::Read, addr, size);
 }
 
-void SPU2writeDMA7Mem(u16* pMem, u32 size)
+void SPU2writeDMA7Mem(u32 addr, u32 size)
 {
 	TimeUpdate(psxRegs.cycle);
 
 	SPU2::FileLog("[%10d] SPU2 writeDMA7Mem size %x at address %x\n", Cycles, size << 1, Cores[1].TSA);
 
-	Cores[1].DoDMAwrite(pMem, size);
+	Cores[1].StartDma(V_Core::DmaDirection::Write, addr, size);
 }
 
 void SPU2::CreateOutputStream()

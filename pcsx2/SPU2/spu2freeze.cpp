@@ -49,28 +49,6 @@ s32 SPU2Savestate::FreezeIt(DataBlock& spud)
 	memcpy(spud.Cores, Cores, sizeof(Cores));
 	memcpy(&spud.Spdif, &Spdif, sizeof(Spdif));
 
-	// Convert pointers to offsets so we can safely restore them when loading.
-	// We use -1 for null, and anything else as an offset from iop memory.
-#define FIX_POINTER(x) \
-	if (!(x)) \
-	{ \
-		x = reinterpret_cast<decltype(x)>(-1); \
-	} \
-	else \
-	{ \
-		pxAssert(reinterpret_cast<const u8*>((x)) >= iopPhysMem(0) && reinterpret_cast<const u8*>((x)) < iopPhysMem(0x1fffff)); \
-		x = reinterpret_cast<decltype(x)>(reinterpret_cast<const u8*>((x)) - iopPhysMem(0)); \
-	}
-
-	for (u32 i = 0; i < 2; i++)
-	{
-		V_Core& core = spud.Cores[i];
-		FIX_POINTER(core.DMAPtr);
-		FIX_POINTER(core.DMARPtr);
-	}
-
-#undef FIX_POINTER
-
 	spud.OutPos = OutPos;
 	spud.InputPos = InputPos;
 	spud.Cycles = Cycles;
@@ -115,27 +93,6 @@ s32 SPU2Savestate::ThawIt(DataBlock& spud)
 
 		memcpy(Cores, spud.Cores, sizeof(Cores));
 		memcpy(&Spdif, &spud.Spdif, sizeof(Spdif));
-
-		// Reverse the pointer offset from above.
-#define FIX_POINTER(x) \
-	if ((x) == reinterpret_cast<decltype(x)>(-1)) \
-	{ \
-		x = nullptr; \
-	} \
-	else \
-	{ \
-		pxAssert(reinterpret_cast<size_t>((x)) <= 0x1fffff); \
-		x = reinterpret_cast<decltype(x)>(iopPhysMem(0) + reinterpret_cast<size_t>((x))); \
-	}
-
-		for (u32 i = 0; i < 2; i++)
-		{
-			V_Core& core = Cores[i];
-			FIX_POINTER(core.DMAPtr);
-			FIX_POINTER(core.DMARPtr);
-		}
-
-#undef FIX_POINTER
 
 		OutPos = spud.OutPos;
 		InputPos = spud.InputPos;

@@ -62,16 +62,12 @@ u16 SPU2read(u32 mem);
 void SPU2async();
 s32 SPU2freeze(FreezeAction mode, freezeData* data);
 
-void SPU2readDMA4Mem(u16* pMem, u32 size);
-void SPU2writeDMA4Mem(u16* pMem, u32 size);
-void SPU2interruptDMA4();
-void SPU2interruptDMA7();
-void SPU2readDMA7Mem(u16* pMem, u32 size);
-void SPU2writeDMA7Mem(u16* pMem, u32 size);
+void SPU2readDMA4Mem(u32 addr, u32 size);
+void SPU2writeDMA4Mem(u32 addr, u32 size);
+void SPU2readDMA7Mem(u32 addr, u32 size);
+void SPU2writeDMA7Mem(u32 addr, u32 size);
 
 extern u32 lClocks;
 
 extern void TimeUpdate(u32 cClocks);
 extern void SPU2_FastWrite(u32 rmem, u16 value);
-
-//#define PCM24_S1_INTERLEAVE

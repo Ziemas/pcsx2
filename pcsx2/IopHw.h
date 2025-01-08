@@ -258,7 +258,6 @@ static dma_mbc&		hw_dma12	= (dma_mbc&) iopHw[0x1550];
 #define HW_DMA4_MADR (psxHu32(0x10c0)) // SPU DMA
 #define HW_DMA4_BCR  (psxHu32(0x10c4))
 #define HW_DMA4_CHCR (psxHu32(0x10c8))
-#define HW_DMA4_TADR (psxHu32(0x10cc))
 
 #define HW_DMA6_MADR (psxHu32(0x10e0)) // GPU DMA (OT)
 #define HW_DMA6_BCR  (psxHu32(0x10e4))
@@ -267,7 +266,6 @@ static dma_mbc&		hw_dma12	= (dma_mbc&) iopHw[0x1550];
 #define HW_DMA7_MADR (psxHu32(0x1500)) // SPU2 DMA
 #define HW_DMA7_BCR  (psxHu32(0x1504))
 #define HW_DMA7_CHCR (psxHu32(0x1508))
-#define HW_DMA7_TADR (psxHu32(0x150C))
 
 #define HW_DMA8_MADR (psxHu32(0x1510)) // DEV9 DMA
 #define HW_DMA8_BCR  (psxHu32(0x1514))

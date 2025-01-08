@@ -569,36 +569,25 @@ static StereoOut32 DCFilter(StereoOut32 input) {
 
 __forceinline void spu2Mix()
 {
-	// Note: Playmode 4 is SPDIF, which overrides other inputs.
-	StereoOut32 InputData[2] =
-		{
-			// SPDIF is on Core 0:
-			// Fixme:
-			// 1. We do not have an AC3 decoder for the bitstream.
-			// 2. Games usually provide a normal ADMA stream as well and want to see it getting read!
-			/*(PlayMode&4) ? StereoOut32::Empty : */ ApplyVolume(Cores[0].ReadInput(), Cores[0].InpVol),
+	Cores[0].RunAdma();
+	Cores[1].RunAdma();
 
-			// CDDA is on Core 1:
-			(PlayMode & 8) ? StereoOut32::Empty : ApplyVolume(Cores[1].ReadInput(), Cores[1].InpVol)};
+	StereoOut32 InputData[2] = {
+		ApplyVolume(Cores[0].ReadInput(), Cores[0].InpVol),
+		ApplyVolume(Cores[1].ReadInput(), Cores[1].InpVol)};
 
 #ifdef PCSX2_DEVBUILD
 	WaveDump::WriteCore(0, CoreSrc_Input, InputData[0]);
 	WaveDump::WriteCore(1, CoreSrc_Input, InputData[1]);
 #endif
 
-	// Todo: Replace me with memzero initializer!
-	VoiceMixSet VoiceData[2] = {VoiceMixSet::Empty, VoiceMixSet::Empty}; // mixed voice data for each core.
+	VoiceMixSet VoiceData[2] = {};
 	MixCoreVoices(VoiceData[0], 0);
 	MixCoreVoices(VoiceData[1], 1);
 
 	StereoOut32 Ext(Cores[0].Mix(VoiceData[0], InputData[0], StereoOut32::Empty));
 
-	if ((PlayMode & 4) || (Cores[0].Mute != 0))
-		Ext = StereoOut32::Empty;
-	else
-	{
-		Ext = ApplyVolume(clamp_mix(Ext), Cores[0].MasterVol);
-	}
+	Ext = Cores[0].Mute ? StereoOut32::Empty : ApplyVolume(clamp_mix(Ext), Cores[0].MasterVol);
 
 	// Commit Core 0 output to ram before mixing Core 1:
 	spu2M_WriteFast(0x800 + OutPos, Ext.Left);
@@ -611,18 +600,7 @@ __forceinline void spu2Mix()
 	Ext = ApplyVolume(Ext, Cores[1].ExtVol);
 	StereoOut32 Out(Cores[1].Mix(VoiceData[1], InputData[1], Ext));
 
-	if (PlayMode & 8)
-	{
-		// Experimental CDDA support
-		// The CDDA overrides all other mixer output.  It's a direct feed!
-
-		Out = Cores[1].ReadInput_HiFi();
-		//WaveLog::WriteCore( 1, "CDDA-32", OutL, OutR );
-	}
-	else
-	{
-		Out = ApplyVolume(clamp_mix(Out), Cores[1].MasterVol);
-	}
+	Out = Cores[1].Mute ? StereoOut32::Empty : ApplyVolume(clamp_mix(Out), Cores[1].MasterVol);
 
 	// For a long time PCSX2 has had its output volume halved by
 	// an incorrect function for applying the master volume above.
