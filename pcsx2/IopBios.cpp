@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0+
 
 #include "Common.h"
+#include "DebugTools/BiosDebugData.h"
 #include "DebugTools/SymbolGuardian.h"
 #include "IopBios.h"
 #include "IopMem.h"
@@ -1205,6 +1206,22 @@ namespace R3000A
 			}
 
 			CurrentBiosInformation.iopModListAddr = GetModList(a0);
+
+			Console.WriteLn("-------------- list at %08x", CurrentBiosInformation.iopModListAddr);
+			auto a = getIOPModules();
+			int i = 0;
+			for (auto& m : a)
+			{
+				Console.WriteLn("module %d: %s", i, m.name.c_str());
+				Console.WriteLn("   entry %08x", m.entry);
+				Console.WriteLn("   gp %08x", m.gp);
+				Console.WriteLn("   text: [%08x, %08x]", m.text_addr, m.text_addr + m.text_size);
+				Console.WriteLn("   data: [%08x, %08x]", m.text_addr + m.text_size, m.text_addr + m.text_size + m.data_size);
+				Console.WriteLn("   bss:  [%08x, %08x]", m.text_addr + m.text_size + m.data_size, m.text_addr + m.text_size + m.bss_size);
+
+				i++;
+			}
+
 			return 0;
 		}
 
