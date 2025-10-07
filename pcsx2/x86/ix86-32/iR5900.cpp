@@ -1645,6 +1645,91 @@ void encodeMemcheck()
 	}
 }
 
+
+typedef struct
+{
+	// total size: 0x1C
+	u16 flags; // offset 0x0, size 0x2
+	u8 attr; // offset 0x2, size 0x1
+	u8 prio; // offset 0x3, size 0x1
+	u8 bank; // offset 0x4, size 0x1
+	u8 note; // offset 0x5, size 0x1
+	u8 id1; // offset 0x6, size 0x1
+	u8 id2; // offset 0x7, size 0x1
+	s16 vol; // offset 0x8, size 0x2
+	s16 pan; // offset 0xA, size 0x2
+	s16 pitch; // offset 0xC, size 0x2
+	s16 bend; // offset 0xE, size 0x2
+	u8 limit; // offset 0x10, size 0x1
+	u8 ___dummy___0; // offset 0x11, size 0x1
+	u8 ___dummy___1; // offset 0x12, size 0x1
+	u8 ___dummy___2; // offset 0x13, size 0x1
+	u32 kofftime; // offset 0x14, size 0x4
+	u32 guid; // offset 0x18, size 0x4
+} CSE_REQP;
+
+typedef struct
+{
+	// total size: 0x14
+	u8 vol; // offset 0x0, size 0x1
+	u8 pan; // offset 0x1, size 0x1
+	s16 pitch; // offset 0x2, size 0x2
+	u16 bendLow; // offset 0x4, size 0x2
+	u16 bendHigh; // offset 0x6, size 0x2
+	u16 adsr1; // offset 0x8, size 0x2
+	u16 adsr2; // offset 0xA, size 0x2
+	u32 freq; // offset 0xC, size 0x4
+	u32 s_addr; // offset 0x10, size 0x4
+} CSE_PHDP;
+
+
+static void startSound()
+{
+	CSE_REQP reqp;
+	CSE_PHDP phdp;
+
+	memcpy(&phdp, PSM(cpuRegs.GPR.n.a0.UL[0]), sizeof(phdp));
+	memcpy(&reqp, PSM(cpuRegs.GPR.n.a1.UL[0]), sizeof(reqp));
+	printf("starting voice\n");
+	printf("     attr:     0x%x\n", reqp.attr);
+	printf("     flags:    0x%x\n", reqp.flags);
+	printf("     prio:     0x%x\n", reqp.prio);
+	printf("     guid:     0x%x\n", reqp.guid);
+	printf("     id1:      0x%x\n", reqp.id1);
+	printf("     id2:      0x%x\n", reqp.id2);
+	printf("     note:     0x%x\n", reqp.note);
+	printf("     limit:    0x%x\n", reqp.limit);
+	printf("     kofftime: 0x%x\n", reqp.kofftime);
+	printf("     sa_addr:  0x%x\n", phdp.s_addr);
+}
+
+static void mleSeKeyOff()
+{
+	CSE_REQP reqp;
+	memcpy(&reqp, PSM(cpuRegs.GPR.n.a0.UL[0]), sizeof(reqp));
+    printf("seKeyOff flags 0x%x\n", reqp.flags);
+    printf("       attr: 0x%x\n", reqp.attr);
+    printf("       guid: 0x%x\n", reqp.guid);
+    printf("       id1:  0x%x\n", reqp.id1);
+    printf("       id2:  0x%x\n", reqp.id2);
+    printf("       note: 0x%x\n", reqp.note);
+
+}
+
+using hookFun = void (*)();
+static std::unordered_map<u32, hookFun> hooks = {{0x412990, mleSeKeyOff}, {0x412a50, startSound}};
+
+static void hookPc(u32 pc)
+{
+	auto hook = hooks.find(pc);
+	if (hook == hooks.end())
+		return;
+
+
+	iFlushCall(FLUSH_EVERYTHING);
+	xFastCall((void*)hook->second);
+}
+
 void recompileNextInstruction(bool delayslot, bool swapped_delay_slot)
 {
 	if (EmuConfig.EnablePatches)
@@ -1667,6 +1752,8 @@ void recompileNextInstruction(bool delayslot, bool swapped_delay_slot)
 		_clearNeededX86regs();
 		_clearNeededXMMregs();
 	}
+
+	hookPc(pc);
 
 	s_pCode = (int*)PSM(pc);
 	pxAssert(s_pCode);
