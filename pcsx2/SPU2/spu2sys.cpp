@@ -215,11 +215,7 @@ void V_Voice::Start()
 	SCurrent = 28;
 	LoopMode = 0;
 
-	// When SP >= 0 the next sample will be grabbed, we don't want this to happen
-	// instantly because in the case of pitch being 0 we want to delay getting
-	// the next block header. This is a hack to work around the fact that unlike
-	// the HW we don't update the block header on every cycle.
-	SP = -1;
+	SP = 0;
 
 	LoopFlags = 0;
 	NextA = StartA | 1;
