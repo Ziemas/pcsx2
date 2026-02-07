@@ -1140,11 +1140,23 @@ static void iPsxAddEECycles(u32 blockCycles)
 	xSUB(ptr32[&psxRegs.iopCycleEE], eax);
 }
 
+static void checkcrap(u32 blockstart, u32 pc)
+{
+	bool test = cpuRegs.cycle == (cpuRegs.cycle64 & 0xffffffff);
+	if (!test)
+	{
+		Console.Error("iop diverged at %x (%x != %x)", pc, psxRegs.cycle, psxRegs.cycle64);
+		Console.WriteLn("current block %x - %x", blockstart, pc);
+		pxFailRel("bad");
+	}
+}
+
 static void iPsxBranchTest(u32 newpc, u32 cpuBranch)
 {
 	u32 blockCycles = psxScaleBlockCycles();
 
-	if (EmuConfig.Speedhacks.WaitLoop && s_nBlockFF && newpc == s_branchTo)
+	// TODO cycles64
+	if (false && EmuConfig.Speedhacks.WaitLoop && s_nBlockFF && newpc == s_branchTo)
 	{
 		xMOV(eax, ptr32[&psxRegs.cycle]);
 		xMOV(ecx, eax);
@@ -1170,6 +1182,10 @@ static void iPsxBranchTest(u32 newpc, u32 cpuBranch)
 	}
 	else
 	{
+		xMOV(rbx, ptr64[&psxRegs.cycle64]);
+		xADD(rbx, blockCycles);
+		xMOV(ptr64[&psxRegs.cycle64], rbx); // update cycles
+
 		xMOV(ebx, ptr32[&psxRegs.cycle]);
 		xADD(ebx, blockCycles);
 		xMOV(ptr32[&psxRegs.cycle], ebx); // update cycles
@@ -1181,6 +1197,8 @@ static void iPsxBranchTest(u32 newpc, u32 cpuBranch)
 		// check if an event is pending
 		xSUB(ebx, ptr32[&psxRegs.iopNextEventCycle]);
 		xForwardJS<u8> nointerruptpending;
+
+		xFastCall((void*)checkcrap, s_pCurBlockEx->startpc, psxpc);
 
 		xFastCall((void*)iopEventTest);
 
@@ -1225,6 +1243,7 @@ void rpsxSYSCALL()
 	xCMP(ptr32[&psxRegs.pc], psxpc - 4);
 	j8Ptr[0] = JE8(0);
 
+	xADD(ptr64[&psxRegs.cycle64], psxScaleBlockCycles());
 	xADD(ptr32[&psxRegs.cycle], psxScaleBlockCycles());
 	iPsxAddEECycles(psxScaleBlockCycles());
 	JMP32((uptr)iopDispatcherReg - ((uptr)x86Ptr + 5));
@@ -1247,6 +1266,7 @@ void rpsxBREAK()
 
 	xCMP(ptr32[&psxRegs.pc], psxpc - 4);
 	j8Ptr[0] = JE8(0);
+	xADD(ptr64[&psxRegs.cycle64], psxScaleBlockCycles());
 	xADD(ptr32[&psxRegs.cycle], psxScaleBlockCycles());
 	iPsxAddEECycles(psxScaleBlockCycles());
 	JMP32((uptr)iopDispatcherReg - ((uptr)x86Ptr + 5));
@@ -1742,6 +1762,7 @@ StartRecomp:
 			pxAssert(!willbranch3);
 		else
 		{
+			xADD(ptr64[&psxRegs.cycle64], psxScaleBlockCycles());
 			xADD(ptr32[&psxRegs.cycle], psxScaleBlockCycles());
 			iPsxAddEECycles(psxScaleBlockCycles());
 		}

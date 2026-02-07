@@ -229,6 +229,7 @@ static __fi void execI()
 
 	psxRegs.pc+= 4;
 	psxRegs.cycle++;
+	psxRegs.cycle64++;
 
 	psxBSC[psxRegs.code >> 26]();
 }

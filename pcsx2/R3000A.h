@@ -95,6 +95,7 @@ struct psxRegisters {
 	u32 pc;				/* Program counter */
 	u32 code;			/* The instruction */
 	u32 cycle;
+	u64 cycle64;
 	u32 interrupt;
 	u32 pcWriteback;
 
