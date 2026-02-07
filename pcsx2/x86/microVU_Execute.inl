@@ -354,8 +354,20 @@ _mVUt void mVUcleanUp()
 		u32 cycles_passed = std::min(mVU.cycles, 3000) * EmuConfig.Speedhacks.EECycleSkip;
 		if (cycles_passed > 0)
 		{
+			bool test = cpuRegs.cycle == (cpuRegs.cycle64 & 0xffffffff);
+			if (!test)
+			{
+				Console.Error("diverged");
+			}
+
 			s32 vu0_offset = VU0.cycle - cpuRegs.cycle;
 			cpuRegs.cycle += cycles_passed;
+			cpuRegs.cycle64 += cycles_passed;
+			if (test && cpuRegs.cycle != (cpuRegs.cycle64 & 0xffffffff))
+			{
+				Console.Error("diverged spr");
+			}
+
 
 			// VU0 needs to stay in sync with the CPU otherwise things get messy
 			// So we need to adjust when VU1 skips cycles also

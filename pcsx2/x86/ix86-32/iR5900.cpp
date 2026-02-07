@@ -1343,6 +1343,17 @@ u32 scaleblockcycles_clear()
 	return scaled;
 }
 
+static void checkcrap(u32 blockstart, u32 pc)
+{
+	bool test = cpuRegs.cycle == (cpuRegs.cycle64 & 0xffffffff);
+	if (!test)
+	{
+		Console.Error("ee diverged at %x (%x != %x)", pc, cpuRegs.cycle, cpuRegs.cycle64);
+		Console.WriteLn("current block %x - %x", blockstart, pc);
+		pxFailRel("bad");
+	}
+}
+
 // Generates dynarec code for Event tests followed by a block dispatch (branch).
 // Parameters:
 //   newpc - address to jump to at the end of the block.  If newpc == 0xffffffff then
@@ -1360,7 +1371,8 @@ static void iBranchTest(u32 newpc)
 	//    cpuRegs.cycle += blockcycles;
 	//    if ( cpuRegs.cycle > g_nextEventCycle ) { DoEvents(); }
 
-	if (EmuConfig.Speedhacks.WaitLoop && s_nBlockFF && newpc == s_branchTo)
+	// TODO cycle64
+	if (false && EmuConfig.Speedhacks.WaitLoop && s_nBlockFF && newpc == s_branchTo)
 	{
 		xMOV(eax, ptr32[&cpuRegs.nextEventCycle]);
 		xADD(ptr32[&cpuRegs.cycle], scaleblockcycles());
@@ -1372,8 +1384,14 @@ static void iBranchTest(u32 newpc)
 	}
 	else
 	{
+		auto cycles = scaleblockcycles();
+
+		xMOV(rax, ptr64[&cpuRegs.cycle64]);
+		xADD(rax, cycles);
+		xMOV(ptr64[&cpuRegs.cycle64], rax); // update cycles
+
 		xMOV(eax, ptr[&cpuRegs.cycle]);
-		xADD(eax, scaleblockcycles());
+		xADD(eax, cycles);
 		xMOV(ptr[&cpuRegs.cycle], eax); // update cycles
 		xSUB(eax, ptr[&cpuRegs.nextEventCycle]);
 
@@ -1382,6 +1400,7 @@ static void iBranchTest(u32 newpc)
 		else
 			recBlocks.Link(HWADDR(newpc), xJcc32(Jcc_Signed));
 
+		xFastCall((void*)checkcrap, s_pCurBlockEx->startpc, pc);
 		xJMP((void*)DispatcherEvent);
 	}
 }
@@ -2126,6 +2145,9 @@ static bool skipMPEG_By_Pattern(u32 sPC)
 
 static bool recSkipTimeoutLoop(s32 reg, bool is_timeout_loop)
 {
+	// TODO cycle64
+	return false;
+
 	if (!EmuConfig.Speedhacks.WaitLoop || !is_timeout_loop)
 		return false;
 
@@ -2716,7 +2738,9 @@ StartRecomp:
 			else
 			{
 				xMOV(ptr32[&cpuRegs.pc], pc);
-				xADD(ptr32[&cpuRegs.cycle], scaleblockcycles());
+				auto cycles = scaleblockcycles();
+				xADD(ptr32[&cpuRegs.cycle], cycles);
+				xADD(ptr64[&cpuRegs.cycle64], cycles);
 				recBlocks.Link(HWADDR(pc), xJcc32());
 			}
 		}

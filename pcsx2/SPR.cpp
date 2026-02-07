@@ -30,7 +30,10 @@ static void TestClearVUs(u32 madr, u32 qwc, bool isWrite)
 				vu1Thread.WaitVU();
 			else
 				CpuVU1->Execute(vu1RunCycles);
+
 			cpuRegs.cycle = VU1.cycle;
+			cpuRegs.cycle64 += (s32)(VU1.cycle - cpuRegs.cycle);
+
 			//Catch up VU0 too
 			CpuVU0->ExecuteBlock(0);
 		}

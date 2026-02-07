@@ -454,6 +454,7 @@ void VU_Thread::ExecuteVU(u32 vu_addr, u32 vif_top, u32 vif_itop, u32 fbrst)
 	u32 cycles = std::max(Get_vuCycles(), 4u);
 	u32 skip_cycles = std::min(cycles, 3000u);
 	cpuRegs.cycle += skip_cycles * EmuConfig.Speedhacks.EECycleSkip;
+	cpuRegs.cycle64 += skip_cycles * EmuConfig.Speedhacks.EECycleSkip;
 	VU0.cycle += skip_cycles * EmuConfig.Speedhacks.EECycleSkip;
 	Get_MTVUChanges();
 

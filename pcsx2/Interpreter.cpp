@@ -50,6 +50,7 @@ void intUpdateCPUCycles()
 
 	// Ensure block cycle count is never less than 1.
 	cpuRegs.cycle += (scale_cycles < 1) ? 1 : scale_cycles;
+	cpuRegs.cycle64 += (scale_cycles < 1) ? 1 : scale_cycles;
 
 	if (cyclerate > 1)
 	{
@@ -228,7 +229,8 @@ static __fi void _doBranch_shared(u32 tar)
 	{
 		if (Cpu == &intCpu)
 		{
-			if (intLastBranchTo == tar && EmuConfig.Speedhacks.WaitLoop)
+			// TODO cycle64
+			if (false && intLastBranchTo == tar && EmuConfig.Speedhacks.WaitLoop)
 			{
 				intUpdateCPUCycles();
 				bool can_skip = true;
@@ -252,9 +254,13 @@ static __fi void _doBranch_shared(u32 tar)
 				if (can_skip)
 				{
 					if (static_cast<s32>(cpuRegs.nextEventCycle - cpuRegs.cycle) > 0)
+					{
 						cpuRegs.cycle = cpuRegs.nextEventCycle;
+					}
 					else
+					{
 						cpuRegs.nextEventCycle = cpuRegs.cycle;
+					}
 				}
 			}
 		}

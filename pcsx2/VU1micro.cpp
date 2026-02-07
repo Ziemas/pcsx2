@@ -43,6 +43,7 @@ void vu1Finish(bool add_cycles) {
 	if (add_cycles)
 	{
 		cpuRegs.cycle += VU1.cycle - vu1cycles;
+		cpuRegs.cycle64 += VU1.cycle - vu1cycles;
 	}
 }
 

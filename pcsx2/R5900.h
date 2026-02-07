@@ -123,6 +123,7 @@ struct cpuRegisters {
 	u32 eCycle[32];
 	u32 sCycle[32];		// for internal counters
 	u32 cycle;			// calculate cpucycles..
+	u64 cycle64;		// calculate cpucycles..
 	u32 interrupt;
 	int branch;
 	int opmode;			// operating mode

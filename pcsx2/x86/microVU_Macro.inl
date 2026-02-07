@@ -143,7 +143,9 @@ bool mVUIsReservedCOP2(int hostreg)
 	void recV##f() \
 	{ \
 		iFlushCall(FLUSH_FOR_POSSIBLE_MICRO_EXEC); \
-		xADD(ptr32[&cpuRegs.cycle], scaleblockcycles_clear()); \
+		auto cycles = scaleblockcycles_clear(); \
+		xADD(ptr32[&cpuRegs.cycle], cycles); \
+		xADD(ptr64[&cpuRegs.cycle64], cycles); \
 		recCall(V##f); \
 	}
 
@@ -331,8 +333,15 @@ static void COP2_Interlock(bool mBitSync)
 		{
 			iFlushCall(FLUSH_FOR_POSSIBLE_MICRO_EXEC);
 			_freeX86reg(eax);
+
+			auto cycles = scaleblockcycles_clear();
+
+			xMOV(rax, ptr64[&cpuRegs.cycle64]);
+			xADD(rax, cycles);
+			xMOV(ptr64[&cpuRegs.cycle64], rax); // update cycles
+
 			xMOV(eax, ptr32[&cpuRegs.cycle]);
-			xADD(eax, scaleblockcycles_clear());
+			xADD(eax, cycles);
 			xMOV(ptr32[&cpuRegs.cycle], eax); // update cycles
 
 			xTEST(ptr32[&VU0.VI[REG_VPU_STAT].UL], 0x1);
@@ -366,8 +375,15 @@ static void mVUSyncVU0()
 {
 	iFlushCall(FLUSH_FOR_POSSIBLE_MICRO_EXEC);
 	_freeX86reg(eax);
+
+	auto cycles = scaleblockcycles_clear();
+
+	xMOV(rax, ptr64[&cpuRegs.cycle64]);
+	xADD(rax, cycles);
+	xMOV(ptr64[&cpuRegs.cycle64], rax); // update cycles
+
 	xMOV(eax, ptr32[&cpuRegs.cycle]);
-	xADD(eax, scaleblockcycles_clear());
+	xADD(eax, cycles);
 	xMOV(ptr32[&cpuRegs.cycle], eax); // update cycles
 
 	xTEST(ptr32[&VU0.VI[REG_VPU_STAT].UL], 0x1);

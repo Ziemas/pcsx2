@@ -134,9 +134,15 @@ void recMFC0()
 {
 	if (_Rd_ == 9)
 	{
+		auto cycles = scaleblockcycles_clear();
+
+		xMOV(rcx, ptr64[&cpuRegs.cycle64]);
+		xADD(rcx, cycles);
+		xMOV(ptr64[&cpuRegs.cycle64], rcx); // update cycles
+
 		// This case needs to be handled even if the write-back is ignored (_Rt_ == 0 )
 		xMOV(ecx, ptr32[&cpuRegs.cycle]);
-		xADD(ecx, scaleblockcycles_clear());
+		xADD(ecx, cycles);
 		xMOV(ptr32[&cpuRegs.cycle], ecx); // update cycles
 		xMOV(eax, ecx);
 		xSUB(eax, ptr[&cpuRegs.lastCOP0Cycle]);
@@ -164,8 +170,12 @@ void recMFC0()
 		else if (0 == (_Imm_ & 2)) // MFPC 0, only LSB of register matters
 		{
 			iFlushCall(FLUSH_INTERPRETER);
+
+			auto cycles = scaleblockcycles_clear();
+			xADD(ptr64[&cpuRegs.cycle64], cycles);
+
 			xMOV(eax, ptr32[&cpuRegs.cycle]);
-			xADD(eax, scaleblockcycles_clear());
+			xADD(eax, cycles);
 			xMOV(ptr32[&cpuRegs.cycle], eax); // update cycles
 			xFastCall((void*)COP0_UpdatePCCR);
 
@@ -175,8 +185,12 @@ void recMFC0()
 		else // MFPC 1
 		{
 			iFlushCall(FLUSH_INTERPRETER);
+
+			auto cycles = scaleblockcycles_clear();
+			xADD(ptr64[&cpuRegs.cycle64], cycles);
+
 			xMOV(eax, ptr32[&cpuRegs.cycle]);
-			xADD(eax, scaleblockcycles_clear());
+			xADD(eax, cycles);
 			xMOV(ptr32[&cpuRegs.cycle], eax); // update cycles
 			xFastCall((void*)COP0_UpdatePCCR);
 
@@ -202,12 +216,17 @@ void recMTC0()
 	{
 		switch (_Rd_)
 		{
-			case 12:
+			case 12: {
 				iFlushCall(FLUSH_INTERPRETER);
+
+				auto cycles = scaleblockcycles_clear();
+				xADD(ptr64[&cpuRegs.cycle64], cycles);
+
 				xMOV(eax, ptr32[&cpuRegs.cycle]);
-				xADD(eax, scaleblockcycles_clear());
+				xADD(eax, cycles);
 				xMOV(ptr32[&cpuRegs.cycle], eax); // update cycles
 				xFastCall((void*)WriteCP0Status, g_cpuConstRegs[_Rt_].UL[0]);
+			}
 				break;
 
 			case 16:
@@ -215,12 +234,16 @@ void recMTC0()
 				xFastCall((void*)WriteCP0Config, g_cpuConstRegs[_Rt_].UL[0]);
 				break;
 
-			case 9:
+			case 9: {
+				auto cycles = scaleblockcycles_clear();
+				xADD(ptr64[&cpuRegs.cycle64], cycles);
+
 				xMOV(ecx, ptr32[&cpuRegs.cycle]);
-				xADD(ecx, scaleblockcycles_clear());
+				xADD(ecx, cycles);
 				xMOV(ptr32[&cpuRegs.cycle], ecx); // update cycles
 				xMOV(ptr[&cpuRegs.lastCOP0Cycle], ecx);
 				xMOV(ptr32[&cpuRegs.CP0.r[9]], g_cpuConstRegs[_Rt_].UL[0]);
+			}
 				break;
 
 			case 25:
@@ -230,8 +253,12 @@ void recMTC0()
 						break;
 					// Updates PCRs and sets the PCCR.
 					iFlushCall(FLUSH_INTERPRETER);
+
+					auto cycles = scaleblockcycles_clear();
+					xADD(ptr64[&cpuRegs.cycle64], cycles);
+
 					xMOV(eax, ptr32[&cpuRegs.cycle]);
-					xADD(eax, scaleblockcycles_clear());
+					xADD(eax, cycles);
 					xMOV(ptr32[&cpuRegs.cycle], eax); // update cycles
 					xFastCall((void*)COP0_UpdatePCCR);
 					xMOV(ptr32[&cpuRegs.PERF.n.pccr], g_cpuConstRegs[_Rt_].UL[0]);
@@ -239,16 +266,23 @@ void recMTC0()
 				}
 				else if (0 == (_Imm_ & 2)) // MTPC 0, only LSB of register matters
 				{
+					auto cycles = scaleblockcycles_clear();
+					xADD(ptr64[&cpuRegs.cycle64], cycles);
+
 					xMOV(eax, ptr32[&cpuRegs.cycle]);
-					xADD(eax, scaleblockcycles_clear());
+					xADD(eax, cycles);
 					xMOV(ptr32[&cpuRegs.cycle], eax); // update cycles
 					xMOV(ptr32[&cpuRegs.PERF.n.pcr0], g_cpuConstRegs[_Rt_].UL[0]);
 					xMOV(ptr[&cpuRegs.lastPERFCycle[0]], eax);
 				}
 				else // MTPC 1
 				{
+
+					auto cycles = scaleblockcycles_clear();
+					xADD(ptr64[&cpuRegs.cycle64], cycles);
+
 					xMOV(eax, ptr32[&cpuRegs.cycle]);
-					xADD(eax, scaleblockcycles_clear());
+					xADD(eax, cycles);
 					xMOV(ptr32[&cpuRegs.cycle], eax); // update cycles
 					xMOV(ptr32[&cpuRegs.PERF.n.pcr1], g_cpuConstRegs[_Rt_].UL[0]);
 					xMOV(ptr[&cpuRegs.lastPERFCycle[1]], eax);
@@ -268,14 +302,19 @@ void recMTC0()
 	{
 		switch (_Rd_)
 		{
-			case 12:
+			case 12: {
 				_eeMoveGPRtoR(arg1reg, _Rt_);
 				iFlushCall(FLUSH_INTERPRETER);
+
+				auto cycles = scaleblockcycles_clear();
+				xADD(ptr64[&cpuRegs.cycle64], cycles);
+
 				xMOV(eax, ptr32[&cpuRegs.cycle]);
-				xADD(eax, scaleblockcycles_clear());
+				xADD(eax, cycles);
 				xMOV(ptr32[&cpuRegs.cycle], eax); // update cycles
 				xFastCall((void*)WriteCP0Status);
 				break;
+			}
 
 			case 16:
 				_eeMoveGPRtoR(arg1reg, _Rt_);
@@ -283,13 +322,17 @@ void recMTC0()
 				xFastCall((void*)WriteCP0Config);
 				break;
 
-			case 9:
+			case 9: {
+				auto cycles = scaleblockcycles_clear();
+				xADD(ptr64[&cpuRegs.cycle64], cycles);
+
 				xMOV(ecx, ptr32[&cpuRegs.cycle]);
-				xADD(ecx, scaleblockcycles_clear());
+				xADD(ecx, cycles);
 				xMOV(ptr32[&cpuRegs.cycle], ecx); // update cycles
 				_eeMoveGPRtoM((uptr)&cpuRegs.CP0.r[9], _Rt_);
 				xMOV(ptr[&cpuRegs.lastCOP0Cycle], ecx);
 				break;
+			}
 
 			case 25:
 				if (0 == (_Imm_ & 1)) // MTPS
@@ -297,8 +340,12 @@ void recMTC0()
 					if (0 != (_Imm_ & 0x3E)) // only effective when the register is 0
 						break;
 					iFlushCall(FLUSH_INTERPRETER);
+
+					auto cycles = scaleblockcycles_clear();
+					xADD(ptr64[&cpuRegs.cycle64], cycles);
+
 					xMOV(eax, ptr32[&cpuRegs.cycle]);
-					xADD(eax, scaleblockcycles_clear());
+					xADD(eax, cycles);
 					xMOV(ptr32[&cpuRegs.cycle], eax); // update cycles
 					xFastCall((void*)COP0_UpdatePCCR);
 					_eeMoveGPRtoM((uptr)&cpuRegs.PERF.n.pccr, _Rt_);
@@ -306,16 +353,22 @@ void recMTC0()
 				}
 				else if (0 == (_Imm_ & 2)) // MTPC 0, only LSB of register matters
 				{
+					auto cycles = scaleblockcycles_clear();
+					xADD(ptr64[&cpuRegs.cycle64], cycles);
+
 					xMOV(ecx, ptr32[&cpuRegs.cycle]);
-					xADD(ecx, scaleblockcycles_clear());
+					xADD(ecx, cycles);
 					xMOV(ptr32[&cpuRegs.cycle], ecx); // update cycles
 					_eeMoveGPRtoM((uptr)&cpuRegs.PERF.n.pcr0, _Rt_);
 					xMOV(ptr[&cpuRegs.lastPERFCycle[0]], ecx);
 				}
 				else // MTPC 1
 				{
+					auto cycles = scaleblockcycles_clear();
+					xADD(ptr64[&cpuRegs.cycle64], cycles);
+
 					xMOV(ecx, ptr32[&cpuRegs.cycle]);
-					xADD(ecx, scaleblockcycles_clear());
+					xADD(ecx, cycles);
 					xMOV(ptr32[&cpuRegs.cycle], ecx); // update cycles
 					_eeMoveGPRtoM((uptr)&cpuRegs.PERF.n.pcr1, _Rt_);
 					xMOV(ptr[&cpuRegs.lastPERFCycle[1]], ecx);
