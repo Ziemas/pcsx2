@@ -113,10 +113,7 @@ struct psxRegisters {
 	s32 iopCycleEE;
 	u32 iopCycleEECarry;
 
-	u32 sCycle[32];		// start cycle for signaled ints
-	s32 eCycle[32];		// cycle delta for signaled ints (sCycle + eCycle == branch cycle)
-	//u32 _msflag[32];
-	//u32 _smflag[32];
+	u64 tCycle[32];		// start cycle for signaled ints
 };
 
 alignas(16) extern psxRegisters psxRegs;

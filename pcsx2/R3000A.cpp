@@ -119,7 +119,7 @@ __fi int psxTestCycle( u32 startCycle, s32 delta )
 __fi int psxRemainingCycles(IopEventId n)
 {
 	if (psxRegs.interrupt & (1 << n))
-		return ((psxRegs.cycle - psxRegs.sCycle[n]) + psxRegs.eCycle[n]);
+		return (psxRegs.tCycle[n] - psxRegs.cycle64);
 	else
 		return 0;
 }
@@ -132,8 +132,7 @@ __fi void PSX_INT( IopEventId n, s32 ecycle )
 
 	psxRegs.interrupt |= 1 << n;
 
-	psxRegs.sCycle[n] = psxRegs.cycle;
-	psxRegs.eCycle[n] = ecycle;
+	psxRegs.tCycle[n] = psxRegs.cycle + ecycle;
 
 	psxSetNextBranchDelta(ecycle);
 	const float mutiplier = static_cast<float>(PS2CLK) / static_cast<float>(PSXCLK);
@@ -151,13 +150,13 @@ static __fi void IopTestEvent( IopEventId n, void (*callback)() )
 {
 	if( !(psxRegs.interrupt & (1 << n)) ) return;
 
-	if( psxTestCycle( psxRegs.sCycle[n], psxRegs.eCycle[n] ) )
+	if( psxRegs.cycle64 >= psxRegs.tCycle[n] )
 	{
 		psxRegs.interrupt &= ~(1 << n);
 		callback();
 	}
 	else
-		psxSetNextBranch( psxRegs.sCycle[n], psxRegs.eCycle[n] );
+		psxSetNextBranchDelta( psxRegs.tCycle[n] - psxRegs.cycle64 );
 }
 
 static __fi void Sio0TestEvent(IopEventId n)
@@ -167,14 +166,14 @@ static __fi void Sio0TestEvent(IopEventId n)
 		return;
 	}
 
-	if (psxTestCycle(psxRegs.sCycle[n], psxRegs.eCycle[n]))
+	if(psxRegs.cycle64 >= psxRegs.tCycle[n])
 	{
 		psxRegs.interrupt &= ~(1 << n);
 		g_Sio0.Interrupt(Sio0Interrupt::TEST_EVENT);
 	}
 	else
 	{
-		psxSetNextBranch(psxRegs.sCycle[n], psxRegs.eCycle[n]);
+		psxSetNextBranchDelta( psxRegs.tCycle[n] - psxRegs.cycle64 );
 	}
 }
 
