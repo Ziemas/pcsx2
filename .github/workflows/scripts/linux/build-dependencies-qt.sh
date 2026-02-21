@@ -36,6 +36,7 @@ ZSTD=1.5.7
 KDDOCKWIDGETS=2.4.0
 PLUTOVG=1.3.2
 PLUTOSVG=0.0.7
+LUA=5.5.0
 
 SHADERC=2025.4
 SHADERC_GLSLANG=7a47e2531cb334982b2a2dd8513dca0a3de4373d
@@ -77,6 +78,7 @@ eb33e51f49a15e023950cd7825ca74a4a2b43db8354825ac24fc1b7ee09e6fa3  zstd-$ZSTD.tar
 272d2725b140e09e85b96eecdc59c2e00c1a14cda2301767e1bf3c363a44b931  shaderc-glslang-$SHADERC_GLSLANG.tar.gz
 c693867f10a7760ef1bcf85419d51783586768cc2c601d03841bc6a8b2554b9c  shaderc-spirv-headers-$SHADERC_SPIRVHEADERS.tar.gz
 06b0a042f2e121e954badb4fd78c9e2d4bc7ed6087eceb26ab559c23cf94334f  shaderc-spirv-tools-$SHADERC_SPIRVTOOLS.tar.gz
+57ccc32bbbd005cab75bcc52444052535af691789dba2b9016d5c50640d68b3d  lua-$LUA.tar.gz
 EOF
 
 curl -L \
@@ -106,7 +108,8 @@ curl -L \
 	-o "shaderc-spirv-tools-$SHADERC_SPIRVTOOLS.tar.gz" "https://github.com/KhronosGroup/SPIRV-Tools/archive/$SHADERC_SPIRVTOOLS.tar.gz" \
 	-o "KDDockWidgets-$KDDOCKWIDGETS.tar.gz" "https://github.com/KDAB/KDDockWidgets/archive/v$KDDOCKWIDGETS.tar.gz" \
 	-o "plutovg-$PLUTOVG.tar.gz" "https://github.com/sammycage/plutovg/archive/v$PLUTOVG.tar.gz" \
-	-o "plutosvg-$PLUTOSVG.tar.gz" "https://github.com/sammycage/plutosvg/archive/v$PLUTOSVG.tar.gz"
+	-o "plutosvg-$PLUTOSVG.tar.gz" "https://github.com/sammycage/plutosvg/archive/v$PLUTOSVG.tar.gz" \
+	-O "https://www.lua.org/ftp/lua-$LUA.tar.gz"
 
 shasum -a 256 --check SHASUMS
 
@@ -363,6 +366,15 @@ patch -p1 < "$SCRIPTDIR/../common/shaderc-changes.patch"
 cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$INSTALLDIR" -DCMAKE_INSTALL_PREFIX="$INSTALLDIR" -DSHADERC_SKIP_TESTS=ON -DSHADERC_SKIP_EXAMPLES=ON -DSHADERC_SKIP_COPYRIGHT_CHECK=ON -B build -G Ninja
 cmake --build build --parallel
 ninja -C build install
+cd ..
+
+echo "Building lua..."
+rm -fr "lua-$LUA"
+tar xf "lua-$LUA.tar.gz"
+cd "lua-$LUA"
+make "-j$NPROCS"
+make local
+make install INSTALL_TOP="$INSTALLDIR"
 cd ..
 
 echo "Cleaning up..."

@@ -22,6 +22,18 @@ find_package(Freetype 2.12 REQUIRED)
 find_package(plutovg 1.1.0 REQUIRED)
 find_package(plutosvg 0.0.7 REQUIRED)
 
+# Copied from cmake docs
+find_package(Lua 5.5.0 REQUIRED)
+if(Lua_FOUND AND NOT TARGET Lua::Lua)
+  add_library(Lua::Lua INTERFACE IMPORTED)
+  set_target_properties(
+    Lua::Lua
+    PROPERTIES
+      INTERFACE_INCLUDE_DIRECTORIES "${LUA_INCLUDE_DIR}"
+      INTERFACE_LINK_LIBRARIES "${LUA_LIBRARIES}"
+  )
+endif()
+
 if(USE_VULKAN)
 	find_package(Shaderc REQUIRED)
 endif()

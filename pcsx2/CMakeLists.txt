@@ -1168,6 +1168,7 @@ target_link_libraries(PCSX2_FLAGS INTERFACE
 	ccc
 	plutovg::plutovg
 	plutosvg::plutosvg
+	Lua::Lua
 	${LIBC_LIBRARIES}
 )
 
