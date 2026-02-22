@@ -37,6 +37,7 @@
 #include "SIO/Sio0.h"
 #include "SIO/Sio2.h"
 #include "SPU2/spu2.h"
+#include "Script.h"
 #include "SupportURLs.h"
 #include "USB/USB.h"
 #include "Vif_Dynarec.h"
@@ -1605,6 +1606,7 @@ VMBootResult VMManager::Initialize(const VMBootParameters& boot_params, Error* e
 	}
 
 	PerformanceMetrics::Clear();
+	Script::Init();
 	return VMBootResult::StartupSuccess;
 }
 
@@ -1659,6 +1661,7 @@ void VMManager::Shutdown(bool save_resume_state)
 	FPControlRegister::SetCurrent(FPControlRegister::GetDefault());
 
 	Patch::UnloadPatches();
+	Script::Shutdown();
 	R3000A::ioman::reset();
 	vtlb_Shutdown();
 	USBclose();
@@ -1745,6 +1748,7 @@ void VMManager::Reset()
 	SysMemory::Reset();
 	cpuReset();
 	hwReset();
+	Script::Init();
 
 	if (g_InputRecording.isActive())
 	{
@@ -2840,6 +2844,7 @@ void VMManager::Internal::EntryPointCompilingOnCPUThread()
 	HandleELFChange(true);
 
 	Patch::ApplyBootPatches();
+	Script::SignalBoot();
 
 	// If the config changes at this point, it's a reset, so the game doesn't currently know about the memcard
 	// so there's no need to leave the eject running.
@@ -2857,6 +2862,7 @@ void VMManager::Internal::VSyncOnCPUThread()
 	Pad::UpdateMacroButtons();
 
 	Patch::ApplyVsyncPatches();
+	Script::SignalVSync();
 
 	// Frame advance must be done *before* pumping messages, because otherwise
 	// we'll immediately reduce the counter we just set.

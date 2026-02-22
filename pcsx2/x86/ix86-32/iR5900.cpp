@@ -10,6 +10,7 @@
 #include "Patch.h"
 #include "R3000A.h"
 #include "R5900OpcodeTables.h"
+#include "Script.h"
 #include "VMManager.h"
 #include "vtlb.h"
 #include "x86/BaseblockEx.h"
@@ -2309,6 +2310,11 @@ static void recRecompile(const u32 startpc)
 	while (1)
 	{
 		BASEBLOCK* pblock = PC_GETBLOCK(i);
+
+		if (Script::HasHook(i))
+		{
+			xFastCall(Script::CallHooks, i);
+		}
 
 		// stop before breakpoints
 		if (isBreakpointNeeded(i) != 0 || isMemcheckNeeded(i) != 0)
