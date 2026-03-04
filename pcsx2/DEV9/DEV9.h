@@ -678,7 +678,7 @@ u32 FLASHread32(u32 addr, int size);
 void FLASHwrite32(u32 addr, u32 value, int size);
 void _DEV9irq(int cause, int cycles);
 int DEV9irqHandler(void);
-void DEV9async(u32 cycles);
+void DEV9async(u64 cycles);
 void DEV9runFIFO();
 void DEV9writeDMA8Mem(u32* pMem, int size);
 void DEV9readDMA8Mem(u32* pMem, int size);

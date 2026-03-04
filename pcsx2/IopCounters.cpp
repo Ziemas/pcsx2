@@ -33,7 +33,7 @@
 
 psxCounter psxCounters[NUM_COUNTERS];
 s32 psxNextDeltaCounter;
-u32 psxNextStartCounter;
+u64 psxNextStartCounter;
 
 bool hBlanking = false;
 bool vBlanking = false;
@@ -132,24 +132,24 @@ static void _rcntSet(int cntidx)
 		return;
 	}
 
-	c = (u64)((overflowCap - counter.count) * counter.rate) - (psxRegs.cycle - counter.startCycle);
+	c = (u64)((overflowCap - counter.count) * counter.rate) - ((u32)psxRegs.cycle - counter.startCycle);
 	c += psxRegs.cycle - psxNextStartCounter; // adjust for time passed since last rcntUpdate();
 
 	if (c < (u64)psxNextDeltaCounter)
 	{
-		psxNextDeltaCounter = (u32)c;
+		psxNextDeltaCounter = c;
 		psxSetNextBranch(psxNextStartCounter, psxNextDeltaCounter); //Need to update on counter resets/target changes
 	}
 
 	if (counter.target & IOPCNT_FUTURE_TARGET)
 		return;
 
-	c = (s64)((counter.target - counter.count) * counter.rate) - (psxRegs.cycle - counter.startCycle);
+	c = (s64)((counter.target - counter.count) * counter.rate) - ((u32)psxRegs.cycle - counter.startCycle);
 	c += psxRegs.cycle - psxNextStartCounter; // adjust for time passed since last rcntUpdate();
 
 	if (c < (u64)psxNextDeltaCounter)
 	{
-		psxNextDeltaCounter = (u32)c;
+		psxNextDeltaCounter = c;
 		psxSetNextBranch(psxNextStartCounter, psxNextDeltaCounter); //Need to update on counter resets/target changes
 	}
 }

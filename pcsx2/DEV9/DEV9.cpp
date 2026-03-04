@@ -1121,7 +1121,7 @@ void DEV9writeDMA8Mem(u32* pMem, int size)
 	}
 }
 
-void DEV9async(u32 cycles)
+void DEV9async(u64 cycles)
 {
 	smap_async(cycles);
 	dev9.ata->Async(cycles);

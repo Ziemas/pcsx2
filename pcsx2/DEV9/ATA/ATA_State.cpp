@@ -511,7 +511,7 @@ void ATA::Write(u32 addr, u16 value, int width)
 	}
 }
 
-void ATA::Async(uint cycles)
+void ATA::Async(u64 cycles)
 {
 	if (!hddImage)
 		return;

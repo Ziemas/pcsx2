@@ -169,7 +169,7 @@ public:
 	u16 Read(u32 addr, int width);
 	void Write(u32 addr, u16 value, int width);
 
-	void Async(u32 cycles);
+	void Async(u64 cycles);
 
 	int ReadDMAToFIFO(u8* buffer, int space);
 	int WriteDMAFromFIFO(u8* buffer, int available);

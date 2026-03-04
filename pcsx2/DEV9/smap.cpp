@@ -859,7 +859,7 @@ void smap_writeDMA8Mem(u32* pMem, int size)
 	}
 }
 
-void smap_async(u32 cycles)
+void smap_async(u64 cycles)
 {
 	if (fireIntR)
 	{
