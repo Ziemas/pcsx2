@@ -94,32 +94,21 @@ void psxException(u32 code, u32 bd)
 	}*/
 }
 
-__fi void psxSetNextBranch( u64 startCycle, s32 delta )
+__fi void psxSetNextBranch( u64 targetCycle )
 {
-	// typecast the conditional to signed so that things don't blow up
-	// if startCycle is greater than our next branch cycle.
-
-	if( (int)(psxRegs.iopNextEventCycle - startCycle) > delta )
-		psxRegs.iopNextEventCycle = startCycle + delta;
+	if( psxRegs.iopNextEventCycle > targetCycle )
+		psxRegs.iopNextEventCycle = targetCycle;
 }
 
 __fi void psxSetNextBranchDelta( s32 delta )
 {
-	psxSetNextBranch( psxRegs.cycle, delta );
-}
-
-__fi int psxTestCycle( u64 startCycle, s32 delta )
-{
-	// typecast the conditional to signed so that things don't explode
-	// if the startCycle is ahead of our current cpu cycle.
-
-	return (int)(psxRegs.cycle - startCycle) >= delta;
+	psxSetNextBranch( psxRegs.cycle + delta );
 }
 
 __fi int psxRemainingCycles(IopEventId n)
 {
 	if (psxRegs.interrupt & (1 << n))
-		return ((psxRegs.cycle - psxRegs.sCycle[n]) + psxRegs.eCycle[n]);
+		return psxRegs.tCycle[n] - psxRegs.cycle;
 	else
 		return 0;
 }
@@ -132,8 +121,7 @@ __fi void PSX_INT( IopEventId n, s32 ecycle )
 
 	psxRegs.interrupt |= 1 << n;
 
-	psxRegs.sCycle[n] = psxRegs.cycle;
-	psxRegs.eCycle[n] = ecycle;
+	psxRegs.tCycle[n] = psxRegs.cycle + ecycle;
 
 	psxSetNextBranchDelta(ecycle);
 	const float mutiplier = static_cast<float>(PS2CLK) / static_cast<float>(PSXCLK);
@@ -151,13 +139,15 @@ static __fi void IopTestEvent( IopEventId n, void (*callback)() )
 {
 	if( !(psxRegs.interrupt & (1 << n)) ) return;
 
-	if( psxTestCycle( psxRegs.sCycle[n], psxRegs.eCycle[n] ) )
+	if( psxRegs.cycle >= psxRegs.tCycle[n] )
 	{
 		psxRegs.interrupt &= ~(1 << n);
 		callback();
 	}
 	else
-		psxSetNextBranch( psxRegs.sCycle[n], psxRegs.eCycle[n] );
+	{
+		psxSetNextBranch( psxRegs.tCycle[n] );
+	}
 }
 
 static __fi void Sio0TestEvent(IopEventId n)
@@ -167,14 +157,14 @@ static __fi void Sio0TestEvent(IopEventId n)
 		return;
 	}
 
-	if (psxTestCycle(psxRegs.sCycle[n], psxRegs.eCycle[n]))
+	if(psxRegs.cycle >= psxRegs.tCycle[n])
 	{
 		psxRegs.interrupt &= ~(1 << n);
 		g_Sio0.Interrupt(Sio0Interrupt::TEST_EVENT);
 	}
 	else
 	{
-		psxSetNextBranch(psxRegs.sCycle[n], psxRegs.eCycle[n]);
+		psxSetNextBranch(psxRegs.tCycle[n]);
 	}
 }
 
