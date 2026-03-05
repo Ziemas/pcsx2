@@ -238,15 +238,10 @@ void V_Voice::Stop()
 
 __forceinline void CounterUpdate(u32 DMAICounter)
 {
-	if (((psxCounters[6].startCycle + psxCounters[6].deltaCycles) - psxRegs.cycle) > (u32)DMAICounter)
+	if ((psxRegs.cycle - psxCounters[6].startCycle) > (u32)DMAICounter)
 	{
 		psxCounters[6].startCycle = psxRegs.cycle;
-		psxCounters[6].deltaCycles = DMAICounter;
-
-		psxNextDeltaCounter -= (psxRegs.cycle - psxNextStartCounter);
-		psxNextStartCounter = psxRegs.cycle;
-		if (psxCounters[6].deltaCycles < psxNextDeltaCounter)
-			psxNextDeltaCounter = psxCounters[6].deltaCycles;
+		psxNextCounter = std::min(psxNextCounter, psxRegs.cycle + DMAICounter);
 	}
 }
 

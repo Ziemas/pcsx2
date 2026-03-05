@@ -201,8 +201,6 @@ bool SaveStateBase::FreezeInternals(Error* error)
 	Freeze(EEoCycle);
 	Freeze(nextDeltaCounter);
 	Freeze(nextStartCounter);
-	Freeze(psxNextStartCounter);
-	Freeze(psxNextDeltaCounter);
 
 	// Fourth Block - EE-related systems
 	// ---------------------------------
