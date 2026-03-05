@@ -17,7 +17,7 @@
 
 using namespace R3000A;
 
-R3000Acpu *psxCpu;
+R3000Acpu* psxCpu;
 
 // used for constant propagation
 u32 g_psxConstRegs[32];
@@ -40,7 +40,7 @@ void psxReset()
 
 	psxRegs.pc = 0xbfc00000; // Start in bootstrap
 	psxRegs.CP0.n.Status = 0x00400000; // BEV = 1
-	psxRegs.CP0.n.PRid   = 0x0000001f; // PRevID = Revision ID, same as the IOP R3000A
+	psxRegs.CP0.n.PRid = 0x0000001f; // PRevID = Revision ID, same as the IOP R3000A
 
 	psxRegs.iopBreak = 0;
 	psxRegs.iopCycleEE = -1;
@@ -53,13 +53,14 @@ void psxReset()
 	psxBiosReset();
 }
 
-void psxShutdown() {
+void psxShutdown()
+{
 	//psxCpu->Shutdown();
 }
 
 void psxException(u32 code, u32 bd)
 {
-//	PSXCPU_LOG("psxException %x: %x, %x", code, psxHu32(0x1070), psxHu32(0x1074));
+	//	PSXCPU_LOG("psxException %x: %x, %x", code, psxHu32(0x1070), psxHu32(0x1074));
 	//Console.WriteLn("!! psxException %x: %x, %x", code, psxHu32(0x1070), psxHu32(0x1074));
 	// Set the Cause
 	psxRegs.CP0.n.Cause &= ~0x7f;
@@ -69,7 +70,7 @@ void psxException(u32 code, u32 bd)
 	if (bd)
 	{
 		PSXCPU_LOG("bd set");
-		psxRegs.CP0.n.Cause|= 0x80000000;
+		psxRegs.CP0.n.Cause |= 0x80000000;
 		psxRegs.CP0.n.EPC = (psxRegs.pc - 4);
 	}
 	else
@@ -81,8 +82,8 @@ void psxException(u32 code, u32 bd)
 		psxRegs.pc = 0x80000080;
 
 	// Set the Status
-	psxRegs.CP0.n.Status = (psxRegs.CP0.n.Status &~0x3f) |
-						  ((psxRegs.CP0.n.Status & 0xf) << 2);
+	psxRegs.CP0.n.Status = (psxRegs.CP0.n.Status & ~0x3f) |
+	                       ((psxRegs.CP0.n.Status & 0xf) << 2);
 
 	/*if ((((PSXMu32(psxRegs.CP0.n.EPC) >> 24) & 0xfe) == 0x4a)) {
 		// "hokuto no ken" / "Crash Bandicot 2" ... fix
@@ -94,15 +95,15 @@ void psxException(u32 code, u32 bd)
 	}*/
 }
 
-__fi void psxSetNextBranch( u64 targetCycle )
+__fi void psxSetNextBranch(u64 targetCycle)
 {
-	if( psxRegs.iopNextEventCycle > targetCycle )
+	if (psxRegs.iopNextEventCycle > targetCycle)
 		psxRegs.iopNextEventCycle = targetCycle;
 }
 
-__fi void psxSetNextBranchDelta( s32 delta )
+__fi void psxSetNextBranchDelta(s32 delta)
 {
-	psxSetNextBranch( psxRegs.cycle + delta );
+	psxSetNextBranch(psxRegs.cycle + delta);
 }
 
 __fi int psxRemainingCycles(IopEventId n)
@@ -113,7 +114,7 @@ __fi int psxRemainingCycles(IopEventId n)
 		return 0;
 }
 
-__fi void PSX_INT( IopEventId n, s32 ecycle )
+__fi void PSX_INT(IopEventId n, s32 ecycle)
 {
 	// 19 is CDVD read int, it's supposed to be high.
 	//if (ecycle > 8192 && n != 19)
@@ -130,23 +131,24 @@ __fi void PSX_INT( IopEventId n, s32 ecycle )
 	if (psxRegs.iopCycleEE < iopDelta)
 	{
 		// The EE called this int, so inform it to branch as needed:
-		
+
 		cpuSetNextEventDelta(iopDelta - psxRegs.iopCycleEE);
 	}
 }
 
-static __fi void IopTestEvent( IopEventId n, void (*callback)() )
+static __fi void IopTestEvent(IopEventId n, void (*callback)())
 {
-	if( !(psxRegs.interrupt & (1 << n)) ) return;
+	if (!(psxRegs.interrupt & (1 << n)))
+		return;
 
-	if( psxRegs.cycle >= psxRegs.tCycle[n] )
+	if (psxRegs.cycle >= psxRegs.tCycle[n])
 	{
 		psxRegs.interrupt &= ~(1 << n);
 		callback();
 	}
 	else
 	{
-		psxSetNextBranch( psxRegs.tCycle[n] );
+		psxSetNextBranch(psxRegs.tCycle[n]);
 	}
 }
 
@@ -157,7 +159,7 @@ static __fi void Sio0TestEvent(IopEventId n)
 		return;
 	}
 
-	if(psxRegs.cycle >= psxRegs.tCycle[n])
+	if (psxRegs.cycle >= psxRegs.tCycle[n])
 	{
 		psxRegs.interrupt &= ~(1 << n);
 		g_Sio0.Interrupt(Sio0Interrupt::TEST_EVENT);
@@ -170,27 +172,26 @@ static __fi void Sio0TestEvent(IopEventId n)
 
 static __fi void _psxTestInterrupts()
 {
-	IopTestEvent(IopEvt_SIF0,		sif0Interrupt);	// SIF0
-	IopTestEvent(IopEvt_SIF1,		sif1Interrupt);	// SIF1
-	IopTestEvent(IopEvt_SIF2,		sif2Interrupt);	// SIF2
+	IopTestEvent(IopEvt_SIF0, sif0Interrupt); // SIF0
+	IopTestEvent(IopEvt_SIF1, sif1Interrupt); // SIF1
+	IopTestEvent(IopEvt_SIF2, sif2Interrupt); // SIF2
 	Sio0TestEvent(IopEvt_SIO);
 	IopTestEvent(IopEvt_CdvdSectorReady, cdvdSectorReady);
-	IopTestEvent(IopEvt_CdvdRead,	cdvdReadInterrupt);
+	IopTestEvent(IopEvt_CdvdRead, cdvdReadInterrupt);
 
 	// Profile-guided Optimization (sorta)
 	// The following ints are rarely called.  Encasing them in a conditional
 	// as follows helps speed up most games.
 
-	if( psxRegs.interrupt & ((1 << IopEvt_Cdvd) | (1 << IopEvt_Dma11) | (1 << IopEvt_Dma12)
-		| (1 << IopEvt_Cdrom) | (1 << IopEvt_CdromRead) | (1 << IopEvt_DEV9) | (1 << IopEvt_USB)))
+	if (psxRegs.interrupt & ((1 << IopEvt_Cdvd) | (1 << IopEvt_Dma11) | (1 << IopEvt_Dma12) | (1 << IopEvt_Cdrom) | (1 << IopEvt_CdromRead) | (1 << IopEvt_DEV9) | (1 << IopEvt_USB)))
 	{
-		IopTestEvent(IopEvt_Cdvd,		cdvdActionInterrupt);
-		IopTestEvent(IopEvt_Dma11,		psxDMA11Interrupt);	// SIO2
-		IopTestEvent(IopEvt_Dma12,		psxDMA12Interrupt);	// SIO2
-		IopTestEvent(IopEvt_Cdrom,		cdrInterrupt);
-		IopTestEvent(IopEvt_CdromRead,	cdrReadInterrupt);
-		IopTestEvent(IopEvt_DEV9,		dev9Interrupt);
-		IopTestEvent(IopEvt_USB,		usbInterrupt);
+		IopTestEvent(IopEvt_Cdvd, cdvdActionInterrupt);
+		IopTestEvent(IopEvt_Dma11, psxDMA11Interrupt); // SIO2
+		IopTestEvent(IopEvt_Dma12, psxDMA12Interrupt); // SIO2
+		IopTestEvent(IopEvt_Cdrom, cdrInterrupt);
+		IopTestEvent(IopEvt_CdromRead, cdrReadInterrupt);
+		IopTestEvent(IopEvt_DEV9, dev9Interrupt);
+		IopTestEvent(IopEvt_USB, usbInterrupt);
 	}
 }
 
@@ -230,23 +231,25 @@ __ri void iopEventTest()
 
 void iopTestIntc()
 {
-	if( psxHu32(HW_ICTRL) == 0 ) return;
-	if( (psxHu32(HW_ISTAT) & psxHu32(HW_IMASK)) == 0 ) return;
+	if (psxHu32(HW_ICTRL) == 0)
+		return;
+	if ((psxHu32(HW_ISTAT) & psxHu32(HW_IMASK)) == 0)
+		return;
 
-	if( !eeEventTestIsActive )
+	if (!eeEventTestIsActive)
 	{
 		// An iop exception has occurred while the EE is running code.
 		// Inform the EE to branch so the IOP can handle it promptly:
 
-		cpuSetNextEventDelta( 16 );
+		cpuSetNextEventDelta(16);
 		iopEventAction = true;
 		//Console.Error( "** IOP Needs an EE EventText, kthx **  %d", iopCycleEE );
 
 		// Note: No need to set the iop's branch delta here, since the EE
 		// will run an IOP branch test regardless.
 	}
-	else if ( !iopEventTestIsActive )
-		psxSetNextBranchDelta( 2 );
+	else if (!iopEventTestIsActive)
+		psxSetNextBranchDelta(2);
 }
 
 inline bool psxIsBranchOrJump(u32 addr)

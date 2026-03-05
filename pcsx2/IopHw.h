@@ -313,15 +313,15 @@ enum IopEventId
 	IopEvt_USB,
 };
 
-extern void PSX_INT( IopEventId n, s32 ecycle);
+extern void PSX_INT(IopEventId n, s32 ecycle);
 extern int psxRemainingCycles(IopEventId n);
 
-extern void psxSetNextBranch( u64 targetCycle );
-extern void psxSetNextBranchDelta( s32 delta );
+extern void psxSetNextBranch(u64 targetCycle);
+extern void psxSetNextBranchDelta(s32 delta);
 
 extern void psxHwReset();
-extern u8   psxHw4Read8 (u32 add);
-extern void psxHw4Write8(u32 add, u8  value);
+extern u8 psxHw4Read8(u32 add);
+extern void psxHw4Write8(u32 add, u8 value);
 
 extern void psxDmaInterrupt(int n);
 extern void psxDmaInterrupt2(int n);
