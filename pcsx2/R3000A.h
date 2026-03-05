@@ -166,8 +166,7 @@ alignas(16) extern psxRegisters psxRegs;
 
 #endif
 
-extern s32 psxNextDeltaCounter;
-extern u64 psxNextStartCounter;
+extern u64 psxNextCounter;
 extern bool iopEventAction;
 extern bool iopEventTestIsActive;
 

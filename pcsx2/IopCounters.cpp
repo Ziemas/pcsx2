@@ -32,8 +32,7 @@
 #define PSXSOUNDCLK ((int)(48000))
 
 psxCounter psxCounters[NUM_COUNTERS];
-s32 psxNextDeltaCounter;
-u64 psxNextStartCounter;
+u64 psxNextCounter;
 
 bool hBlanking = false;
 bool vBlanking = false;
@@ -91,7 +90,7 @@ static void psxRcntSync(int cntidx)
 
 	if (psxRcntCanCount(cntidx) && psxCounters[cntidx].rate != PSXHBLANK)
 	{
-		const u32 change = (psxRegs.cycle - psxCounters[cntidx].startCycle) / psxCounters[cntidx].rate;
+		const s64 change = (psxRegs.cycle - psxCounters[cntidx].startCycle) / psxCounters[cntidx].rate;
 		if (change > 0)
 		{
 			psxCounters[cntidx].count += change;
@@ -128,30 +127,28 @@ static void _rcntSet(int cntidx)
 	// (we probably missed it because we're doing/checking other things)
 	if (counter.count > overflowCap || counter.count > counter.target)
 	{
-		psxNextDeltaCounter = 4;
+		// Does the +4 actually matter? We just want to run event test asap?
+		psxNextCounter = psxRegs.cycle + 4;
 		return;
 	}
 
-	// FIXME: the u32 casts in this expression exist to match pre-64bit counter code, rewrite these
-	c = (u64)((overflowCap - counter.count) * counter.rate) - ((u32)psxRegs.cycle - (u32)counter.startCycle);
-	c += psxRegs.cycle - psxNextStartCounter; // adjust for time passed since last rcntUpdate();
-
-	if (c < (u64)psxNextDeltaCounter)
+	c = (u64)((overflowCap - counter.count) * counter.rate) + psxRegs.cycle;
+	if (c < psxNextCounter)
 	{
-		psxNextDeltaCounter = (u32)c;
-		psxSetNextBranch(psxNextStartCounter, psxNextDeltaCounter); //Need to update on counter resets/target changes
+		psxNextCounter = c;
+		//Need to update on counter resets/target changes
+		psxRegs.iopNextEventCycle = std::min(psxRegs.iopNextEventCycle, psxNextCounter);
 	}
 
 	if (counter.target & IOPCNT_FUTURE_TARGET)
 		return;
 
-	c = (s64)((counter.target - counter.count) * counter.rate) - ((u32)psxRegs.cycle - (u32)counter.startCycle);
-	c += psxRegs.cycle - psxNextStartCounter; // adjust for time passed since last rcntUpdate();
-
-	if (c < (u64)psxNextDeltaCounter)
+	c = (s64)((counter.target - counter.count) * counter.rate) + psxRegs.cycle;
+	if (c < psxNextCounter)
 	{
-		psxNextDeltaCounter = (u32)c;
-		psxSetNextBranch(psxNextStartCounter, psxNextDeltaCounter); //Need to update on counter resets/target changes
+		psxNextCounter = c;
+		//Need to update on counter resets/target changes
+		psxRegs.iopNextEventCycle = std::min(psxRegs.iopNextEventCycle, psxNextCounter);
 	}
 }
 
@@ -200,8 +197,7 @@ void psxRcntInit()
 
 	// Tell the IOP to branch ASAP, so that timers can get
 	// configured properly.
-	psxNextDeltaCounter = 1;
-	psxNextStartCounter = psxRegs.cycle;
+	psxNextCounter = psxRegs.cycle;
 }
 
 static void _rcntFireInterrupt(int i, bool isOverflow)
@@ -458,8 +454,7 @@ void psxRcntUpdate()
 {
 	int i;
 
-	psxNextDeltaCounter = 0x7fffffff;
-	psxNextStartCounter = psxRegs.cycle;
+	psxNextCounter = UINT64_MAX;
 
 	for (i = 0; i < 6; i++)
 	{
@@ -483,7 +478,7 @@ void psxRcntUpdate()
 	psxCounters[6].startCycle = psxRegs.cycle - spu2_delta;
 	psxCounters[6].deltaCycles = psxCounters[6].rate;
 	SPU2async();
-	psxNextDeltaCounter = psxCounters[6].deltaCycles;
+	psxNextCounter = psxRegs.cycle + psxCounters[6].deltaCycles;
 
 	DEV9async(1);    
 	const s32 diffusb = psxRegs.cycle - psxCounters[7].startCycle;
@@ -498,8 +493,7 @@ void psxRcntUpdate()
 	else
 		cusb -= diffusb;
 
-	if (cusb < psxNextDeltaCounter)
-		psxNextDeltaCounter = cusb;
+	psxNextCounter = std::min(psxNextCounter, psxRegs.cycle + cusb);
 
 	for (i = 0; i < 6; i++)
 		_rcntSet(i);
@@ -796,8 +790,7 @@ bool SaveStateBase::psxRcntFreeze()
 		return false;
 
 	Freeze(psxCounters);
-	Freeze(psxNextDeltaCounter);
-	Freeze(psxNextStartCounter);
+	Freeze(psxNextCounter);
 	Freeze(hBlanking);
 	Freeze(vBlanking);
 
