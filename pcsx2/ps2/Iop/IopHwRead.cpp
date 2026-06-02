@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0+
 
 #include "IopHw_Internal.h"
+#include "Pif.h"
 #include "Sif.h"
 #include "SIO/Sio2.h"
 #include "SIO/Sio0.h"
@@ -374,7 +375,50 @@ mem16_t iopHwRead16_Page3( u32 addr )
 	// all addresses are assumed to be prefixed with 0x1f803xxx:
 	pxAssume( (addr >> 12) == 0x1f803 );
 
-	mem16_t ret = psxHu16(addr);
+	u32 masked_addr = addr & 0x0fff;
+	mem16_t ret = 0;
+
+	switch (masked_addr)
+	{
+		mcase(0x1f803800):
+			// board id
+			ret = 0x4126;
+			break;
+
+		mcase(0x1f803808):
+			// unk
+			if (psxHu16(0x1f80380c) == 0x1300) {
+				ret = 0x0;
+			} else {
+				ret = 0xf00;
+			}
+			break;
+
+		mcase(0x1f803810):
+			// FIFO state, hardcoding like this makes the driver happy enough 
+		    ret = (1 << 0) | (1 << 8) | (1 << 9);
+			break;
+
+		mcase(0x1f803814):
+		    ret = Pif::tx_count;
+			break;
+
+		mcase(0x1f803818):
+		    ret = Pif::rx_count;
+			break;
+
+		mcase(0x1f803820):
+			// unk
+		    ret = 4 | 2;
+			break;
+
+		default:
+			ret = psxHu16(addr);
+			break;
+	}
+
+	//Console.WriteLn("pif16[%08x] > %08x", addr, ret);
+
 	IopHwTraceLog<mem16_t>( addr, ret, true );
 	return ret;
 }
@@ -404,7 +448,19 @@ mem32_t iopHwRead32_Page3( u32 addr )
 {
 	// all addresses are assumed to be prefixed with 0x1f803xxx:
 	pxAssume( (addr >> 12) == 0x1f803 );
-	const mem32_t ret = psxHu32(addr);
+	u32 masked_addr = addr & 0x0fff;
+	mem32_t ret;
+
+	switch (masked_addr)
+	{
+		mcase(0x1f803840):
+			ret = Pif::FifoRx();
+		    break;
+		default:
+			ret = psxHu32(addr);
+			break;
+	}
+
 	IopHwTraceLog<mem32_t>( addr, ret, true );
 	return ret;
 }

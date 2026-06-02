@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0+
 
 #include "IopHw_Internal.h"
+#include "Pif.h"
 #include "Sif.h"
 #include "SIO/Sio2.h"
 #include "SIO/Sio0.h"
@@ -395,6 +396,11 @@ static __fi void _HwWrite_16or32_Page1( u32 addr, T val )
 				DmaExec(4);
 			break;
 
+			mcase(0x1f8010d8):	// DMA5 CHCR -- PIF
+				psxHu(addr) = val;
+				DmaExec(5);
+			break;
+
 			mcase(0x1f8010e8):	// DMA6 CHCR -- OT clear
 				psxHu(addr) = val;
 				DmaExec(6);
@@ -557,6 +563,45 @@ void iopHwWrite16_Page3( u32 addr, mem16_t val )
 {
 	// all addresses are assumed to be prefixed with 0x1f803xxx:
 	pxAssert( (addr >> 12) == 0x1f803 );
+	//Console.WriteLn("pif16[%08x] < %08x", addr, val);
+
+	u32 masked_addr = addr & 0x0fff;
+	switch (masked_addr)
+	{
+		mcase(0x1f803814):
+			Pif::tx_count = std::min(Pif::tx_count + 1, UINT16_MAX);
+			Pif::PacketComplete();
+			break;
+		mcase(0x1f803818):
+			Pif::rx_count = std::max(Pif::rx_count - 1, 0);
+			break;
+	}
+
+	if(ConsoleLogging.iopConsole.IsActive() && (addr == 0x1f80380c))	// STDOUT
+	{
+		static char pbuf[1024];
+		static int pidx;
+		static bool included_newline = false;
+
+		if (val == '\r')
+		{
+			included_newline = true;
+			pbuf[pidx++] = '\n';
+		}
+		else if (!included_newline || (val != '\n'))
+		{
+			included_newline = false;
+			pbuf[pidx++] = val;
+		}
+
+		if ((pidx == std::size(pbuf)-1) || (pbuf[pidx-1] == '\n'))
+		{
+			pbuf[pidx] = 0;
+			iopConLog( ShiftJIS_ConvertString(pbuf) );
+			pidx = 0;
+		}
+	}
+
 	psxHu16(addr) = val;
 	IopHwTraceLog<mem16_t>( addr, val, false );
 }
@@ -580,6 +625,12 @@ void iopHwWrite32_Page3( u32 addr, mem32_t val )
 {
 	// all addresses are assumed to be prefixed with 0x1f803xxx:
 	pxAssert( (addr >> 12) == 0x1f803 );
+
+	if (addr == 0x1f803840)
+	{
+		Pif::FifoTx(val);
+	}
+
 	psxHu16(addr) = val;
 	IopHwTraceLog<mem32_t>( addr, val, false );
 }

@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2002-2026 PCSX2 Dev Team
 // SPDX-License-Identifier: GPL-3.0+
 
+#include "Pif.h"
 #include "R3000A.h"
 #include "Common.h"
 #include "SPU2/spu2.h"
@@ -81,6 +82,40 @@ void spu2DMA4Irq()
 		HW_DMA4_CHCR &= ~0x01000000;
 		psxDmaInterrupt(4);
 	}
+}
+
+void psxDma5(u32 madr, u32 bcr, u32 chcr) // PIF
+{
+	int size = (bcr >> 16) * (bcr & 0xFFFF);
+	int start = chcr & 0x01000000;
+	int write = chcr & 1;
+
+	if (!start)
+	{
+		return;
+	}
+
+	u32* mem = (u32*)iopPhysMem(madr);
+
+	if (write)
+	{
+		while (size--)
+		{
+			Pif::FifoTx(*mem++);
+		}
+	}
+	else
+	{
+		while (size--)
+		{
+			*mem++ = Pif::FifoRx();
+		}
+	}
+
+	// pifdrv always busy-waits for completion,
+	// so should be immune to timing issues
+	HW_DMA5_CHCR &= ~0x01000000;
+	psxDmaInterrupt(5);
 }
 
 void psxDma7(u32 madr, u32 bcr, u32 chcr) // SPU2's Core 1

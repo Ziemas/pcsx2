@@ -14,6 +14,7 @@
 #include "IopHw.h"
 #include "IopDma.h"
 #include "CDVD/CDVD.h"
+#include "Pif.h"
 
 #include <math.h>
 
@@ -486,6 +487,7 @@ void psxRcntUpdate()
 	psxNextDeltaCounter = psxCounters[6].deltaCycles;
 
 	DEV9async(1);    
+	Pif::Poll();
 	const s32 diffusb = psxRegs.cycle - psxCounters[7].startCycle;
 	s32 cusb = psxCounters[7].deltaCycles;
 
