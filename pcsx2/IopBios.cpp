@@ -1357,7 +1357,7 @@ namespace R3000A
 
 		// Special case with ioman and iomanX
 		// They are mostly compatible excluding stat structures
-		if(libname == "ioman" || libname == "iomanx")
+		if (EmuConfig.HostFs && (libname == "ioman" || libname == "iomanx"))
 		{
 			const bool use_ioman = libname == "ioman";
 			using namespace ioman;
