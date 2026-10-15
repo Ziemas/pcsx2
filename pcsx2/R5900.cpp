@@ -278,6 +278,7 @@ static __fi bool _cpuTestInterrupts()
 		TESTINT(DMAC_GIF, gifInterrupt);
 		TESTINT(DMAC_SIF0, EEsif0Interrupt);
 		TESTINT(DMAC_SIF1, EEsif1Interrupt);
+		TESTINT(DMAC_SIF2, EEsif2Interrupt);
 		// Profile-guided Optimization (sorta)
 		// The following ints are rarely called.  Encasing them in a conditional
 		// as follows helps speed up most games.
