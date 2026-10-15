@@ -273,7 +273,7 @@ static __fi void _HwWrite_16or32_Page1( u32 addr, T val )
 	// ------------------------------------------------------------------------
 	// PS1 GPU access
 	//
-	else if ( (masked_addr >= pgmsk(HW_PS1_GPU_START)) && (masked_addr < pgmsk(HW_PS1_GPU_END)) )
+	else if ((psxHu32(HW_ICFG) & (1 << 3)) && (masked_addr >= pgmsk(HW_PS1_GPU_START)) && (masked_addr < pgmsk(HW_PS1_GPU_END)) )
 	{
 		// todo: psx mode: this is new
 		if( sizeof(T) == 2 )
