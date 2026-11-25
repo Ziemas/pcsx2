@@ -165,7 +165,7 @@ static bool Address2Symbol(u64 address, SmallString &buf)
 	{
 		buf.append_format("cpuRegs.nextEventCycle");
 	}
-	else if (address >= A(fpuRegs.fpr) && address < A(fpuRegs.fprc))
+	else if (address == A(fpuRegs.fpr) && address < A(&fpuRegs.fpr[32]))
 	{
 		buf.append_format("fpuRegs.f{:02}", static_cast<u32>(address - A(fpuRegs.fpr)) / 4u);
 	}
