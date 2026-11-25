@@ -305,6 +305,9 @@ static void iopRecError(int err)
 		case 1:
 			Host::ReportErrorAsync("R3000A Exception", fmt::format("Jump to unaligned address (PC: 0x{:08x})", psxRegs.pc));
 			break;
+		case 2:
+			Host::ReportErrorAsync("R3000A Exception", fmt::format("Jump to NULL (PC: 0x{:08x})", psxRegs.pc));
+			break;
 	}
 
 	VMManager::SetPaused(true);
@@ -1622,6 +1625,11 @@ static void iopRecRecompile(const u32 startpc)
 	u32 i;
 	u32 link_next_block = 0;
 
+	if (!startpc)
+	{
+		iopRecError(2);
+	}
+
 	// When upgrading the IOP, there are two resets, the second of which is a 'fake' reset
 	// This second 'reset' involves UDNL calling SYSMEM and LOADCORE directly, resetting LOADCORE's modules
 	// This detects when SYSMEM is called and clears the modules then
@@ -1647,8 +1655,6 @@ static void iopRecRecompile(const u32 startpc)
 		// per boot so this is fine
 		psxRegs.GPR.n.a0 = Ps2MemSize::ExposedIopRam >> 20;
 	}
-
-	pxAssert(startpc);
 
 	// if recPtr reached the mem limit reset whole mem
 	if (recPtr >= recPtrEnd)

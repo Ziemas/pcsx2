@@ -546,6 +546,9 @@ static void recError(u32 error)
 		case 1:
 			Host::ReportErrorAsync("R5900 Exception", fmt::format("Jump to unaligned address (PC: 0x{:08x})", cpuRegs.pc));
 			break;
+		case 2:
+			Host::ReportErrorAsync("R5900 Exception", fmt::format("Jump to NULL (PC: 0x{:08x})", cpuRegs.pc));
+			break;
 	}
 
 	VMManager::SetPaused(true);
@@ -2194,7 +2197,10 @@ static void recRecompile(const u32 startpc)
 	u32 i = 0;
 	u32 willbranch3 = 0;
 
-	pxAssert(startpc);
+	if (!startpc)
+	{
+		recError(2);
+	}
 
 	// if recPtr reached the mem limit reset whole mem
 	if (recPtr >= recPtrEnd)
